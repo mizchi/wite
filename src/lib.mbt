@@ -835,37 +835,121 @@ fn parse_import_function_count(payload : Bytes) -> UInt raise WalyzeError {
 }
 
 ///|
-fn parse_import_table_count(payload : Bytes) -> UInt raise WalyzeError {
+priv struct ImportSectionEntry {
+  bytes : Bytes
+  kind : UInt
+  kind_index : UInt
+}
+
+///|
+fn parse_import_section_entries_raise(
+  payload : Bytes,
+) -> Array[ImportSectionEntry] raise WalyzeError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
-  let mut table_import_count = 0U
+  let out : Array[ImportSectionEntry] = []
+  let mut function_import_index = 0U
+  let mut table_import_index = 0U
+  let mut memory_import_index = 0U
+  let mut global_import_index = 0U
+  let mut tag_import_index = 0U
   for _ in 0U..<count {
+    let start = parser.get_pos()
     ignore(read_name_string(parser))
     ignore(read_name_string(parser))
     let kind = parser.read_byte().to_uint()
-    match kind {
-      0x00U => ignore(parser.read_u32_leb128())
+    let kind_index = match kind {
+      0x00U => {
+        let current = function_import_index
+        function_import_index += 1U
+        ignore(parser.read_u32_leb128())
+        current
+      }
       0x01U => {
-        table_import_count += 1U
+        let current = table_import_index
+        table_import_index += 1U
         skip_heap_type(parser)
         parse_limits(parser)
+        current
       }
-      0x02U => parse_limits(parser)
+      0x02U => {
+        let current = memory_import_index
+        memory_import_index += 1U
+        parse_limits(parser)
+        current
+      }
       0x03U => {
+        let current = global_import_index
+        global_import_index += 1U
         ignore(parser.read_byte())
         ignore(parser.read_byte())
+        current
       }
       0x04U => {
+        let current = tag_import_index
+        tag_import_index += 1U
         ignore(parser.read_byte())
         ignore(parser.read_u32_leb128())
+        current
       }
       _ =>
         raise WalyzeError::InvalidFormat(
           "unsupported import descriptor kind: " + kind.to_string(),
         )
     }
+    let end_ = parser.get_pos()
+    out.push({ bytes: payload[start:end_].to_bytes(), kind, kind_index })
   }
-  table_import_count
+  out
+}
+
+///|
+fn rewrite_import_section_payload_for_keep_raise(
+  payload : Bytes,
+  keep_table_imports : Array[Bool],
+  keep_memory_imports : Array[Bool],
+  keep_global_imports : Array[Bool],
+) -> (Bytes, UInt) raise WalyzeError {
+  let entries = parse_import_section_entries_raise(payload)
+  let kept_entries : Array[Bytes] = []
+  let mut removed_count = 0U
+  for entry in entries {
+    let mut keep = true
+    if entry.kind == 1U {
+      let index = UInt::reinterpret_as_int(entry.kind_index)
+      if index < 0 || index >= keep_table_imports.length() {
+        raise WalyzeError::InvalidFormat("table import keep index out of range")
+      }
+      keep = keep_table_imports[index]
+    } else if entry.kind == 2U {
+      let index = UInt::reinterpret_as_int(entry.kind_index)
+      if index < 0 || index >= keep_memory_imports.length() {
+        raise WalyzeError::InvalidFormat(
+          "memory import keep index out of range",
+        )
+      }
+      keep = keep_memory_imports[index]
+    } else if entry.kind == 3U {
+      let index = UInt::reinterpret_as_int(entry.kind_index)
+      if index < 0 || index >= keep_global_imports.length() {
+        raise WalyzeError::InvalidFormat(
+          "global import keep index out of range",
+        )
+      }
+      keep = keep_global_imports[index]
+    }
+    if keep {
+      kept_entries.push(entry.bytes)
+    } else {
+      removed_count += 1U
+    }
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_entries.length().reinterpret_as_uint())[:])
+  for entry in kept_entries {
+    out.append(entry[:].to_array())
+  }
+  (Bytes::from_array(out[:]), removed_count)
 }
 
 ///|
@@ -939,6 +1023,28 @@ fn parse_export_function_names(
 
 ///|
 fn parse_export_table_indices(payload : Bytes) -> Array[UInt] raise WalyzeError {
+  parse_export_indices_by_kind(payload, 1U)
+}
+
+///|
+fn parse_export_memory_indices(
+  payload : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  parse_export_indices_by_kind(payload, 2U)
+}
+
+///|
+fn parse_export_global_indices(
+  payload : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  parse_export_indices_by_kind(payload, 3U)
+}
+
+///|
+fn parse_export_indices_by_kind(
+  payload : Bytes,
+  kind_filter : UInt,
+) -> Array[UInt] raise WalyzeError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
@@ -946,7 +1052,7 @@ fn parse_export_table_indices(payload : Bytes) -> Array[UInt] raise WalyzeError 
     ignore(read_name_string(parser))
     let kind = parser.read_byte().to_uint()
     let index = parser.read_u32_leb128()
-    if kind == 1U {
+    if kind == kind_filter {
       push_unique_u32(out, index)
     }
   }
@@ -1400,6 +1506,82 @@ fn collect_ref_func_indices_from_expr_raise(
 }
 
 ///|
+fn collect_global_get_indices_from_expr_raise(
+  expr_bytes : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  let spans = parse_instruction_spans_raise(expr_bytes)
+  let out : Array[UInt] = []
+  for span in spans {
+    if span.opcode == 0x23U {
+      match decode_span_u32_immediate(expr_bytes, span) {
+        Some(index) => push_unique_u32(out, index)
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode global.get immediate in const expr",
+          )
+      }
+    }
+  }
+  out
+}
+
+///|
+fn remap_global_index_raise(
+  index : UInt,
+  global_index_map : Map[UInt, UInt],
+) -> UInt raise WalyzeError {
+  match global_index_map.get(index) {
+    Some(v) => v
+    None =>
+      raise WalyzeError::InvalidFormat(
+        "global remap missing index: " + index.to_string(),
+      )
+  }
+}
+
+///|
+fn remap_memory_index_raise(
+  index : UInt,
+  memory_index_map : Map[UInt, UInt],
+) -> UInt raise WalyzeError {
+  match memory_index_map.get(index) {
+    Some(v) => v
+    None =>
+      raise WalyzeError::InvalidFormat(
+        "memory remap missing index: " + index.to_string(),
+      )
+  }
+}
+
+///|
+fn rewrite_const_expr_global_indices_raise(
+  expr_bytes : Bytes,
+  global_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let spans = parse_instruction_spans_raise(expr_bytes)
+  let out : Array[Byte] = []
+  for span in spans {
+    if span.opcode == 0x23U {
+      match decode_span_u32_immediate(expr_bytes, span) {
+        Some(index) => {
+          out.push(0x23U.to_byte())
+          out.append(
+            encode_u32_leb128(remap_global_index_raise(index, global_index_map))[:],
+          )
+        }
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode global.get immediate",
+          )
+      }
+    } else {
+      out.append(expr_bytes[span.start:span.end_].to_array())
+    }
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn parse_global_section_function_refs_raise(
   payload : Bytes,
 ) -> Array[UInt] raise WalyzeError {
@@ -1514,6 +1696,110 @@ fn parse_element_section_function_refs_raise(
       _ =>
         raise WalyzeError::InvalidFormat(
           "unsupported element segment flags in parser: " + flags.to_string(),
+        )
+    }
+  }
+  out
+}
+
+///|
+fn collect_used_global_indices_from_element_section_raise(
+  payload : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let segment_count = parser.read_u32_leb128()
+  let out : Array[UInt] = []
+  for _ in 0U..<segment_count {
+    let flags = parser.read_u32_leb128()
+    match flags {
+      0U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_global_get_indices_from_expr_raise(offset_expr) {
+          push_unique_u32(out, index)
+        }
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          ignore(parser.read_u32_leb128())
+        }
+      }
+      1U => {
+        ignore(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          ignore(parser.read_u32_leb128())
+        }
+      }
+      2U => {
+        ignore(parser.read_u32_leb128())
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_global_get_indices_from_expr_raise(offset_expr) {
+          push_unique_u32(out, index)
+        }
+        ignore(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          ignore(parser.read_u32_leb128())
+        }
+      }
+      3U => {
+        ignore(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          ignore(parser.read_u32_leb128())
+        }
+      }
+      4U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_global_get_indices_from_expr_raise(offset_expr) {
+          push_unique_u32(out, index)
+        }
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          let expr = read_const_expr_bytes_raise(parser, payload)
+          for index in collect_global_get_indices_from_expr_raise(expr) {
+            push_unique_u32(out, index)
+          }
+        }
+      }
+      5U => {
+        ignore(read_ref_type_bytes_raise(parser))
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          let expr = read_const_expr_bytes_raise(parser, payload)
+          for index in collect_global_get_indices_from_expr_raise(expr) {
+            push_unique_u32(out, index)
+          }
+        }
+      }
+      6U => {
+        ignore(parser.read_u32_leb128())
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_global_get_indices_from_expr_raise(offset_expr) {
+          push_unique_u32(out, index)
+        }
+        ignore(read_ref_type_bytes_raise(parser))
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          let expr = read_const_expr_bytes_raise(parser, payload)
+          for index in collect_global_get_indices_from_expr_raise(expr) {
+            push_unique_u32(out, index)
+          }
+        }
+      }
+      7U => {
+        ignore(read_ref_type_bytes_raise(parser))
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          let expr = read_const_expr_bytes_raise(parser, payload)
+          for index in collect_global_get_indices_from_expr_raise(expr) {
+            push_unique_u32(out, index)
+          }
+        }
+      }
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported element segment flags in global parser: " +
+          flags.to_string(),
         )
     }
   }
@@ -1672,6 +1958,112 @@ fn rewrite_element_section_payload_for_index_map_raise(
 }
 
 ///|
+priv struct GlobalSectionEntry {
+  val_type : Bytes
+  mutability : Byte
+  init_expr : Bytes
+  init_global_refs : Array[UInt]
+}
+
+///|
+fn parse_global_section_entries_with_refs_raise(
+  payload : Bytes,
+) -> Array[GlobalSectionEntry] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[GlobalSectionEntry] = []
+  for _ in 0U..<count {
+    let val_type = read_val_type_bytes_raise(parser)
+    let mutability = parser.read_byte()
+    let init_expr = read_const_expr_bytes_raise(parser, payload)
+    out.push({
+      val_type,
+      mutability,
+      init_expr,
+      init_global_refs: collect_global_get_indices_from_expr_raise(init_expr),
+    })
+  }
+  out
+}
+
+///|
+fn rewrite_global_section_payload_for_keep_local_and_global_index_map_raise(
+  payload : Bytes,
+  keep_local : Array[Bool],
+  global_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let entries = parse_global_section_entries_with_refs_raise(payload)
+  if entries.length() != keep_local.length() {
+    raise WalyzeError::InvalidFormat(
+      "global section length mismatch: global=" +
+      entries.length().to_string() +
+      " keep=" +
+      keep_local.length().to_string(),
+    )
+  }
+  let kept_entries : Array[GlobalSectionEntry] = []
+  for i in 0..<entries.length() {
+    if keep_local[i] {
+      kept_entries.push(entries[i])
+    }
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_entries.length().reinterpret_as_uint())[:])
+  for entry in kept_entries {
+    out.append(entry.val_type[:].to_array())
+    out.push(entry.mutability)
+    out.append(
+      rewrite_const_expr_global_indices_raise(entry.init_expr, global_index_map)[:].to_array(),
+    )
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn parse_memory_section_entries_raise(
+  payload : Bytes,
+) -> Array[Bytes] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[Bytes] = []
+  for _ in 0U..<count {
+    let start = parser.get_pos()
+    parse_limits(parser)
+    let end_ = parser.get_pos()
+    out.push(payload[start:end_].to_bytes())
+  }
+  out
+}
+
+///|
+fn rewrite_memory_section_payload_for_keep_local_raise(
+  payload : Bytes,
+  keep_local : Array[Bool],
+) -> Bytes raise WalyzeError {
+  let entries = parse_memory_section_entries_raise(payload)
+  if entries.length() != keep_local.length() {
+    raise WalyzeError::InvalidFormat(
+      "memory section length mismatch: memory=" +
+      entries.length().to_string() +
+      " keep=" +
+      keep_local.length().to_string(),
+    )
+  }
+  let kept_entries : Array[Bytes] = []
+  for i in 0..<entries.length() {
+    if keep_local[i] {
+      kept_entries.push(entries[i])
+    }
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_entries.length().reinterpret_as_uint())[:])
+  for entry in kept_entries {
+    out.append(entry[:].to_array())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn parse_table_section_entries_raise(
   payload : Bytes,
 ) -> Array[Bytes] raise WalyzeError {
@@ -1810,10 +2202,145 @@ fn collect_used_table_indices_from_code_section(
 }
 
 ///|
-fn rewrite_instruction_table_indices_raise(
+fn opcode_fd_uses_memory(subopcode : UInt) -> Bool {
+  (subopcode >= 0x00U && subopcode <= 0x0bU) ||
+  (subopcode >= 0x54U && subopcode <= 0x5bU) ||
+  subopcode == 0x5cU ||
+  subopcode == 0x5dU
+}
+
+///|
+fn collect_used_global_indices_from_instruction_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> Array[UInt] raise WalyzeError {
+  let out : Array[UInt] = []
+  for span in spans {
+    if span.opcode == 0x23U || span.opcode == 0x24U {
+      match decode_span_u32_immediate(instr_bytes, span) {
+        Some(index) => push_unique_u32(out, index)
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode global index immediate",
+          )
+      }
+    }
+  }
+  out
+}
+
+///|
+fn collect_used_memory_indices_from_instruction_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> Array[UInt] raise WalyzeError {
+  let out : Array[UInt] = []
+  for span in spans {
+    match span.opcode {
+      0x28U..=0x3eU => push_unique_u32(out, 0U)
+      0x3fU | 0x40U =>
+        match decode_span_u32_immediate(instr_bytes, span) {
+          Some(index) => push_unique_u32(out, index)
+          None =>
+            raise WalyzeError::InvalidFormat(
+              "failed to decode memory.size/memory.grow immediate",
+            )
+        }
+      0xfcU => {
+        if span.end_ <= span.start + 1 {
+          raise WalyzeError::InvalidFormat("invalid 0xfc immediate")
+        }
+        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let parser = Cursor::new(imm)
+        let subopcode = parser.read_u32_leb128()
+        match subopcode {
+          8U => {
+            ignore(parser.read_u32_leb128())
+            push_unique_u32(out, parser.read_u32_leb128())
+          }
+          10U => {
+            push_unique_u32(out, parser.read_u32_leb128())
+            push_unique_u32(out, parser.read_u32_leb128())
+          }
+          11U => push_unique_u32(out, parser.read_u32_leb128())
+          _ => ()
+        }
+      }
+      0xfdU => {
+        if span.end_ <= span.start + 1 {
+          raise WalyzeError::InvalidFormat("invalid 0xfd immediate")
+        }
+        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let parser = Cursor::new(imm)
+        if opcode_fd_uses_memory(parser.read_u32_leb128()) {
+          push_unique_u32(out, 0U)
+        }
+      }
+      _ => ()
+    }
+  }
+  out
+}
+
+///|
+fn collect_used_global_indices_from_code_section(
+  payload : Bytes,
+) -> Array[UInt]? {
+  let result = try? {
+    let out : Array[UInt] = []
+    let bodies = parse_code_bodies(payload)
+    for body in bodies {
+      let prefix_end = parse_local_decl_prefix_end(body)
+      let instr_bytes = body[prefix_end:body.length()].to_bytes()
+      let spans = parse_instruction_spans_raise(instr_bytes)
+      for
+        index in collect_used_global_indices_from_instruction_raise(
+          instr_bytes, spans,
+        ) {
+        push_unique_u32(out, index)
+      }
+    }
+    out
+  }
+  match result {
+    Ok(v) => Some(v)
+    Err(_) => None
+  }
+}
+
+///|
+fn collect_used_memory_indices_from_code_section(
+  payload : Bytes,
+) -> Array[UInt]? {
+  let result = try? {
+    let out : Array[UInt] = []
+    let bodies = parse_code_bodies(payload)
+    for body in bodies {
+      let prefix_end = parse_local_decl_prefix_end(body)
+      let instr_bytes = body[prefix_end:body.length()].to_bytes()
+      let spans = parse_instruction_spans_raise(instr_bytes)
+      for
+        index in collect_used_memory_indices_from_instruction_raise(
+          instr_bytes, spans,
+        ) {
+        push_unique_u32(out, index)
+      }
+    }
+    out
+  }
+  match result {
+    Ok(v) => Some(v)
+    Err(_) => None
+  }
+}
+
+///|
+fn rewrite_instruction_module_indices_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   table_index_map : Map[UInt, UInt],
+  memory_index_map : Map[UInt, UInt],
+  global_index_map : Map[UInt, UInt],
 ) -> Bytes raise WalyzeError {
   let out : Array[Byte] = []
   for span in spans {
@@ -1834,6 +2361,21 @@ fn rewrite_instruction_table_indices_raise(
           )[:],
         )
       }
+      0x23U | 0x24U =>
+        match decode_span_u32_immediate(instr_bytes, span) {
+          Some(index) => {
+            out.push(span.opcode.to_byte())
+            out.append(
+              encode_u32_leb128(
+                remap_global_index_raise(index, global_index_map),
+              )[:],
+            )
+          }
+          None =>
+            raise WalyzeError::InvalidFormat(
+              "failed to decode global index immediate",
+            )
+        }
       0x25U | 0x26U =>
         match decode_span_u32_immediate(instr_bytes, span) {
           Some(index) => {
@@ -1847,6 +2389,29 @@ fn rewrite_instruction_table_indices_raise(
               "failed to decode table index immediate",
             )
         }
+      0x28U..=0x3eU => {
+        if remap_memory_index_raise(0U, memory_index_map) != 0U {
+          raise WalyzeError::InvalidFormat(
+            "implicit memory index remapped to non-zero",
+          )
+        }
+        out.append(instr_bytes[span.start:span.end_].to_array())
+      }
+      0x3fU | 0x40U =>
+        match decode_span_u32_immediate(instr_bytes, span) {
+          Some(index) => {
+            out.push(span.opcode.to_byte())
+            out.append(
+              encode_u32_leb128(
+                remap_memory_index_raise(index, memory_index_map),
+              )[:],
+            )
+          }
+          None =>
+            raise WalyzeError::InvalidFormat(
+              "failed to decode memory.size/memory.grow immediate",
+            )
+        }
       0xfcU => {
         if span.end_ <= span.start + 1 {
           raise WalyzeError::InvalidFormat("invalid 0xfc immediate")
@@ -1854,9 +2419,42 @@ fn rewrite_instruction_table_indices_raise(
         let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
         let parser = Cursor::new(imm)
         let subopcode = parser.read_u32_leb128()
+        let rest_start = parser.get_pos()
         out.push(0xfcU.to_byte())
         out.append(encode_u32_leb128(subopcode)[:])
         match subopcode {
+          8U => {
+            let data_index = parser.read_u32_leb128()
+            let memory_index = parser.read_u32_leb128()
+            out.append(encode_u32_leb128(data_index)[:])
+            out.append(
+              encode_u32_leb128(
+                remap_memory_index_raise(memory_index, memory_index_map),
+              )[:],
+            )
+          }
+          10U => {
+            let dst_memory = parser.read_u32_leb128()
+            let src_memory = parser.read_u32_leb128()
+            out.append(
+              encode_u32_leb128(
+                remap_memory_index_raise(dst_memory, memory_index_map),
+              )[:],
+            )
+            out.append(
+              encode_u32_leb128(
+                remap_memory_index_raise(src_memory, memory_index_map),
+              )[:],
+            )
+          }
+          11U => {
+            let memory_index = parser.read_u32_leb128()
+            out.append(
+              encode_u32_leb128(
+                remap_memory_index_raise(memory_index, memory_index_map),
+              )[:],
+            )
+          }
           12U => {
             let elem_index = parser.read_u32_leb128()
             let table_index = parser.read_u32_leb128()
@@ -1868,13 +2466,17 @@ fn rewrite_instruction_table_indices_raise(
             )
           }
           14U => {
-            let dst = parser.read_u32_leb128()
-            let src = parser.read_u32_leb128()
+            let dst_table = parser.read_u32_leb128()
+            let src_table = parser.read_u32_leb128()
             out.append(
-              encode_u32_leb128(remap_table_index_raise(dst, table_index_map))[:],
+              encode_u32_leb128(
+                remap_table_index_raise(dst_table, table_index_map),
+              )[:],
             )
             out.append(
-              encode_u32_leb128(remap_table_index_raise(src, table_index_map))[:],
+              encode_u32_leb128(
+                remap_table_index_raise(src_table, table_index_map),
+              )[:],
             )
           }
           15U | 16U | 17U => {
@@ -1885,7 +2487,7 @@ fn rewrite_instruction_table_indices_raise(
               )[:],
             )
           }
-          _ => out.append(imm[:].to_array())
+          _ => out.append(imm[rest_start:imm.length()].to_array())
         }
       }
       _ => out.append(instr_bytes[span.start:span.end_].to_array())
@@ -1895,15 +2497,17 @@ fn rewrite_instruction_table_indices_raise(
 }
 
 ///|
-fn rewrite_code_body_for_table_index_map_raise(
+fn rewrite_code_body_for_module_index_map_raise(
   body : Bytes,
   table_index_map : Map[UInt, UInt],
+  memory_index_map : Map[UInt, UInt],
+  global_index_map : Map[UInt, UInt],
 ) -> Bytes raise WalyzeError {
   let prefix_end = parse_local_decl_prefix_end(body)
   let instr_bytes = body[prefix_end:body.length()].to_bytes()
   let spans = parse_instruction_spans_raise(instr_bytes)
-  let rewritten_instr = rewrite_instruction_table_indices_raise(
-    instr_bytes, spans, table_index_map,
+  let rewritten_instr = rewrite_instruction_module_indices_raise(
+    instr_bytes, spans, table_index_map, memory_index_map, global_index_map,
   )
   let out : Array[Byte] = body[0:prefix_end].to_array()
   out.append(rewritten_instr[:].to_array())
@@ -1911,16 +2515,18 @@ fn rewrite_code_body_for_table_index_map_raise(
 }
 
 ///|
-fn rewrite_code_section_payload_for_table_index_map_raise(
+fn rewrite_code_section_payload_for_module_index_map_raise(
   payload : Bytes,
   table_index_map : Map[UInt, UInt],
+  memory_index_map : Map[UInt, UInt],
+  global_index_map : Map[UInt, UInt],
 ) -> Bytes raise WalyzeError {
   let bodies = parse_code_bodies(payload)
   let out : Array[Byte] = []
   out.append(encode_u32_leb128(bodies.length().reinterpret_as_uint())[:])
   for body in bodies {
-    let rewritten = rewrite_code_body_for_table_index_map_raise(
-      body, table_index_map,
+    let rewritten = rewrite_code_body_for_module_index_map_raise(
+      body, table_index_map, memory_index_map, global_index_map,
     )
     out.append(encode_u32_leb128(rewritten.length().reinterpret_as_uint())[:])
     out.append(rewritten[:].to_array())
@@ -1929,28 +2535,53 @@ fn rewrite_code_section_payload_for_table_index_map_raise(
 }
 
 ///|
-fn rewrite_export_section_payload_for_table_index_map_raise(
+fn rewrite_export_section_payload_for_module_index_maps_raise(
   payload : Bytes,
   table_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+  memory_index_map : Map[UInt, UInt],
+  global_index_map : Map[UInt, UInt],
+) -> (Bytes, UInt) raise WalyzeError {
   let parser = Cursor::new(payload)
   let export_count = parser.read_u32_leb128()
   let out : Array[Byte] = []
-  out.append(encode_u32_leb128(export_count)[:])
+  let mut kept_count = 0U
+  let mut removed_count = 0U
   for _ in 0U..<export_count {
     let name = read_name_bytes(parser)
     let kind = parser.read_byte().to_uint()
     let index = parser.read_u32_leb128()
-    append_name_bytes(out, name)
-    out.push(kind.to_byte())
-    let remapped = if kind == 1U {
-      remap_table_index_raise(index, table_index_map)
-    } else {
-      index
+    let mapped = match kind {
+      1U =>
+        match table_index_map.get(index) {
+          Some(v) => Some(v)
+          None => None
+        }
+      2U =>
+        match memory_index_map.get(index) {
+          Some(v) => Some(v)
+          None => None
+        }
+      3U =>
+        match global_index_map.get(index) {
+          Some(v) => Some(v)
+          None => None
+        }
+      _ => Some(index)
     }
-    out.append(encode_u32_leb128(remapped)[:])
+    match mapped {
+      Some(remapped) => {
+        kept_count += 1U
+        append_name_bytes(out, name)
+        out.push(kind.to_byte())
+        out.append(encode_u32_leb128(remapped)[:])
+      }
+      None => removed_count += 1U
+    }
   }
-  Bytes::from_array(out[:])
+  let encoded : Array[Byte] = []
+  encoded.append(encode_u32_leb128(kept_count)[:])
+  encoded.append(out[:])
+  (Bytes::from_array(encoded[:]), removed_count)
 }
 
 ///|
@@ -1967,23 +2598,28 @@ fn read_function_index_vector_bytes_raise(
 }
 
 ///|
-fn read_const_expr_vector_bytes_raise(
+fn rewrite_const_expr_vector_global_indices_raise(
   parser : Cursor,
   payload : Bytes,
+  global_index_map : Map[UInt, UInt],
 ) -> Bytes raise WalyzeError {
-  let start = parser.get_pos()
   let count = parser.read_u32_leb128()
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(count)[:])
   for _ in 0U..<count {
-    ignore(read_const_expr_bytes_raise(parser, payload))
+    let expr = read_const_expr_bytes_raise(parser, payload)
+    out.append(
+      rewrite_const_expr_global_indices_raise(expr, global_index_map)[:].to_array(),
+    )
   }
-  let end_ = parser.get_pos()
-  payload[start:end_].to_bytes()
+  Bytes::from_array(out[:])
 }
 
 ///|
 fn rewrite_element_section_payload_for_table_index_map_raise(
   payload : Bytes,
   table_index_map : Map[UInt, UInt],
+  global_index_map : Map[UInt, UInt],
 ) -> (Bytes, UInt) raise WalyzeError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
@@ -2001,7 +2637,11 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
           keep_segment = false
         } else {
           segment_out.append(encode_u32_leb128(0U)[:])
-          segment_out.append(offset_expr[:].to_array())
+          segment_out.append(
+            rewrite_const_expr_global_indices_raise(
+              offset_expr, global_index_map,
+            )[:].to_array(),
+          )
           segment_out.append(function_indices[:].to_array())
         }
       }
@@ -2021,7 +2661,11 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
           Some(remapped) => {
             segment_out.append(encode_u32_leb128(2U)[:])
             segment_out.append(encode_u32_leb128(remapped)[:])
-            segment_out.append(offset_expr[:].to_array())
+            segment_out.append(
+              rewrite_const_expr_global_indices_raise(
+                offset_expr, global_index_map,
+              )[:].to_array(),
+            )
             segment_out.push(elem_kind)
             segment_out.append(function_indices[:].to_array())
           }
@@ -2037,18 +2681,26 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
       }
       4U => {
         let offset_expr = read_const_expr_bytes_raise(parser, payload)
-        let exprs = read_const_expr_vector_bytes_raise(parser, payload)
+        let exprs = rewrite_const_expr_vector_global_indices_raise(
+          parser, payload, global_index_map,
+        )
         if table_index_map.get(0U) is None {
           keep_segment = false
         } else {
           segment_out.append(encode_u32_leb128(4U)[:])
-          segment_out.append(offset_expr[:].to_array())
+          segment_out.append(
+            rewrite_const_expr_global_indices_raise(
+              offset_expr, global_index_map,
+            )[:].to_array(),
+          )
           segment_out.append(exprs[:].to_array())
         }
       }
       5U => {
         let ref_type = read_ref_type_bytes_raise(parser)
-        let exprs = read_const_expr_vector_bytes_raise(parser, payload)
+        let exprs = rewrite_const_expr_vector_global_indices_raise(
+          parser, payload, global_index_map,
+        )
         segment_out.append(encode_u32_leb128(5U)[:])
         segment_out.append(ref_type[:].to_array())
         segment_out.append(exprs[:].to_array())
@@ -2057,12 +2709,18 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
         let table_index = parser.read_u32_leb128()
         let offset_expr = read_const_expr_bytes_raise(parser, payload)
         let ref_type = read_ref_type_bytes_raise(parser)
-        let exprs = read_const_expr_vector_bytes_raise(parser, payload)
+        let exprs = rewrite_const_expr_vector_global_indices_raise(
+          parser, payload, global_index_map,
+        )
         match table_index_map.get(table_index) {
           Some(remapped) => {
             segment_out.append(encode_u32_leb128(6U)[:])
             segment_out.append(encode_u32_leb128(remapped)[:])
-            segment_out.append(offset_expr[:].to_array())
+            segment_out.append(
+              rewrite_const_expr_global_indices_raise(
+                offset_expr, global_index_map,
+              )[:].to_array(),
+            )
             segment_out.append(ref_type[:].to_array())
             segment_out.append(exprs[:].to_array())
           }
@@ -2071,7 +2729,9 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
       }
       7U => {
         let ref_type = read_ref_type_bytes_raise(parser)
-        let exprs = read_const_expr_vector_bytes_raise(parser, payload)
+        let exprs = rewrite_const_expr_vector_global_indices_raise(
+          parser, payload, global_index_map,
+        )
         segment_out.append(encode_u32_leb128(7U)[:])
         segment_out.append(ref_type[:].to_array())
         segment_out.append(exprs[:].to_array())
@@ -2080,6 +2740,143 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
         raise WalyzeError::InvalidFormat(
           "unsupported element segment flags in table rewrite: " +
           flags.to_string(),
+        )
+    }
+    if keep_segment {
+      kept_segments.push(Bytes::from_array(segment_out[:]))
+    } else {
+      removed_segment_count += 1U
+    }
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_segments.length().reinterpret_as_uint())[:])
+  for segment in kept_segments {
+    out.append(segment[:].to_array())
+  }
+  (Bytes::from_array(out[:]), removed_segment_count)
+}
+
+///|
+fn read_data_init_bytes_raise(
+  parser : Cursor,
+  payload : Bytes,
+) -> Bytes raise WalyzeError {
+  let start = parser.get_pos()
+  let size_u = parser.read_u32_leb128()
+  let size = UInt::reinterpret_as_int(size_u)
+  if size < 0 {
+    raise WalyzeError::InvalidFormat("data init size overflow")
+  }
+  parser.skip(size)
+  let end_ = parser.get_pos()
+  payload[start:end_].to_bytes()
+}
+
+///|
+fn collect_used_memory_and_global_indices_from_data_section_raise(
+  payload : Bytes,
+) -> (Array[UInt], Array[UInt]) raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let segment_count = parser.read_u32_leb128()
+  let memory_indices : Array[UInt] = []
+  let global_indices : Array[UInt] = []
+  for _ in 0U..<segment_count {
+    let flags = parser.read_u32_leb128()
+    match flags {
+      0U => {
+        push_unique_u32(memory_indices, 0U)
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_global_get_indices_from_expr_raise(offset_expr) {
+          push_unique_u32(global_indices, index)
+        }
+        ignore(read_data_init_bytes_raise(parser, payload))
+      }
+      1U => ignore(read_data_init_bytes_raise(parser, payload))
+      2U => {
+        let memory_index = parser.read_u32_leb128()
+        push_unique_u32(memory_indices, memory_index)
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_global_get_indices_from_expr_raise(offset_expr) {
+          push_unique_u32(global_indices, index)
+        }
+        ignore(read_data_init_bytes_raise(parser, payload))
+      }
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported data segment flags in parser: " + flags.to_string(),
+        )
+    }
+  }
+  (memory_indices, global_indices)
+}
+
+///|
+fn rewrite_data_section_payload_for_memory_global_index_map_raise(
+  payload : Bytes,
+  memory_index_map : Map[UInt, UInt],
+  global_index_map : Map[UInt, UInt],
+) -> (Bytes, UInt) raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let segment_count = parser.read_u32_leb128()
+  let kept_segments : Array[Bytes] = []
+  let mut removed_segment_count = 0U
+  for _ in 0U..<segment_count {
+    let flags = parser.read_u32_leb128()
+    let segment_out : Array[Byte] = []
+    let mut keep_segment = true
+    match flags {
+      0U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        let data_init = read_data_init_bytes_raise(parser, payload)
+        match memory_index_map.get(0U) {
+          Some(remapped_memory_index) =>
+            if remapped_memory_index == 0U {
+              segment_out.append(encode_u32_leb128(0U)[:])
+              segment_out.append(
+                rewrite_const_expr_global_indices_raise(
+                  offset_expr, global_index_map,
+                )[:].to_array(),
+              )
+              segment_out.append(data_init[:].to_array())
+            } else {
+              segment_out.append(encode_u32_leb128(2U)[:])
+              segment_out.append(encode_u32_leb128(remapped_memory_index)[:])
+              segment_out.append(
+                rewrite_const_expr_global_indices_raise(
+                  offset_expr, global_index_map,
+                )[:].to_array(),
+              )
+              segment_out.append(data_init[:].to_array())
+            }
+          None => keep_segment = false
+        }
+      }
+      1U => {
+        let data_init = read_data_init_bytes_raise(parser, payload)
+        segment_out.append(encode_u32_leb128(1U)[:])
+        segment_out.append(data_init[:].to_array())
+      }
+      2U => {
+        let memory_index = parser.read_u32_leb128()
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        let data_init = read_data_init_bytes_raise(parser, payload)
+        match memory_index_map.get(memory_index) {
+          Some(remapped_memory_index) => {
+            segment_out.append(encode_u32_leb128(2U)[:])
+            segment_out.append(encode_u32_leb128(remapped_memory_index)[:])
+            segment_out.append(
+              rewrite_const_expr_global_indices_raise(
+                offset_expr, global_index_map,
+              )[:].to_array(),
+            )
+            segment_out.append(data_init[:].to_array())
+          }
+          None => keep_segment = false
+        }
+      }
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported data segment flags in rewrite: " + flags.to_string(),
         )
     }
     if keep_segment {
@@ -2675,12 +3472,28 @@ fn optimize_for_size_round_raise(
   if config.enable_remove_unused_module_elements {
     let rume = apply_remove_unused_module_elements_raise(optimized_bytes)
     optimized_bytes = rume.bytes
-    if rume.removed_table_count > 0U || rume.removed_element_count > 0U {
+    if rume.removed_import_count > 0U ||
+      rume.removed_table_count > 0U ||
+      rume.removed_memory_count > 0U ||
+      rume.removed_global_count > 0U ||
+      rume.removed_element_count > 0U ||
+      rume.removed_data_count > 0U ||
+      rume.removed_export_count > 0U {
       removed_sections.push(
-        "rume:tables:" +
+        "rume:imports:" +
+        rume.removed_import_count.to_string() +
+        " tables:" +
         rume.removed_table_count.to_string() +
+        " memories:" +
+        rume.removed_memory_count.to_string() +
+        " globals:" +
+        rume.removed_global_count.to_string() +
         " elements:" +
-        rume.removed_element_count.to_string(),
+        rume.removed_element_count.to_string() +
+        " data:" +
+        rume.removed_data_count.to_string() +
+        " exports:" +
+        rume.removed_export_count.to_string(),
       )
     }
   }
@@ -3071,8 +3884,13 @@ priv struct MsfApplyResult {
 ///|
 priv struct RumeApplyResult {
   bytes : Bytes
+  removed_import_count : UInt
   removed_table_count : UInt
+  removed_memory_count : UInt
+  removed_global_count : UInt
   removed_element_count : UInt
+  removed_data_count : UInt
+  removed_export_count : UInt
 }
 
 ///|
@@ -3114,48 +3932,180 @@ fn apply_remove_unused_module_elements_raise(
   bytes : Bytes,
 ) -> RumeApplyResult raise WalyzeError {
   let sections = parse_core_sections_raise(bytes)
-  let mut imported_table_count = 0U
+  let mut import_section_payload : Bytes? = None
+  let mut export_section_payload : Bytes? = None
   let mut table_section_payload : Bytes? = None
+  let mut memory_section_payload : Bytes? = None
+  let mut global_section_payload : Bytes? = None
   let mut element_section_payload : Bytes? = None
+  let mut data_section_payload : Bytes? = None
+  let mut import_entries : Array[ImportSectionEntry] = []
   let used_table_indices : Array[UInt] = []
-  let mut code_analysis_complete = true
+  let used_memory_indices : Array[UInt] = []
+  let global_root_indices : Array[UInt] = []
+  let mut analysis_complete = true
   for section in sections {
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
     match section.section_id {
-      2U => imported_table_count += parse_import_table_count(payload)
+      2U => {
+        import_section_payload = Some(payload)
+        import_entries = parse_import_section_entries_raise(payload)
+      }
       4U => table_section_payload = Some(payload)
-      7U =>
+      5U => memory_section_payload = Some(payload)
+      6U => global_section_payload = Some(payload)
+      7U => {
+        export_section_payload = Some(payload)
         for index in parse_export_table_indices(payload) {
           push_unique_u32(used_table_indices, index)
         }
-      9U => element_section_payload = Some(payload)
-      10U =>
+        for index in parse_export_memory_indices(payload) {
+          push_unique_u32(used_memory_indices, index)
+        }
+        for index in parse_export_global_indices(payload) {
+          push_unique_u32(global_root_indices, index)
+        }
+      }
+      9U => {
+        element_section_payload = Some(payload)
+        let global_result = try? collect_used_global_indices_from_element_section_raise(
+          payload,
+        )
+        match global_result {
+          Ok(indices) =>
+            for index in indices {
+              push_unique_u32(global_root_indices, index)
+            }
+          Err(_) => analysis_complete = false
+        }
+      }
+      10U => {
         match collect_used_table_indices_from_code_section(payload) {
           Some(indices) =>
             for index in indices {
               push_unique_u32(used_table_indices, index)
             }
-          None => code_analysis_complete = false
+          None => analysis_complete = false
         }
+        match collect_used_memory_indices_from_code_section(payload) {
+          Some(indices) =>
+            for index in indices {
+              push_unique_u32(used_memory_indices, index)
+            }
+          None => analysis_complete = false
+        }
+        match collect_used_global_indices_from_code_section(payload) {
+          Some(indices) =>
+            for index in indices {
+              push_unique_u32(global_root_indices, index)
+            }
+          None => analysis_complete = false
+        }
+      }
+      11U => {
+        data_section_payload = Some(payload)
+        let data_result = try? collect_used_memory_and_global_indices_from_data_section_raise(
+          payload,
+        )
+        match data_result {
+          Ok((memory_indices, global_indices)) => {
+            for index in memory_indices {
+              push_unique_u32(used_memory_indices, index)
+            }
+            for index in global_indices {
+              push_unique_u32(global_root_indices, index)
+            }
+          }
+          Err(_) => analysis_complete = false
+        }
+      }
       _ => ()
     }
   }
-  if not(code_analysis_complete) {
-    return { bytes, removed_table_count: 0U, removed_element_count: 0U }
+  if not(analysis_complete) {
+    return {
+      bytes,
+      removed_import_count: 0U,
+      removed_table_count: 0U,
+      removed_memory_count: 0U,
+      removed_global_count: 0U,
+      removed_element_count: 0U,
+      removed_data_count: 0U,
+      removed_export_count: 0U,
+    }
   }
-  let table_payload = match table_section_payload {
-    Some(v) => v
-    None => return { bytes, removed_table_count: 0U, removed_element_count: 0U }
+  let mut imported_table_count = 0U
+  let mut imported_memory_count = 0U
+  let mut imported_global_count = 0U
+  for entry in import_entries {
+    match entry.kind {
+      1U => imported_table_count += 1U
+      2U => imported_memory_count += 1U
+      3U => imported_global_count += 1U
+      _ => ()
+    }
   }
-  let local_table_entries = parse_table_section_entries_raise(table_payload)
-  if local_table_entries.length() == 0 {
-    return { bytes, removed_table_count: 0U, removed_element_count: 0U }
+  let keep_import_tables : Array[Bool] = []
+  for i in 0U..<imported_table_count {
+    keep_import_tables.push(used_table_indices.contains(i))
+  }
+  let keep_import_memories : Array[Bool] = []
+  for i in 0U..<imported_memory_count {
+    keep_import_memories.push(used_memory_indices.contains(i))
+  }
+  let local_table_entries = match table_section_payload {
+    Some(payload) => parse_table_section_entries_raise(payload)
+    None => []
+  }
+  let local_memory_entries = match memory_section_payload {
+    Some(payload) => parse_memory_section_entries_raise(payload)
+    None => []
+  }
+  let local_global_entries : Array[GlobalSectionEntry] = match
+    global_section_payload {
+    Some(payload) => parse_global_section_entries_with_refs_raise(payload)
+    None => []
+  }
+  let used_global_indices : Array[UInt] = []
+  for index in global_root_indices {
+    push_unique_u32(used_global_indices, index)
+  }
+  let queue : Array[UInt] = used_global_indices.copy()
+  let mut queue_index = 0
+  while queue_index < queue.length() {
+    let current = queue[queue_index]
+    queue_index += 1
+    if current < imported_global_count {
+      continue
+    }
+    let local_index_u = current - imported_global_count
+    let local_index = UInt::reinterpret_as_int(local_index_u)
+    if local_index >= 0 && local_index < local_global_entries.length() {
+      for dep in local_global_entries[local_index].init_global_refs {
+        if not(used_global_indices.contains(dep)) {
+          push_unique_u32(used_global_indices, dep)
+          queue.push(dep)
+        }
+      }
+    }
+  }
+  let keep_import_globals : Array[Bool] = []
+  for i in 0U..<imported_global_count {
+    keep_import_globals.push(used_global_indices.contains(i))
+  }
+  let table_index_map : Map[UInt, UInt] = {}
+  let mut kept_imported_table_count = 0U
+  for i in 0U..<imported_table_count {
+    let index = UInt::reinterpret_as_int(i)
+    if index < 0 || index >= keep_import_tables.length() {
+      raise WalyzeError::InvalidFormat("table import keep index out of range")
+    }
+    if keep_import_tables[index] {
+      table_index_map.set(i, kept_imported_table_count)
+      kept_imported_table_count += 1U
+    }
   }
   let keep_local_tables : Array[Bool] = []
-  let table_index_map : Map[UInt, UInt] = {}
-  for i in 0U..<imported_table_count {
-    table_index_map.set(i, i)
-  }
   let mut kept_local_table_count = 0U
   let mut removed_table_count = 0U
   for i in 0..<local_table_entries.length() {
@@ -3164,7 +4114,7 @@ fn apply_remove_unused_module_elements_raise(
       keep_local_tables.push(true)
       table_index_map.set(
         old_index,
-        imported_table_count + kept_local_table_count,
+        kept_imported_table_count + kept_local_table_count,
       )
       kept_local_table_count += 1U
     } else {
@@ -3172,25 +4122,142 @@ fn apply_remove_unused_module_elements_raise(
       removed_table_count += 1U
     }
   }
+  let memory_index_map : Map[UInt, UInt] = {}
+  let mut kept_imported_memory_count = 0U
+  for i in 0U..<imported_memory_count {
+    let index = UInt::reinterpret_as_int(i)
+    if index < 0 || index >= keep_import_memories.length() {
+      raise WalyzeError::InvalidFormat("memory import keep index out of range")
+    }
+    if keep_import_memories[index] {
+      memory_index_map.set(i, kept_imported_memory_count)
+      kept_imported_memory_count += 1U
+    }
+  }
+  let keep_local_memories : Array[Bool] = []
+  let mut kept_local_memory_count = 0U
+  let mut removed_memory_count = 0U
+  for i in 0..<local_memory_entries.length() {
+    let old_index = imported_memory_count + i.reinterpret_as_uint()
+    if used_memory_indices.contains(old_index) {
+      keep_local_memories.push(true)
+      memory_index_map.set(
+        old_index,
+        kept_imported_memory_count + kept_local_memory_count,
+      )
+      kept_local_memory_count += 1U
+    } else {
+      keep_local_memories.push(false)
+      removed_memory_count += 1U
+    }
+  }
+  let global_index_map : Map[UInt, UInt] = {}
+  let mut kept_imported_global_count = 0U
+  for i in 0U..<imported_global_count {
+    let index = UInt::reinterpret_as_int(i)
+    if index < 0 || index >= keep_import_globals.length() {
+      raise WalyzeError::InvalidFormat("global import keep index out of range")
+    }
+    if keep_import_globals[index] {
+      global_index_map.set(i, kept_imported_global_count)
+      kept_imported_global_count += 1U
+    }
+  }
+  let keep_local_globals : Array[Bool] = []
+  let mut kept_local_global_count = 0U
+  let mut removed_global_count = 0U
+  for i in 0..<local_global_entries.length() {
+    let old_index = imported_global_count + i.reinterpret_as_uint()
+    if used_global_indices.contains(old_index) {
+      keep_local_globals.push(true)
+      global_index_map.set(
+        old_index,
+        kept_imported_global_count + kept_local_global_count,
+      )
+      kept_local_global_count += 1U
+    } else {
+      keep_local_globals.push(false)
+      removed_global_count += 1U
+    }
+  }
+  let mut removed_import_count = 0U
+  let mut rewritten_import_payload : Bytes? = None
+  match import_section_payload {
+    Some(payload) => {
+      let (rewritten, removed) = rewrite_import_section_payload_for_keep_raise(
+        payload, keep_import_tables, keep_import_memories, keep_import_globals,
+      )
+      rewritten_import_payload = Some(rewritten)
+      removed_import_count = removed
+    }
+    None => ()
+  }
   let mut removed_element_count = 0U
   let mut rewritten_element_payload : Bytes? = None
   match element_section_payload {
     Some(payload) => {
       let (rewritten, removed_segments) = rewrite_element_section_payload_for_table_index_map_raise(
-        payload, table_index_map,
+        payload, table_index_map, global_index_map,
       )
       rewritten_element_payload = Some(rewritten)
       removed_element_count = removed_segments
     }
     None => ()
   }
-  if removed_table_count == 0U && removed_element_count == 0U {
-    return { bytes, removed_table_count, removed_element_count }
+  let mut removed_data_count = 0U
+  let mut rewritten_data_payload : Bytes? = None
+  match data_section_payload {
+    Some(payload) => {
+      let (rewritten, removed_segments) = rewrite_data_section_payload_for_memory_global_index_map_raise(
+        payload, memory_index_map, global_index_map,
+      )
+      rewritten_data_payload = Some(rewritten)
+      removed_data_count = removed_segments
+    }
+    None => ()
+  }
+  let mut removed_export_count = 0U
+  let mut rewritten_export_payload : Bytes? = None
+  match export_section_payload {
+    Some(payload) => {
+      let (rewritten, removed) = rewrite_export_section_payload_for_module_index_maps_raise(
+        payload, table_index_map, memory_index_map, global_index_map,
+      )
+      rewritten_export_payload = Some(rewritten)
+      removed_export_count = removed
+    }
+    None => ()
+  }
+  if removed_import_count == 0U &&
+    removed_table_count == 0U &&
+    removed_memory_count == 0U &&
+    removed_global_count == 0U &&
+    removed_element_count == 0U &&
+    removed_data_count == 0U &&
+    removed_export_count == 0U {
+    return {
+      bytes,
+      removed_import_count,
+      removed_table_count,
+      removed_memory_count,
+      removed_global_count,
+      removed_element_count,
+      removed_data_count,
+      removed_export_count,
+    }
   }
   let out : Array[Byte] = bytes[0:8].to_array()
   for section in sections {
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
     match section.section_id {
+      2U =>
+        match rewritten_import_payload {
+          Some(rewritten) =>
+            if parse_vec_count(rewritten) > 0U {
+              append_encoded_section(out, 2U, rewritten)
+            }
+          None => ()
+        }
       4U => {
         let rewritten = rewrite_table_section_payload_for_keep_local_raise(
           payload, keep_local_tables,
@@ -3199,14 +4266,30 @@ fn apply_remove_unused_module_elements_raise(
           append_encoded_section(out, 4U, rewritten)
         }
       }
-      7U =>
-        append_encoded_section(
-          out,
-          7U,
-          rewrite_export_section_payload_for_table_index_map_raise(
-            payload, table_index_map,
-          ),
+      5U => {
+        let rewritten = rewrite_memory_section_payload_for_keep_local_raise(
+          payload, keep_local_memories,
         )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 5U, rewritten)
+        }
+      }
+      6U => {
+        let rewritten = rewrite_global_section_payload_for_keep_local_and_global_index_map_raise(
+          payload, keep_local_globals, global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 6U, rewritten)
+        }
+      }
+      7U =>
+        match rewritten_export_payload {
+          Some(rewritten) =>
+            if parse_vec_count(rewritten) > 0U {
+              append_encoded_section(out, 7U, rewritten)
+            }
+          None => ()
+        }
       9U =>
         match rewritten_element_payload {
           Some(rewritten) =>
@@ -3222,18 +4305,34 @@ fn apply_remove_unused_module_elements_raise(
         append_encoded_section(
           out,
           10U,
-          rewrite_code_section_payload_for_table_index_map_raise(
-            payload, table_index_map,
+          rewrite_code_section_payload_for_module_index_map_raise(
+            payload, table_index_map, memory_index_map, global_index_map,
           ),
         )
+      11U =>
+        match rewritten_data_payload {
+          Some(rewritten) =>
+            if parse_vec_count(rewritten) > 0U {
+              append_encoded_section(out, 11U, rewritten)
+            }
+          None =>
+            out.append(
+              bytes[section.section_start:section.section_end].to_array(),
+            )
+        }
       _ =>
         out.append(bytes[section.section_start:section.section_end].to_array())
     }
   }
   {
     bytes: Bytes::from_array(out[:]),
+    removed_import_count,
     removed_table_count,
+    removed_memory_count,
+    removed_global_count,
     removed_element_count,
+    removed_data_count,
+    removed_export_count,
   }
 }
 

@@ -481,6 +481,73 @@ fn sample_module_with_unused_table_and_element_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_unused_import_memory_global_table_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // import section:
+  //   table env.t0 (used), table env.t1 (unused)
+  //   memory env.m0 (used), memory env.m1 (unused)
+  //   global env.g0 (used), global env.g1 (unused)
+  append_section(
+    out,
+    2U,
+    bytes_of([
+      0x06, 0x03, 0x65, 0x6e, 0x76, 0x02, 0x74, 0x30, 0x01, 0x70, 0x00, 0x01, 0x03,
+      0x65, 0x6e, 0x76, 0x02, 0x74, 0x31, 0x01, 0x70, 0x00, 0x01, 0x03, 0x65, 0x6e,
+      0x76, 0x02, 0x6d, 0x30, 0x02, 0x00, 0x01, 0x03, 0x65, 0x6e, 0x76, 0x02, 0x6d,
+      0x31, 0x02, 0x00, 0x01, 0x03, 0x65, 0x6e, 0x76, 0x02, 0x67, 0x30, 0x03, 0x7f,
+      0x00, 0x03, 0x65, 0x6e, 0x76, 0x02, 0x67, 0x31, 0x03, 0x7f, 0x00,
+    ]),
+  )
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // table section: 2 local tables (index 2 used, index 3 unused)
+  append_section(out, 4U, bytes_of([0x02, 0x70, 0x00, 0x01, 0x70, 0x00, 0x01]))
+  // memory section: 2 local memories (index 2 used, index 3 unused)
+  append_section(out, 5U, bytes_of([0x02, 0x00, 0x01, 0x00, 0x01]))
+  // global section:
+  //   local#0(index 2) = global.get 0
+  //   local#1(index 3) = global.get 2
+  //   local#2(index 4) = i32.const 1 (unused)
+  append_section(
+    out,
+    6U,
+    bytes_of([
+      0x03, 0x7f, 0x00, 0x23, 0x00, 0x0b, 0x7f, 0x00, 0x23, 0x02, 0x0b, 0x7f, 0x00,
+      0x41, 0x01, 0x0b,
+    ]),
+  )
+  // export section:
+  //   run(func 0), t_local(table 2), m_local(memory 2), g_local(global 3)
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x04, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00, 0x07, 0x74, 0x5f, 0x6c, 0x6f, 0x63,
+      0x61, 0x6c, 0x01, 0x02, 0x07, 0x6d, 0x5f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x02,
+      0x02, 0x07, 0x67, 0x5f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x03, 0x03,
+    ]),
+  )
+  // code section:
+  //   global.get 3, drop
+  //   table.size 0, drop
+  //   table.size 2, drop
+  //   memory.size 0, drop
+  //   memory.size 2, drop
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x13, 0x00, 0x23, 0x03, 0x1a, 0xfc, 0x10, 0x00, 0x1a, 0xfc, 0x10, 0x02,
+      0x1a, 0x3f, 0x00, 0x1a, 0x3f, 0x02, 0x1a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn bytes_contains_seq(bytes : Bytes, seq : Array[Int]) -> Bool {
   if seq.length() == 0 {
     return true
@@ -880,12 +947,74 @@ test "optimize with rume apply removes unused table and element segment" {
     assert_true(false)
     return
   }
-  assert_true(optimized.removed_sections.any(s => s.contains("rume:tables:1")))
+  assert_true(optimized.removed_sections.any(s => s.contains("tables:1")))
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x04, 0x04, 0x01, 0x70, 0x00, 0x01]),
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x00]))
   assert_true(not(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x01])))
+}
+
+///|
+test "optimize with rume apply removes unused import/global/memory/table and remaps indices" {
+  let bytes = sample_module_with_unused_import_memory_global_table_bytes()
+  guard profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.import_count, 6U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_remove_unused_module_elements=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.removed_sections.any(s => s.contains("imports:3")))
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.import_count, 3U)
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x04, 0x04, 0x01, 0x70, 0x00, 0x01]),
+  )
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x05, 0x03, 0x01, 0x00, 0x01]),
+  )
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x06, 0x0b, 0x02, 0x7f, 0x00, 0x23, 0x00, 0x0b, 0x7f, 0x00, 0x23, 0x01, 0x0b,
+    ]),
+  )
+  assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x01]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x02])))
+  assert_true(bytes_contains_seq(optimized.bytes, [0x3f, 0x01]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x3f, 0x02])))
+  assert_true(bytes_contains_seq(optimized.bytes, [0x23, 0x02]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x23, 0x03])))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x07, 0x74, 0x5f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x01, 0x01,
+    ]),
+  )
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x07, 0x6d, 0x5f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x02, 0x01,
+    ]),
+  )
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x07, 0x67, 0x5f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x03, 0x02,
+    ]),
+  )
 }
 
 ///|
