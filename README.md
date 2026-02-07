@@ -7,6 +7,7 @@ It provides:
 - core wasm section-size analysis (`twiggy`-style breakdown by section)
 - core wasm top-function size analysis (`twiggy top`-style by code body size)
 - core wasm call graph + dead-body analysis (export/start roots)
+- core wasm call graph roots from global/element `ref.func`
 - core wasm DCE report + apply (callgraph-based function-level pruning)
 - core wasm duplicate function elimination apply (body+type based index remap)
 - core wasm merge-similar-functions apply (forwarding thunk merge + index remap)
