@@ -1,0 +1,10 @@
+import {
+  "mizchi/walyze" as @walyze,
+  "mizchi/wit" as @wit,
+  "moonbitlang/x/fs" as @fs,
+  "moonbitlang/x/sys" as @sys,
+}
+
+options(
+  "is-main": true,
+)

@@ -1,0 +1,16 @@
+{
+  "name": "mizchi/walyze",
+  "version": "0.1.0",
+  "deps": {
+    "moonbitlang/x": "0.4.40",
+    "mizchi/mwac": "0.1.2",
+    "mizchi/wit": "0.1.1"
+  },
+  "source": "src",
+  "preferred-target": "js",
+  "readme": "README.mbt.md",
+  "repository": "https://github.com/mizchi/walyze",
+  "license": "Apache-2.0",
+  "keywords": ["wasm", "component-model", "optimizer", "profiler"],
+  "description": "Component-model-aware WebAssembly analyzer, optimizer, and profiler"
+}
