@@ -2,9 +2,9 @@
 
 ## KPI Snapshot (2026-02-07)
 
-- core size KPI (`optimize -O1`): `171331 -> 73955 bytes` (`56.8350%`)
+- core size KPI (`optimize -O1`): `171331 -> 70803 bytes` (`58.6747%`)
 - wasm-opt 参考値 (`-Oz --all-features --strip-debug --strip-dwarf --strip-target-features`): `171331 -> 66220 bytes` (`61.3497%`)
-- gap to wasm-opt: `7735 bytes` (`-4.5147pt`)
+- gap to wasm-opt: `4583 bytes` (`-2.6750pt`)
 - component-model DCE KPI: `128170 -> 64076 bytes` (`50.0070%`)
 
 上記より、当面は **core size の wasm-opt ギャップ解消** を最優先にしつつ、差別化軸である **closed-world + GC 最適化** を次優先で進める。
@@ -58,7 +58,9 @@
 - [x] `drop-elision` 基盤: `local.get/global.get/ref.func/ref.null + drop`
 - [x] `local-cse` の最小実装（`local.get a; local.set b; local.get a -> local.get a; local.tee b`）
 - [ ] `precompute` の拡張（`eqz(eqz(x))` などの安全な定数/論理簡約）
-- [ ] `simplify-locals*` / `coalesce-locals` / `rse` を移植する
+- [x] `simplify-locals*` 基盤: local 簡約パイプラインを固定点で反復する
+- [x] `rse` 基盤: `local.tee x; local.set x -> local.set x`
+- [ ] `coalesce-locals` の本体実装（local 再割当て / index 圧縮）
 - [ ] `inlining-optimizing` / `dae-optimizing` / `duplicate-import-elimination` を検討する
 - [ ] `simplify-globals*` / `reorder-globals` / `memory-packing` を検討する
 

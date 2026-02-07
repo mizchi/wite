@@ -148,8 +148,8 @@ pub fn OptimizeConfig::o1() -> Self {
     enable_merge_blocks=true,
     enable_remove_unused_brs=true,
     enable_dce=false,
-    enable_dfe=false,
-    enable_merge_similar_functions=false,
+    enable_dfe=true,
+    enable_merge_similar_functions=true,
   )
 }
 
@@ -4094,6 +4094,42 @@ fn apply_simplify_local_tee_drop_to_set(instr_bytes : Bytes) -> Bytes {
 }
 
 ///|
+fn apply_rse_local_tee_set_same(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() &&
+      spans[i].opcode == 0x22U &&
+      spans[i + 1].opcode == 0x21U {
+      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
+        Some(tee_index) =>
+          match
+            decode_local_index_immediate_from_span(instr_bytes, spans[i + 1]) {
+            Some(set_index) =>
+              if tee_index == set_index && spans[i].end_ > spans[i].start + 1 {
+                out.push(0x21U.to_byte())
+                out.append(
+                  instr_bytes[spans[i].start + 1:spans[i].end_].to_array(),
+                )
+                i += 2
+                continue
+              }
+            None => ()
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn apply_basic_peephole_to_spans(
   spans : Array[InstrSpan],
   config : OptimizeConfig,
@@ -4259,11 +4295,22 @@ fn optimize_instruction_bytes(
   if config.peephole_remove_nop || config.peephole_remove_const_drop {
     current_bytes = apply_precompute_i32_add(current_bytes)
     current_bytes = apply_precompute_i32_identity_ops(current_bytes)
-    current_bytes = apply_simplify_local_set_get_to_tee(current_bytes)
-    current_bytes = apply_simplify_local_tee_drop_to_set(current_bytes)
-    current_bytes = apply_simplify_local_get_set_noop(current_bytes)
-    current_bytes = apply_simplify_local_get_tee_to_get(current_bytes)
-    current_bytes = apply_local_cse_get_set_get(current_bytes)
+    let mut local_simplify_round = 0
+    while local_simplify_round < 4 {
+      let before_local_simplify = current_bytes
+      current_bytes = apply_simplify_local_set_get_to_tee(current_bytes)
+      current_bytes = apply_simplify_local_tee_drop_to_set(current_bytes)
+      current_bytes = apply_rse_local_tee_set_same(current_bytes)
+      current_bytes = apply_simplify_local_get_set_noop(current_bytes)
+      current_bytes = apply_simplify_local_get_tee_to_get(current_bytes)
+      current_bytes = apply_local_cse_get_set_get(current_bytes)
+      current_bytes = apply_simplify_local_tee_drop_to_set(current_bytes)
+      current_bytes = apply_rse_local_tee_set_same(current_bytes)
+      if bytes_equal(before_local_simplify, current_bytes) {
+        break
+      }
+      local_simplify_round += 1
+    }
   }
   let spans = match parse_instruction_spans(current_bytes) {
     Some(v) => v

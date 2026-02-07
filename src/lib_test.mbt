@@ -643,6 +643,56 @@ fn sample_module_with_local_cse_get_set_get_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_local_tee_set_same_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=1, local group(count=1, i32)
+  // i32.const 1
+  // local.tee 0
+  // local.set 0
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0a, 0x01, 0x01, 0x7f, 0x41, 0x01, 0x22, 0x00, 0x21, 0x00, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_local_chain_simplify_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // local.get 0
+  // local.tee 0
+  // local.set 0
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x01, 0x08, 0x00, 0x20, 0x00, 0x22, 0x00, 0x21, 0x00, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_unreachable_tail_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1057,6 +1107,8 @@ test "opt level presets map to expected optimizer knobs" {
   }
   assert_true(o1.enable_peephole)
   assert_true(not(o1.enable_dce))
+  assert_true(o1.enable_dfe)
+  assert_true(o1.enable_merge_similar_functions)
   assert_true(o1.strip_debug_sections)
   assert_true(o1.strip_dwarf_sections)
   assert_true(o1.strip_target_features_section)
@@ -2228,6 +2280,74 @@ test "optimize local-cse rewrites local.get+local.set+local.get" {
       bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x01, 0x20, 0x00]),
     ),
   )
+}
+
+///|
+test "optimize rse rewrites local.tee+local.set(same) to local.set" {
+  let bytes = sample_module_with_local_tee_set_same_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 10U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 8U)
+  assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x21, 0x00, 0x0b]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x22, 0x00, 0x21, 0x00])))
+}
+
+///|
+test "optimize local simplify chain reaches fixed-point" {
+  let bytes = sample_module_with_local_chain_simplify_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 8U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 2U)
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x22, 0x00])))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x00])))
 }
 
 ///|
