@@ -48,6 +48,7 @@ pub struct OptimizeConfig {
   enable_dfe : Bool
   enable_merge_similar_functions : Bool
   enable_remove_unused_module_elements : Bool
+  closed_world : Bool
 }
 
 ///|
@@ -71,6 +72,7 @@ pub fn OptimizeConfig::default() -> Self {
     enable_dfe: false,
     enable_merge_similar_functions: false,
     enable_remove_unused_module_elements: false,
+    closed_world: false,
   }
 }
 
@@ -95,6 +97,7 @@ pub fn OptimizeConfig::aggressive() -> Self {
     enable_dfe: false,
     enable_merge_similar_functions: false,
     enable_remove_unused_module_elements: false,
+    closed_world: false,
   }
 }
 
@@ -272,6 +275,7 @@ pub fn make_optimize_config(
   enable_dfe? : Bool = false,
   enable_merge_similar_functions? : Bool = false,
   enable_remove_unused_module_elements? : Bool = false,
+  closed_world? : Bool = false,
 ) -> OptimizeConfig {
   {
     strip_all_custom,
@@ -292,6 +296,7 @@ pub fn make_optimize_config(
     enable_dfe,
     enable_merge_similar_functions,
     enable_remove_unused_module_elements,
+    closed_world,
   }
 }
 

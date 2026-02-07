@@ -655,6 +655,7 @@ test "opt level presets map to expected optimizer knobs" {
   assert_true(not(o0.enable_dce))
   assert_true(not(o0.enable_dfe))
   assert_true(not(o0.enable_merge_similar_functions))
+  assert_true(not(o0.closed_world))
   assert_eq(o0.pass_rounds, 1U)
   guard optimize_config_from_opt_level("-O2") is Some(o2) else {
     assert_true(false)
@@ -663,6 +664,7 @@ test "opt level presets map to expected optimizer knobs" {
   assert_true(o2.enable_peephole)
   assert_true(o2.enable_dce)
   assert_true(not(o2.enable_dfe))
+  assert_true(not(o2.closed_world))
   assert_eq(o2.pass_rounds, 2U)
   guard optimize_config_from_opt_level("-Oz") is Some(oz) else {
     assert_true(false)
@@ -671,11 +673,20 @@ test "opt level presets map to expected optimizer knobs" {
   assert_true(oz.enable_dce)
   assert_true(oz.enable_dfe)
   assert_true(oz.enable_merge_similar_functions)
+  assert_true(not(oz.closed_world))
   assert_eq(oz.pass_rounds, 8U)
   match optimize_config_from_opt_level("-Ox") {
     Some(_) => assert_true(false)
     None => ()
   }
+}
+
+///|
+test "make optimize config can enable closed-world mode" {
+  let default_config = make_optimize_config()
+  assert_true(not(default_config.closed_world))
+  let closed_world_config = make_optimize_config(closed_world=true)
+  assert_true(closed_world_config.closed_world)
 }
 
 ///|
