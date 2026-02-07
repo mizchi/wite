@@ -136,9 +136,9 @@ pub fn OptimizeConfig::o1() -> Self {
     strip_all_custom=false,
     strip_name_section=false,
     strip_producers_section=false,
-    strip_debug_sections=false,
-    strip_dwarf_sections=false,
-    strip_target_features_section=false,
+    strip_debug_sections=true,
+    strip_dwarf_sections=true,
+    strip_target_features_section=true,
     keep_custom_sections=[],
     pass_rounds=1U,
     enable_peephole=true,
@@ -3899,6 +3899,37 @@ fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
 }
 
 ///|
+fn apply_precompute_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() && spans[i].opcode == 0x41U {
+      match
+        decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
+        Some(0U) =>
+          if spans[i + 1].opcode == 0x6aU || spans[i + 1].opcode == 0x6bU {
+            i += 2
+            continue
+          }
+        Some(1U) =>
+          if spans[i + 1].opcode == 0x6cU {
+            i += 2
+            continue
+          }
+        _ => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
@@ -3921,6 +3952,110 @@ fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
                   instr_bytes[spans[i].start + 1:spans[i].end_].to_array(),
                 )
                 i += 2
+                continue
+              }
+            None => ()
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn apply_simplify_local_get_set_noop(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() &&
+      spans[i].opcode == 0x20U &&
+      spans[i + 1].opcode == 0x21U {
+      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
+        Some(get_index) =>
+          match
+            decode_local_index_immediate_from_span(instr_bytes, spans[i + 1]) {
+            Some(set_index) =>
+              if get_index == set_index {
+                i += 2
+                continue
+              }
+            None => ()
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn apply_simplify_local_get_tee_to_get(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() &&
+      spans[i].opcode == 0x20U &&
+      spans[i + 1].opcode == 0x22U {
+      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
+        Some(get_index) =>
+          match
+            decode_local_index_immediate_from_span(instr_bytes, spans[i + 1]) {
+            Some(tee_index) =>
+              if get_index == tee_index {
+                out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+                i += 2
+                continue
+              }
+            None => ()
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn apply_local_cse_get_set_get(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 2 < spans.length() &&
+      spans[i].opcode == 0x20U &&
+      spans[i + 1].opcode == 0x21U &&
+      spans[i + 2].opcode == 0x20U {
+      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
+        Some(first_get_index) =>
+          match
+            decode_local_index_immediate_from_span(instr_bytes, spans[i + 2]) {
+            Some(second_get_index) =>
+              if first_get_index == second_get_index &&
+                spans[i + 1].end_ > spans[i + 1].start + 1 {
+                out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+                out.push(0x22U.to_byte())
+                out.append(
+                  instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_array(),
+                )
+                i += 3
                 continue
               }
             None => ()
@@ -4123,8 +4258,12 @@ fn optimize_instruction_bytes(
   let mut current_bytes = instr_bytes
   if config.peephole_remove_nop || config.peephole_remove_const_drop {
     current_bytes = apply_precompute_i32_add(current_bytes)
+    current_bytes = apply_precompute_i32_identity_ops(current_bytes)
     current_bytes = apply_simplify_local_set_get_to_tee(current_bytes)
     current_bytes = apply_simplify_local_tee_drop_to_set(current_bytes)
+    current_bytes = apply_simplify_local_get_set_noop(current_bytes)
+    current_bytes = apply_simplify_local_get_tee_to_get(current_bytes)
+    current_bytes = apply_local_cse_get_set_get(current_bytes)
   }
   let spans = match parse_instruction_spans(current_bytes) {
     Some(v) => v

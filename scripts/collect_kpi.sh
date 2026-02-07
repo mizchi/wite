@@ -8,23 +8,48 @@ COMPONENT_DCE_TSV="$OUT_DIR/component_dce.tsv"
 RUNTIME_TSV="$OUT_DIR/runtime.tsv"
 BENCH_RAW_LOG="$OUT_DIR/bench.raw.log"
 LATEST_MD="$OUT_DIR/latest.md"
+WASM_OPT_BIN="${WASM_OPT_BIN:-}"
+WASM_OPT_ARGS=(
+  -Oz
+  --all-features
+  --strip-debug
+  --strip-dwarf
+  --strip-target-features
+)
+
+if [[ -z "$WASM_OPT_BIN" ]]; then
+  WASM_OPT_BIN="$(command -v wasm-opt || true)"
+fi
+
+HAS_WASM_OPT=0
+if [[ -n "$WASM_OPT_BIN" ]]; then
+  HAS_WASM_OPT=1
+fi
 
 mkdir -p "$OUT_DIR"
 
 tmp_wasm="$(mktemp)"
+tmp_wasm_opt="$(mktemp)"
 tmp_runtime="$(mktemp)"
 tmp_component="$(mktemp)"
 cleanup() {
-  rm -f "$tmp_wasm" "$tmp_runtime" "$tmp_component"
+  rm -f "$tmp_wasm" "$tmp_wasm_opt" "$tmp_runtime" "$tmp_component"
 }
 trap cleanup EXIT
 
-echo -e "file\tbefore_bytes\tafter_bytes\treduction_ratio_pct" > "$SIZE_TSV"
+echo -e "file\tbefore_bytes\twalyze_after_bytes\twalyze_reduction_ratio_pct\twasm_opt_after_bytes\twasm_opt_reduction_ratio_pct\tgap_to_wasm_opt_bytes\tgap_to_wasm_opt_ratio_pct\twasm_opt_status" > "$SIZE_TSV"
 
 total_before=0
 total_after=0
+core_file_count=0
+
+wasm_opt_total_before=0
+wasm_opt_total_walyze_after=0
+wasm_opt_total_after=0
+wasm_opt_success_files=0
 
 while IFS= read -r file; do
+  core_file_count=$((core_file_count + 1))
   rel="${file#$ROOT_DIR/}"
   line="$(
     moon run src/main --target js -- optimize "$rel" "$tmp_wasm" -O1 2>&1 |
@@ -43,13 +68,52 @@ while IFS= read -r file; do
   fi
 
   ratio_pct="$(awk -v b="$before" -v a="$after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
-  echo -e "$rel\t$before\t$after\t$ratio_pct" >> "$SIZE_TSV"
+
+  wasm_opt_after="NA"
+  wasm_opt_ratio_pct="NA"
+  gap_to_wasm_opt_bytes="NA"
+  gap_to_wasm_opt_ratio_pct="NA"
+  wasm_opt_status="missing"
+
+  if [[ "$HAS_WASM_OPT" -eq 1 ]]; then
+    if "$WASM_OPT_BIN" "$file" -o "$tmp_wasm_opt" "${WASM_OPT_ARGS[@]}" >/dev/null 2>&1; then
+      wasm_opt_after="$(wc -c < "$tmp_wasm_opt" | tr -d '[:space:]')"
+      if [[ "$wasm_opt_after" =~ ^[0-9]+$ ]]; then
+        wasm_opt_ratio_pct="$(awk -v b="$before" -v a="$wasm_opt_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+        gap_to_wasm_opt_bytes=$((after - wasm_opt_after))
+        gap_to_wasm_opt_ratio_pct="$(awk -v w="$ratio_pct" -v o="$wasm_opt_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
+        wasm_opt_status="ok"
+
+        wasm_opt_total_before=$((wasm_opt_total_before + before))
+        wasm_opt_total_walyze_after=$((wasm_opt_total_walyze_after + after))
+        wasm_opt_total_after=$((wasm_opt_total_after + wasm_opt_after))
+        wasm_opt_success_files=$((wasm_opt_success_files + 1))
+      else
+        wasm_opt_status="invalid-output"
+        wasm_opt_after="NA"
+      fi
+    else
+      wasm_opt_status="error"
+    fi
+  fi
+
+  echo -e "$rel\t$before\t$after\t$ratio_pct\t$wasm_opt_after\t$wasm_opt_ratio_pct\t$gap_to_wasm_opt_bytes\t$gap_to_wasm_opt_ratio_pct\t$wasm_opt_status" >> "$SIZE_TSV"
 
   total_before=$((total_before + before))
   total_after=$((total_after + after))
 done < <(find "$ROOT_DIR/bench/corpus/core/binaryen" -type f -name '*.wasm' | sort)
 
 total_ratio_pct="$(awk -v b="$total_before" -v a="$total_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+wasm_opt_total_ratio_pct="NA"
+wasm_opt_total_walyze_ratio_pct="NA"
+wasm_opt_total_gap_bytes="NA"
+wasm_opt_total_gap_ratio_pct="NA"
+if [[ "$wasm_opt_success_files" -gt 0 ]]; then
+  wasm_opt_total_ratio_pct="$(awk -v b="$wasm_opt_total_before" -v a="$wasm_opt_total_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+  wasm_opt_total_walyze_ratio_pct="$(awk -v b="$wasm_opt_total_before" -v a="$wasm_opt_total_walyze_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+  wasm_opt_total_gap_bytes=$((wasm_opt_total_walyze_after - wasm_opt_total_after))
+  wasm_opt_total_gap_ratio_pct="$(awk -v w="$wasm_opt_total_walyze_ratio_pct" -v o="$wasm_opt_total_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
+fi
 
 echo -e "file\tcomponent_bytes\tcore_before_bytes\tcore_after_bytes\treduction_ratio_pct\tcore_module_count\troot_count" > "$COMPONENT_DCE_TSV"
 
@@ -138,10 +202,22 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo "- total_before_bytes: $total_before"
   echo "- total_after_bytes: $total_after"
   echo "- total_reduction_ratio_pct: $total_ratio_pct"
+  if [[ "$HAS_WASM_OPT" -eq 1 ]]; then
+    echo "- wasm_opt_reference: \`$WASM_OPT_BIN ${WASM_OPT_ARGS[*]}\`"
+  else
+    echo '- wasm_opt_reference: unavailable (`wasm-opt` not found; install Binaryen or set `WASM_OPT_BIN`)'
+  fi
+  echo "- wasm_opt_success_files: $wasm_opt_success_files/$core_file_count"
+  if [[ "$wasm_opt_success_files" -gt 0 ]]; then
+    echo "- wasm_opt_total_after_bytes: $wasm_opt_total_after"
+    echo "- wasm_opt_total_reduction_ratio_pct: $wasm_opt_total_ratio_pct"
+    echo "- gap_to_wasm_opt_bytes: $wasm_opt_total_gap_bytes"
+    echo "- gap_to_wasm_opt_ratio_pct: $wasm_opt_total_gap_ratio_pct"
+  fi
   echo
-  echo "| file | before_bytes | after_bytes | reduction_ratio_pct |"
-  echo "| --- | ---: | ---: | ---: |"
-  awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s |\n", $1, $2, $3, $4 }' "$SIZE_TSV"
+  echo "| file | before_bytes | walyze_after_bytes | walyze_reduction_ratio_pct | wasm_opt_after_bytes | wasm_opt_reduction_ratio_pct | gap_to_wasm_opt_bytes | gap_to_wasm_opt_ratio_pct | wasm_opt_status |"
+  echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
+  awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9 }' "$SIZE_TSV"
   echo
   echo "## Component-model DCE Size KPI (priority 1)"
   echo

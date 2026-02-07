@@ -1,8 +1,22 @@
 # TODO (walyze)
 
-component-model DCE の強みを活かすため、`wasm-opt` 互換よりも **closed-world + GC 最適化** を優先する。
+## KPI Snapshot (2026-02-07)
 
-## P0: Closed-World 基盤（最優先）
+- core size KPI (`optimize -O1`): `171331 -> 73955 bytes` (`56.8350%`)
+- wasm-opt 参考値 (`-Oz --all-features --strip-debug --strip-dwarf --strip-target-features`): `171331 -> 66220 bytes` (`61.3497%`)
+- gap to wasm-opt: `7735 bytes` (`-4.5147pt`)
+- component-model DCE KPI: `128170 -> 64076 bytes` (`50.0070%`)
+
+上記より、当面は **core size の wasm-opt ギャップ解消** を最優先にしつつ、差別化軸である **closed-world + GC 最適化** を次優先で進める。
+
+## P0: Core Size ギャップ解消（最優先）
+
+- [ ] core corpus 合計 gap (`gap_to_wasm_opt_ratio_pct`) を段階的に縮小する
+- [ ] `zlib.wasm` 向けに `optimize-instructions` / `precompute` / `local-cse` を優先実装する
+- [ ] 小型 fixture（`br_to_exit`, `elided-br`, `complexBinaryNames`）での pass 適用漏れを潰す
+- [ ] `gc_target_feature.wasm` の `wasm-opt` 側サイズ増ケースを比較注記し、評価対象の扱いを決める
+
+## P1: Closed-World 基盤
 
 - [x] `closed_world` 最適化モードを `OptimizeConfig` / CLI に追加する
 - [x] component 由来の root policy を定義する（WIT/export/canonical ABI）
@@ -10,7 +24,7 @@ component-model DCE の強みを活かすため、`wasm-opt` 互換よりも **c
 - [x] unsafe ケース向けに `safe mode`（closed-world 無効）を追加する
 - [x] root 可視化レポート（なぜ keep されたか）を出せるようにする
 
-## P1: GC / Closed-World 最適化（差別化の本丸）
+## P2: GC / Closed-World 最適化（差別化の本丸）
 
 - [x] `type-refining` の基盤を実装する（重複 function type の正規化）
 - [ ] GC hierarchy を考慮した `type-refining` へ拡張する
@@ -20,32 +34,35 @@ component-model DCE の強みを活かすため、`wasm-opt` 互換よりも **c
 - [ ] 可能なら `signature-refining` / `cfp` 系を段階導入する
 - [ ] component root policy と GC 最適化の整合テストを追加する
 
-## P2: 呼び出し経路の削減
+## P3: 呼び出し経路の削減
 
 - [ ] `directize` 相当を導入する（table 経由 call の直接化）
 - [ ] directize 後に DCE / RUME が追加で効くことを検証する
 - [ ] `remove-unused-module-elements` と index rewrite の境界テストを拡充する
 
-## P3: 固定点最適化（component + core 連携）
+## P4: 固定点最適化（component + core 連携）
 
 - [ ] component↔core の固定点ループを導入する
 - [ ] 収束条件（サイズ非改善 / 反復上限）を定義する
 - [ ] `--converge` と固定点ループの挙動を整理・統合する
 
-## P4: wasm-opt 互換パスの段階移植
+## P5: wasm-opt 互換パスの段階移植（拡張バックログ）
 
 - [ ] `optimize-instructions` / `precompute` / `local-cse` を優先移植する
 - [x] `precompute` 基盤: `i32.const+i32.const+i32.add` の定数畳み込み
+- [x] `precompute` 基盤: `i32.const 0 + add/sub`, `i32.const 1 + mul` の恒等変換
 - [x] `simplify-locals` 基盤: `local.set+local.get -> local.tee`
 - [x] `simplify-locals` 基盤: `local.tee+drop -> local.set`
+- [x] `simplify-locals` 基盤: `local.get+local.set(same)` の no-op 削除
+- [x] `simplify-locals` 基盤: `local.get+local.tee(same) -> local.get`
 - [x] `drop-elision` 基盤: `local.get/global.get/ref.func/ref.null + drop`
-- [ ] `local-cse` の最小実装（同一 basic block での重複 `local.get` 削減）
+- [x] `local-cse` の最小実装（`local.get a; local.set b; local.get a -> local.get a; local.tee b`）
 - [ ] `precompute` の拡張（`eqz(eqz(x))` などの安全な定数/論理簡約）
 - [ ] `simplify-locals*` / `coalesce-locals` / `rse` を移植する
 - [ ] `inlining-optimizing` / `dae-optimizing` / `duplicate-import-elimination` を検討する
 - [ ] `simplify-globals*` / `reorder-globals` / `memory-packing` を検討する
 
-## P5: 計測と品質
+## P6: 計測と品質
 
 - [x] ベンチセット（component + core）初版を整備する（Binaryen/wac fixture + `moon bench` 導線）
 - [x] KPI を明文化する（優先順: サイズ削減率 > 実行時間、`bench/KPI.md` + `just kpi`）

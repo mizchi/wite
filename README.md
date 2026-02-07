@@ -74,7 +74,7 @@ just check     # type check
 just test      # run tests
 just bench     # run benchmark suite
 just bench-sync # sync benchmark corpus fixtures from upstream
-just kpi       # collect KPI report (size first, runtime second)
+just kpi       # collect KPI report (size first, runtime second, includes optional wasm-opt reference)
 just run       # run CLI (src/main)
 just info      # generate .mbti
 ```
