@@ -1,0 +1,152 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/walyze"
+
+import {
+  "mizchi/wit",
+}
+
+// Values
+pub fn analyze_call_graph(Bytes) -> Result[CallGraphReport, WalyzeError]
+
+pub fn analyze_component_call_graphs(Bytes) -> Result[Array[ComponentCallGraphReport], String]
+
+pub fn analyze_component_contract(Bytes, @wit.ResolveInput) -> Result[ContractReport, String]
+
+pub fn analyze_component_function_sizes(Bytes) -> Result[Array[ComponentFunctionSizeReport], String]
+
+pub fn analyze_function_sizes(Bytes) -> Result[Array[FunctionSize], WalyzeError]
+
+pub fn analyze_section_sizes(Bytes) -> Result[Array[SectionSize], WalyzeError]
+
+pub fn error_to_string(WalyzeError) -> String
+
+pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, keep_custom_sections? : Array[String], enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool) -> OptimizeConfig
+
+pub fn optimize_for_size(Bytes, config? : OptimizeConfig) -> Result[OptimizeResult, WalyzeError]
+
+pub fn profile_component(Bytes) -> Result[ComponentProfile, String]
+
+pub fn profile_module(Bytes) -> Result[ModuleProfile, WalyzeError]
+
+pub fn profile_runtime_zero_arg_exports(Bytes, iterations? : UInt) -> Result[RuntimeProfile, String]
+
+// Errors
+pub suberror WalyzeError {
+  UnexpectedEof
+  InvalidMagic
+  UnsupportedVersion(String)
+  InvalidFormat(String)
+}
+
+// Types and methods
+pub struct CallGraphNode {
+  function_index : UInt
+  body_bytes : UInt
+  name : String?
+  export_names : Array[String]
+  direct_callees : Array[UInt]
+  reachable_from_roots : Bool
+}
+
+pub struct CallGraphReport {
+  imported_function_count : UInt
+  local_function_count : UInt
+  roots : Array[UInt]
+  has_indirect_calls : Bool
+  partial : Bool
+  reachable_body_bytes : UInt
+  dead_body_bytes : UInt
+  nodes : Array[CallGraphNode]
+}
+
+pub struct ComponentCallGraphReport {
+  module_index : UInt
+  graph : CallGraphReport
+}
+
+pub struct ComponentFunctionSizeReport {
+  module_index : UInt
+  function_count : UInt
+  total_body_bytes : UInt
+  functions : Array[FunctionSize]
+}
+
+pub struct ComponentProfile {
+  total_bytes : UInt
+  import_count : UInt
+  export_count : UInt
+  core_module_count : UInt
+  nested_component_count : UInt
+  sections : Array[SectionSize]
+  core_modules : Array[ModuleProfile]
+}
+
+pub struct ContractReport {
+  component_imports : Array[String]
+  component_exports : Array[String]
+  wit_imports : Array[String]
+  wit_exports : Array[String]
+  missing_component_imports : Array[String]
+  missing_component_exports : Array[String]
+}
+
+pub struct FunctionSize {
+  function_index : UInt
+  body_bytes : UInt
+  name : String?
+  export_names : Array[String]
+}
+
+pub struct ModuleProfile {
+  total_bytes : UInt
+  function_count : UInt
+  import_count : UInt
+  export_count : UInt
+  code_body_count : UInt
+  code_body_bytes : UInt
+  sections : Array[SectionSize]
+}
+
+pub struct OptimizeConfig {
+  strip_all_custom : Bool
+  strip_name_section : Bool
+  strip_producers_section : Bool
+  keep_custom_sections : Array[String]
+  enable_peephole : Bool
+  peephole_remove_nop : Bool
+  peephole_remove_const_drop : Bool
+}
+pub fn OptimizeConfig::aggressive() -> Self
+pub fn OptimizeConfig::default() -> Self
+
+pub struct OptimizeResult {
+  bytes : Bytes
+  before_size : UInt
+  after_size : UInt
+  removed_sections : Array[String]
+}
+
+pub struct RuntimeFunctionProfile {
+  name : String
+  calls : UInt
+  total_ns : UInt64
+  average_ns : UInt64
+}
+
+pub struct RuntimeProfile {
+  instantiate_ns : UInt64
+  iterations : UInt
+  functions : Array[RuntimeFunctionProfile]
+  skipped_exports : Array[String]
+}
+
+pub struct SectionSize {
+  key : String
+  section_id : UInt
+  total_bytes : UInt
+}
+
+// Type aliases
+
+// Traits
+
