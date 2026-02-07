@@ -6635,6 +6635,62 @@ fn unique_sorted(xs : Array[String]) -> Array[String] {
 }
 
 ///|
+fn merge_root_names(base : Array[String], extra : Array[String]) -> Array[String] {
+  let merged = base.copy()
+  merged.append(extra[:])
+  unique_sorted(merged)
+}
+
+///|
+fn with_additional_closed_world_roots(
+  config : OptimizeConfig,
+  extra_roots : Array[String],
+) -> OptimizeConfig {
+  if extra_roots.length() == 0 {
+    return config
+  }
+  let closed_world_root_exports = merge_root_names(
+    config.closed_world_root_exports, extra_roots,
+  )
+  make_optimize_config(
+    strip_all_custom=config.strip_all_custom,
+    strip_name_section=config.strip_name_section,
+    strip_producers_section=config.strip_producers_section,
+    strip_debug_sections=config.strip_debug_sections,
+    strip_dwarf_sections=config.strip_dwarf_sections,
+    strip_target_features_section=config.strip_target_features_section,
+    keep_custom_sections=config.keep_custom_sections,
+    pass_rounds=config.pass_rounds,
+    enable_peephole=config.enable_peephole,
+    peephole_remove_nop=config.peephole_remove_nop,
+    peephole_remove_const_drop=config.peephole_remove_const_drop,
+    enable_vacuum=config.enable_vacuum,
+    enable_merge_blocks=config.enable_merge_blocks,
+    enable_remove_unused_brs=config.enable_remove_unused_brs,
+    enable_dce=config.enable_dce,
+    enable_dfe=config.enable_dfe,
+    enable_merge_similar_functions=config.enable_merge_similar_functions,
+    enable_remove_unused_module_elements=config.enable_remove_unused_module_elements,
+    closed_world=config.closed_world,
+    closed_world_root_exports=closed_world_root_exports,
+    safe_mode=config.safe_mode,
+  )
+}
+
+///|
+fn is_core_module_payload(payload : Bytes) -> Bool {
+  payload.length() >= 8 &&
+  payload[0] == 0x00U.to_byte() &&
+  payload[1] == 0x61U.to_byte() &&
+  payload[2] == 0x73U.to_byte() &&
+  payload[3] == 0x6dU.to_byte() &&
+  payload[4] == 0x01U.to_byte() &&
+  payload[5] == 0x00U.to_byte() &&
+  payload[6] == 0x00U.to_byte() &&
+  payload[7] == 0x00U.to_byte()
+}
+
+///|
 fn world_keys(xs : Map[String, @wit.RWorldItem]) -> Array[String] {
   let out : Array[String] = []
   xs.each((key, _) => out.push(key))
@@ -6743,18 +6799,20 @@ pub fn analyze_component_call_graphs(
 pub fn analyze_component_core_optimize(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
+  exclude? : Array[String] = [],
 ) -> Result[ComponentCoreOptimizeReport, String] {
   let detail = match @mwac_component.parse_component_detail(bytes) {
     Ok(v) => v
     Err(e) => return Err("component detail parse failed: " + e.to_string())
   }
+  let effective_config = with_additional_closed_world_roots(config, exclude)
   let entries : Array[ComponentCoreOptimizeEntry] = []
   let mut total_core_before_bytes = 0U
   let mut total_core_after_bytes = 0U
   for i in 0..<detail.core_modules.length() {
     let core_bytes = detail.core_modules[i]
     let before_bytes = core_bytes.length().reinterpret_as_uint()
-    let optimized = match optimize_for_size(core_bytes, config~) {
+    let optimized = match optimize_for_size(core_bytes, config=effective_config) {
       Ok(v) => v
       Err(e) =>
         return Err(
@@ -6779,6 +6837,55 @@ pub fn analyze_component_core_optimize(
     total_core_before_bytes,
     total_core_after_bytes,
     entries,
+  })
+}
+
+///|
+pub fn optimize_component_for_size(
+  bytes : Bytes,
+  config? : OptimizeConfig = OptimizeConfig::default(),
+  exclude? : Array[String] = [],
+) -> Result[OptimizeResult, String] {
+  let sections_result = try? parse_component_sections_raise(bytes)
+  let sections = match sections_result {
+    Ok(v) => v
+    Err(e) =>
+      return Err("component section parse failed: " + walyze_error_to_string(e))
+  }
+  let effective_config = with_additional_closed_world_roots(config, exclude)
+  let out : Array[Byte] = bytes[0:8].to_array()
+  let removed_sections : Array[String] = []
+  let mut core_module_index = 0
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    if section.section_id == 1U && is_core_module_payload(payload) {
+      let optimized = match optimize_for_size(payload, config=effective_config) {
+        Ok(v) => v
+        Err(e) =>
+          return Err(
+            "core module optimize failed at index " +
+            core_module_index.to_string() +
+            ": " +
+            walyze_error_to_string(e),
+          )
+      }
+      append_encoded_section(out, 1U, optimized.bytes)
+      for removed in optimized.removed_sections {
+        removed_sections.push(
+          "core#" + core_module_index.to_string() + ":" + removed,
+        )
+      }
+      core_module_index += 1
+    } else {
+      out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  let optimized_bytes = Bytes::from_array(out[:])
+  Ok({
+    bytes: optimized_bytes,
+    before_size: bytes.length().reinterpret_as_uint(),
+    after_size: optimized_bytes.length().reinterpret_as_uint(),
+    removed_sections,
   })
 }
 
@@ -6848,6 +6955,7 @@ fn collect_canonical_abi_root_names(
 pub fn analyze_component_root_policy(
   bytes : Bytes,
   resolved_wit? : @wit.ResolveInput? = None,
+  exclude? : Array[String] = [],
 ) -> Result[ComponentRootPolicyReport, String] {
   let detail = match @mwac_component.parse_component_detail(bytes) {
     Ok(v) => v
@@ -6879,6 +6987,7 @@ pub fn analyze_component_root_policy(
   let root_name_candidates = component_exports.copy()
   root_name_candidates.append(wit_exports[:])
   root_name_candidates.append(canonical_abi_roots[:])
+  root_name_candidates.append(exclude[:])
   Ok({
     component_imports,
     component_exports,

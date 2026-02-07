@@ -271,6 +271,20 @@ fn bench_component_dce_corpus_paths() -> Array[String] {
 }
 
 ///|
+fn has_component_export(
+  exports : Array[@mwac_component.ExportInfo],
+  name : Bytes,
+  kind : @mwac_component.ExternKind,
+) -> Bool {
+  for e in exports {
+    if e.kind == kind && e.name == name {
+      return true
+    }
+  }
+  false
+}
+
+///|
 fn component_dce_kpi_optimize_config(roots : Array[String]) -> OptimizeConfig {
   make_optimize_config(
     strip_all_custom=false,
@@ -2952,6 +2966,23 @@ test "component root policy report combines component/wit/canonical roots" {
 }
 
 ///|
+test "component root policy can include dce exclude roots" {
+  let component_path = "bench/corpus/component-dce/mwac/wac_greeter.wasm"
+  let bytes = @fs.read_file_to_bytes(component_path) catch {
+    _ => {
+      inspect("skip", content="skip")
+      return
+    }
+  }
+  guard analyze_component_root_policy(bytes, exclude=["hello"]) is Ok(policy)
+  else {
+    assert_true(false)
+    return
+  }
+  assert_true(policy.root_name_candidates.contains("hello"))
+}
+
+///|
 test "component function size report returns core module entries" {
   let component_path = "../mwac/examples/hello/hello.component.wasm"
   let bytes = @fs.read_file_to_bytes(component_path) catch {
@@ -3118,5 +3149,53 @@ test "component dce corpus applies dce and strictly shrinks core size" {
         entry.removed_sections.any(s => s.contains("dce:functions:"))
       ),
     )
+  }
+}
+
+///|
+test "component optimize with exclude keeps socket pluggable after dce" {
+  let socket_path = "bench/corpus/component-dce/mwac/wac_greeter.wasm"
+  let plug_path = "bench/corpus/component-dce/mwac/wac_hello.wasm"
+  let socket_bytes = @fs.read_file_to_bytes(socket_path) catch {
+    _ => {
+      inspect("skip", content="skip")
+      return
+    }
+  }
+  let plug_bytes = @fs.read_file_to_bytes(plug_path) catch {
+    _ => {
+      inspect("skip", content="skip")
+      return
+    }
+  }
+  guard analyze_component_root_policy(socket_bytes) is Ok(policy) else {
+    assert_true(false)
+    return
+  }
+  let config = component_dce_kpi_optimize_config(policy.root_name_candidates)
+  guard optimize_component_for_size(socket_bytes, config~, exclude=["hello"])
+    is Ok(optimized_socket) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized_socket.after_size <= optimized_socket.before_size)
+  guard @mwac_component.parse_component_info(socket_bytes) is Ok(socket_info)
+  else {
+    assert_true(false)
+    return
+  }
+  guard @mwac_component.plug_components(optimized_socket.bytes, [plug_bytes])
+    is Ok(composed) else {
+    assert_true(false)
+    return
+  }
+  guard @mwac_component.parse_component_info(composed) is Ok(composed_info) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(composed_info.imports.length(), 0)
+  assert_eq(composed_info.exports.length(), socket_info.exports.length())
+  for e in socket_info.exports {
+    assert_true(has_component_export(composed_info.exports, e.name, e.kind))
   }
 }

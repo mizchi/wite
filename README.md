@@ -54,9 +54,9 @@ just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features 
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
 just run -- component-callgraph path/to/component.wasm 20
-just run -- component-dce-kpi path/to/component.wasm path/to/wit-dir
+just run -- component-dce-kpi path/to/component.wasm path/to/wit-dir --exclude=hello
 just run -- contract path/to/component.wasm path/to/wit-dir
-just run -- root-policy path/to/component.wasm path/to/wit-dir
+just run -- root-policy path/to/component.wasm path/to/wit-dir --exclude=hello
 ```
 
 連携例（bundler + minifier）:
@@ -84,8 +84,10 @@ Main APIs are in `src/lib.mbt`:
 - `profile_component(bytes)`
 - `analyze_component_function_sizes(bytes)`
 - `analyze_component_call_graphs(bytes)`
+- `optimize_component_for_size(bytes, config=..., exclude=[...])`
+- `analyze_component_core_optimize(bytes, config=..., exclude=[...])`
 - `analyze_component_contract(bytes, resolved_wit)`
-- `analyze_component_root_policy(bytes, resolved_wit=...)`
+- `analyze_component_root_policy(bytes, resolved_wit=..., exclude=[...])`
 
 ## Development
 

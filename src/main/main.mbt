@@ -17,10 +17,10 @@ fn print_usage() -> Unit {
   println("  component-top-functions <component.wasm> [limit]")
   println("  component-callgraph <component.wasm> [limit]")
   println(
-    "  component-dce-kpi <component.wasm> [wit-dir] [--closed-world-root=<export-name>] [--safe-mode]",
+    "  component-dce-kpi <component.wasm> [wit-dir] [--exclude=<name>] [--closed-world-root=<export-name>] [--safe-mode]",
   )
   println("  contract <component.wasm> <wit-dir>")
-  println("  root-policy <component.wasm> [wit-dir]")
+  println("  root-policy <component.wasm> [wit-dir] [--exclude=<name>]")
 }
 
 ///|
@@ -103,6 +103,18 @@ fn parse_closed_world_roots(args : Array[String], start : Int) -> Array[String] 
     }
   }
   roots
+}
+
+///|
+fn parse_excluded_roots(args : Array[String], start : Int) -> Array[String] {
+  let excludes : Array[String] = []
+  for i in start..<args.length() {
+    match args[i].strip_prefix("--exclude=") {
+      Some(name) => if not(name.is_empty()) { excludes.push(name.to_string()) }
+      None => ()
+    }
+  }
+  excludes
 }
 
 ///|
@@ -622,6 +634,7 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
   }
   let component_path = args[2]
   let bytes = read_bytes_or_exit(component_path)
+  let excludes = parse_excluded_roots(args, 3)
   let mut wit_path : String? = None
   let mut safe_mode = false
   for i in 3..<args.length() {
@@ -644,7 +657,9 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
     None => None
   }
   let policy = match
-    @walyze.analyze_component_root_policy(bytes, resolved_wit~) {
+    @walyze.analyze_component_root_policy(
+      bytes, resolved_wit~, exclude=excludes,
+    ) {
     Ok(v) => v
     Err(msg) => {
       println("component-dce-kpi root policy failed: " + msg)
@@ -693,6 +708,7 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
         "  total_core_after_bytes: " + report.total_core_after_bytes.to_string(),
       )
       println("  root_count: " + roots.length().to_string())
+      println("  exclude_count: " + excludes.length().to_string())
       for entry in report.entries {
         println(
           "  core module #" +
@@ -717,6 +733,7 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
       )
       println("kpi-core-module-count=" + report.core_module_count.to_string())
       println("kpi-root-count=" + roots.length().to_string())
+      println("kpi-exclude-count=" + excludes.length().to_string())
     }
     Err(msg) => {
       println("component-dce-kpi failed: " + msg)
@@ -758,8 +775,20 @@ fn run_contract(component_path : String, wit_path : String) -> Unit {
 }
 
 ///|
-fn run_root_policy(component_path : String, wit_path : String?) -> Unit {
+fn run_root_policy(args : Array[String]) -> Unit {
+  if args.length() < 3 {
+    print_usage()
+    @sys.exit(1)
+  }
+  let component_path = args[2]
   let bytes = read_bytes_or_exit(component_path)
+  let excludes = parse_excluded_roots(args, 3)
+  let mut wit_path : String? = None
+  for i in 3..<args.length() {
+    if not(args[i].has_prefix("--")) && wit_path is None {
+      wit_path = Some(args[i])
+    }
+  }
   let resolved_wit : @wit.ResolveInput? = match wit_path {
     Some(path) =>
       match @wit.resolve_path(path) {
@@ -772,13 +801,17 @@ fn run_root_policy(component_path : String, wit_path : String?) -> Unit {
       }
     None => None
   }
-  match @walyze.analyze_component_root_policy(bytes, resolved_wit~) {
+  match
+    @walyze.analyze_component_root_policy(
+      bytes, resolved_wit~, exclude=excludes,
+    ) {
     Ok(policy) => {
       println("component imports: " + policy.component_imports.join(", "))
       println("component exports: " + policy.component_exports.join(", "))
       println("wit imports: " + policy.wit_imports.join(", "))
       println("wit exports: " + policy.wit_exports.join(", "))
       println("canonical abi roots: " + policy.canonical_abi_roots.join(", "))
+      println("dce excludes: " + excludes.join(", "))
       println("root candidates: " + policy.root_name_candidates.join(", "))
     }
     Err(msg) => {
@@ -900,12 +933,7 @@ fn main {
       run_contract(args[2], args[3])
     }
     "root-policy" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let wit_path = if args.length() >= 4 { Some(args[3]) } else { None }
-      run_root_policy(args[2], wit_path)
+      run_root_policy(args)
     }
     _ => {
       print_usage()
