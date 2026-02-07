@@ -8,7 +8,7 @@ fn print_usage() -> Unit {
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
   println(
-    "  optimize <input.wasm> <output.wasm> [--strip-all-custom] [--keep-custom=<name>] [--no-peephole] [--dce-apply]",
+    "  optimize <input.wasm> <output.wasm> [--strip-all-custom] [--keep-custom=<name>] [--no-peephole] [--dce-apply] [--dfe-apply]",
   )
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
@@ -117,6 +117,7 @@ fn run_optimize(args : Array[String]) -> Unit {
   let mut strip_all_custom = false
   let mut enable_peephole = true
   let mut enable_dce = false
+  let mut enable_dfe = false
   for i in 4..<args.length() {
     if args[i] == "--strip-all-custom" {
       strip_all_custom = true
@@ -127,6 +128,9 @@ fn run_optimize(args : Array[String]) -> Unit {
     if args[i] == "--dce-apply" {
       enable_dce = true
     }
+    if args[i] == "--dfe-apply" {
+      enable_dfe = true
+    }
   }
   let keep_custom_sections = parse_keep_custom(args, 4)
   let config = @walyze.make_optimize_config(
@@ -134,6 +138,7 @@ fn run_optimize(args : Array[String]) -> Unit {
     keep_custom_sections~,
     enable_peephole~,
     enable_dce~,
+    enable_dfe~,
   )
   let bytes = read_bytes_or_exit(input_path)
   match @walyze.optimize_for_size(bytes, config~) {

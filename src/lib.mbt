@@ -38,6 +38,7 @@ pub struct OptimizeConfig {
   peephole_remove_nop : Bool
   peephole_remove_const_drop : Bool
   enable_dce : Bool
+  enable_dfe : Bool
 }
 
 ///|
@@ -51,6 +52,7 @@ pub fn OptimizeConfig::default() -> Self {
     peephole_remove_nop: true,
     peephole_remove_const_drop: true,
     enable_dce: false,
+    enable_dfe: false,
   }
 }
 
@@ -65,6 +67,7 @@ pub fn OptimizeConfig::aggressive() -> Self {
     peephole_remove_nop: true,
     peephole_remove_const_drop: true,
     enable_dce: false,
+    enable_dfe: false,
   }
 }
 
@@ -78,6 +81,7 @@ pub fn make_optimize_config(
   peephole_remove_nop? : Bool = true,
   peephole_remove_const_drop? : Bool = true,
   enable_dce? : Bool = false,
+  enable_dfe? : Bool = false,
 ) -> OptimizeConfig {
   {
     strip_all_custom,
@@ -88,6 +92,7 @@ pub fn make_optimize_config(
     peephole_remove_nop,
     peephole_remove_const_drop,
     enable_dce,
+    enable_dfe,
   }
 }
 
@@ -1360,6 +1365,21 @@ pub fn optimize_for_size(
         removed_sections.push("custom:name(dce)")
       }
     }
+    if config.enable_dfe {
+      let dfe = apply_dfe_raise(optimized_bytes)
+      optimized_bytes = dfe.bytes
+      if dfe.removed_function_count > 0U {
+        removed_sections.push(
+          "dfe:functions:" +
+          dfe.removed_function_count.to_string() +
+          " bodies:" +
+          dfe.removed_body_bytes.to_string(),
+        )
+      }
+      if dfe.dropped_name_section {
+        removed_sections.push("custom:name(dfe)")
+      }
+    }
     {
       bytes: optimized_bytes,
       before_size: bytes.length().reinterpret_as_uint(),
@@ -1670,6 +1690,27 @@ priv struct DceApplyResult {
 }
 
 ///|
+priv struct DfeApplyResult {
+  bytes : Bytes
+  removed_function_count : UInt
+  removed_body_bytes : UInt
+  dropped_name_section : Bool
+}
+
+///|
+fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
+  if a.length() != b.length() {
+    return false
+  }
+  for i in 0..<a.length() {
+    if a[i] != b[i] {
+      return false
+    }
+  }
+  true
+}
+
+///|
 fn apply_dce_raise(bytes : Bytes) -> DceApplyResult raise WalyzeError {
   let call_graph = match analyze_call_graph(bytes) {
     Ok(v) => v
@@ -1779,6 +1820,138 @@ fn apply_dce_raise(bytes : Bytes) -> DceApplyResult raise WalyzeError {
     bytes: Bytes::from_array(out[:]),
     removed_function_count,
     removed_body_bytes: call_graph.dead_body_bytes,
+    dropped_name_section,
+  }
+}
+
+///|
+fn apply_dfe_raise(bytes : Bytes) -> DfeApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut imported_function_count = 0U
+  let mut function_type_indices : Array[UInt] = []
+  let mut code_bodies : Array[Bytes] = []
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U => imported_function_count += parse_import_function_count(payload)
+      3U => function_type_indices = parse_function_type_indices(payload)
+      10U => code_bodies = parse_code_bodies(payload)
+      _ => ()
+    }
+  }
+  if function_type_indices.length() != code_bodies.length() {
+    raise WalyzeError::InvalidFormat(
+      "function/code section count mismatch for dfe: function=" +
+      function_type_indices.length().to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let keep_local : Array[Bool] = []
+  let index_map : Map[UInt, UInt] = {}
+  for i in 0U..<imported_function_count {
+    index_map.set(i, i)
+  }
+  let mut kept_local_count = 0U
+  let mut removed_function_count = 0U
+  let mut removed_body_bytes = 0U
+  for i in 0..<code_bodies.length() {
+    let old_index = imported_function_count + i.reinterpret_as_uint()
+    let mut canonical_pos : Int? = None
+    for j in 0..<i {
+      if keep_local[j] &&
+        function_type_indices[j] == function_type_indices[i] &&
+        bytes_equal(code_bodies[j], code_bodies[i]) {
+        canonical_pos = Some(j)
+        break
+      }
+    }
+    match canonical_pos {
+      Some(pos) => {
+        keep_local.push(false)
+        let canonical_old_index = imported_function_count +
+          pos.reinterpret_as_uint()
+        let canonical_new_index = remap_function_index_raise(
+          canonical_old_index, index_map,
+        )
+        index_map.set(old_index, canonical_new_index)
+        removed_function_count += 1U
+        removed_body_bytes += code_bodies[i].length().reinterpret_as_uint()
+      }
+      None => {
+        keep_local.push(true)
+        index_map.set(old_index, imported_function_count + kept_local_count)
+        kept_local_count += 1U
+      }
+    }
+  }
+  if removed_function_count == 0U {
+    return {
+      bytes,
+      removed_function_count,
+      removed_body_bytes,
+      dropped_name_section: false,
+    }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  let mut dropped_name_section = false
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      3U =>
+        append_encoded_section(
+          out,
+          3U,
+          rewrite_function_section_payload_for_dce_raise(payload, keep_local),
+        )
+      7U =>
+        append_encoded_section(
+          out,
+          7U,
+          rewrite_export_section_payload_for_dce_raise(payload, index_map),
+        )
+      8U =>
+        append_encoded_section(
+          out,
+          8U,
+          rewrite_start_section_payload_for_dce_raise(payload, index_map),
+        )
+      10U =>
+        append_encoded_section(
+          out,
+          10U,
+          rewrite_code_section_payload_for_dce_raise(
+            payload, keep_local, index_map,
+          ),
+        )
+      0U =>
+        match section.custom_name {
+          Some(name) =>
+            if name == "name" {
+              dropped_name_section = true
+            } else {
+              out.append(
+                bytes[section.section_start:section.section_end].to_array(),
+              )
+            }
+          None =>
+            out.append(
+              bytes[section.section_start:section.section_end].to_array(),
+            )
+        }
+      // Global/Element may contain ref.func references and need extra remap handling.
+      6U | 9U =>
+        raise WalyzeError::InvalidFormat(
+          "dfe apply does not yet support global/element sections",
+        )
+      _ =>
+        out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  {
+    bytes: Bytes::from_array(out[:]),
+    removed_function_count,
+    removed_body_bytes,
     dropped_name_section,
   }
 }

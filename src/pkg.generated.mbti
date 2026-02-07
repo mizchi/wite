@@ -22,7 +22,7 @@ pub fn analyze_section_sizes(Bytes) -> Result[Array[SectionSize], WalyzeError]
 
 pub fn error_to_string(WalyzeError) -> String
 
-pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, keep_custom_sections? : Array[String], enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_dce? : Bool) -> OptimizeConfig
+pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, keep_custom_sections? : Array[String], enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_dce? : Bool, enable_dfe? : Bool) -> OptimizeConfig
 
 pub fn optimize_for_size(Bytes, config? : OptimizeConfig) -> Result[OptimizeResult, WalyzeError]
 
@@ -126,6 +126,7 @@ pub struct OptimizeConfig {
   peephole_remove_nop : Bool
   peephole_remove_const_drop : Bool
   enable_dce : Bool
+  enable_dfe : Bool
 }
 pub fn OptimizeConfig::aggressive() -> Self
 pub fn OptimizeConfig::default() -> Self

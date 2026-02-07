@@ -228,6 +228,38 @@ fn sample_module_with_dce_reindex_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_duplicate_functions_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 3 local functions (indices 0,1,2)
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x00]))
+  // export section: export main and alias (alias points duplicated function index 2)
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x02, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00, 0x05, 0x61, 0x6c, 0x69, 0x61,
+      0x73, 0x00, 0x02,
+    ]),
+  )
+  // code section:
+  // #0: call 1, call 2, end
+  // #1: end
+  // #2: end (duplicate body/type with #1)
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x06, 0x00, 0x10, 0x01, 0x10, 0x02, 0x0b, 0x02, 0x00, 0x0b, 0x02, 0x00,
+      0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn find_section_size(sections : Array[SectionSize], key : String) -> UInt? {
   for section in sections {
     if section.key == key {
@@ -407,6 +439,52 @@ test "optimize with dce apply removes dead and rewrites calls" {
   assert_eq(after_graph.dead_body_bytes, 0U)
   assert_eq(after_graph.nodes.length(), 2)
   assert_eq(after_graph.nodes[0].direct_callees, [1U])
+}
+
+///|
+test "optimize with dfe apply merges duplicate functions" {
+  let bytes = sample_module_with_duplicate_functions_bytes()
+  guard profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 3U)
+  assert_eq(before_profile.code_body_count, 3U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_dce=false,
+    enable_dfe=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dfe:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_eq(after_profile.code_body_count, 2U)
+  guard analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_graph.nodes.length(), 2)
+  assert_eq(after_graph.nodes[0].direct_callees, [1U])
+  guard analyze_function_sizes(optimized.bytes) is Ok(functions) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    functions.any(f => f.function_index == 1U &&
+      f.export_names.contains("alias")),
+  )
 }
 
 ///|
