@@ -2,19 +2,18 @@
 
 ## KPI Snapshot (2026-02-07)
 
-- core size KPI (`optimize -O1`): `171331 -> 70738 bytes` (`58.7127%`)
-- wasm-opt 参考値 (`-Oz --all-features --strip-debug --strip-dwarf --strip-target-features`): `171331 -> 66220 bytes` (`61.3497%`)
-- gap to wasm-opt: `4518 bytes` (`-2.6370pt`)
+- core size KPI (`optimize -O1`): `171396 -> 70795 bytes` (`58.6951%`)
+- wasm-opt 参考値 (`-Oz --all-features --strip-debug --strip-dwarf --strip-target-features`): `171396 -> 66254 bytes` (`61.3445%`)
+- gap to wasm-opt: `4541 bytes` (`-2.6494pt`)
 - component-model DCE KPI: `128170 -> 64046 bytes` (`50.0304%`)
+- directize→DCE→RUME 診断: `success_files=6/7`, `dce_gain=1614 bytes`, `rume_gain=11 bytes`, `directize_calls_total=0`
 
 上記より、当面は **core size の wasm-opt ギャップ解消** を最優先にしつつ、差別化軸である **closed-world + GC 最適化** を次優先で進める。
 
-## Next Up (2026-02-08)
+## Next Up (2026-02-07)
 
-- [x] N1 (P0): `zlib.wasm` 向け `optimize-instructions` を拡張する（bitwise/cmp 簡約を追加し、`wasm-opt` gap を直接詰める）
 - [ ] N2 (P0): `gc_target_feature.wasm` を主要 gap 判定に含める方針を確定し、KPI 集計ルールを固定する
-- [x] N3 (P6): 「削ってはいけないものを削っていない」実行同値テストを corpus 横断で増やす（`zlib.wasm` 含む）
-- [x] N4 (P3): directize 後に DCE / RUME がどれだけ追加で効くかを KPI で可視化する
+- [ ] N6 (P3): directize が効く corpus / fixture（`directize_calls_total > 0`）を追加して、連鎖KPIを有効化する
 - [ ] N5 (P2): GC hierarchy を考慮した `type-refining` に着手し、closed-world と組み合わせた差分を測る
 
 ## Architecture Guardrails（mwac / walyze）
@@ -57,6 +56,8 @@
 
 - [x] `directize` 相当を導入する（`i32.const + call_indirect` の安全な直接化）
 - [x] directize 後に DCE / RUME が追加で効くことを検証する（KPI 可視化を追加）
+- [ ] directize が効く core corpus を追加し、`directize_calls_total > 0` を継続観測できるようにする
+- [x] RUME が効く core corpus を追加し、`rume_gain_bytes > 0` を継続観測できるようにする
 - [ ] `remove-unused-module-elements` と index rewrite の境界テストを拡充する
 
 ## P4: 固定点最適化（component + core 連携）
