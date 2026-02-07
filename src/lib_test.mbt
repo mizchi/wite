@@ -339,6 +339,30 @@ fn sample_module_with_duplicate_functions_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_duplicate_functions_but_split_types_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 2 duplicated func types () -> ()
+  append_section(out, 1U, bytes_of([0x02, 0x60, 0x00, 0x00, 0x60, 0x00, 0x00]))
+  // function section: 2 local functions with split type indices [0,1]
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x01]))
+  // export section: export both functions
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x02, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00, 0x05, 0x61, 0x6c, 0x69, 0x61,
+      0x73, 0x00, 0x01,
+    ]),
+  )
+  // code section:
+  // #0: end
+  // #1: end (duplicate body, different type index)
+  append_section(out, 10U, bytes_of([0x02, 0x02, 0x00, 0x0b, 0x02, 0x00, 0x0b]))
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_unreachable_tail_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1391,6 +1415,37 @@ test "optimize with dfe apply merges duplicate functions" {
     functions.any(f => f.function_index == 1U &&
       f.export_names.contains("alias")),
   )
+}
+
+///|
+test "optimize type refining unlocks dfe across duplicated type entries" {
+  let bytes = sample_module_with_duplicate_functions_but_split_types_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("type-refine:types:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dfe:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 1U)
 }
 
 ///|

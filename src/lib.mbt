@@ -3810,6 +3810,14 @@ fn should_remove_unused_types(config : OptimizeConfig) -> Bool {
 }
 
 ///|
+fn should_refine_types(config : OptimizeConfig) -> Bool {
+  config.enable_dce ||
+  config.enable_dfe ||
+  config.enable_merge_similar_functions ||
+  config.enable_remove_unused_module_elements
+}
+
+///|
 priv struct OptimizeRoundResult {
   bytes : Bytes
   removed_sections : Array[String]
@@ -3850,6 +3858,15 @@ fn optimize_for_size_round_raise(
     }
     if dce.dropped_name_section {
       removed_sections.push("custom:name(dce)")
+    }
+  }
+  if should_refine_types(config) {
+    let type_refine = apply_type_refining(optimized_bytes)
+    optimized_bytes = type_refine.bytes
+    if type_refine.refined_type_count > 0U {
+      removed_sections.push(
+        "type-refine:types:" + type_refine.refined_type_count.to_string(),
+      )
     }
   }
   if config.enable_dfe {
@@ -4459,6 +4476,12 @@ priv struct RumeApplyResult {
 }
 
 ///|
+priv struct TypeRefineApplyResult {
+  bytes : Bytes
+  refined_type_count : UInt
+}
+
+///|
 priv struct RemoveUnusedTypesApplyResult {
   bytes : Bytes
   removed_type_count : UInt
@@ -4918,6 +4941,122 @@ fn apply_remove_unused_module_elements_raise(
     removed_data_count,
     removed_export_count,
   }
+}
+
+///|
+fn apply_type_refining(bytes : Bytes) -> TypeRefineApplyResult {
+  let result = try? apply_type_refining_raise(bytes)
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, refined_type_count: 0U }
+  }
+}
+
+///|
+fn apply_type_refining_raise(
+  bytes : Bytes,
+) -> TypeRefineApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut type_section_payload : Bytes? = None
+  for section in sections {
+    match section.section_id {
+      1U =>
+        type_section_payload = Some(
+          bytes[section.payload_start:section.section_end].to_bytes(),
+        )
+      13U =>
+        raise WalyzeError::InvalidFormat(
+          "tag section is not supported in type-refine",
+        )
+      _ => ()
+    }
+  }
+  let type_payload = match type_section_payload {
+    Some(v) => v
+    None => return { bytes, refined_type_count: 0U }
+  }
+  let type_entries = parse_type_section_entries_raise(type_payload)
+  if type_entries.length() <= 1 {
+    return { bytes, refined_type_count: 0U }
+  }
+  let canonical_for_old : Array[UInt] = []
+  for i in 0..<type_entries.length() {
+    let mut canonical = i.reinterpret_as_uint()
+    for j in 0..<i {
+      if bytes_equal(type_entries[i], type_entries[j]) {
+        canonical = j.reinterpret_as_uint()
+        break
+      }
+    }
+    canonical_for_old.push(canonical)
+  }
+  let keep_types : Array[Bool] = []
+  for i in 0..<type_entries.length() {
+    let old_type_index = i.reinterpret_as_uint()
+    keep_types.push(canonical_for_old.contains(old_type_index))
+  }
+  let type_index_map : Map[UInt, UInt] = {}
+  let mut kept_type_count = 0U
+  for i in 0..<keep_types.length() {
+    if keep_types[i] {
+      type_index_map.set(i.reinterpret_as_uint(), kept_type_count)
+      kept_type_count += 1U
+    }
+  }
+  for i in 0..<canonical_for_old.length() {
+    let old_type_index = i.reinterpret_as_uint()
+    let canonical = canonical_for_old[i]
+    type_index_map.set(
+      old_type_index,
+      remap_type_index_raise(canonical, type_index_map),
+    )
+  }
+  let refined_type_count = type_entries.length().reinterpret_as_uint() -
+    kept_type_count
+  if refined_type_count == 0U {
+    return { bytes, refined_type_count: 0U }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      1U => {
+        let rewritten = rewrite_type_section_payload_for_keep_raise(
+          payload, keep_types,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 1U, rewritten)
+        }
+      }
+      2U =>
+        append_encoded_section(
+          out,
+          2U,
+          rewrite_import_section_payload_for_type_index_map_raise(
+            payload, type_index_map,
+          ),
+        )
+      3U =>
+        append_encoded_section(
+          out,
+          3U,
+          rewrite_function_section_payload_for_type_index_map_raise(
+            payload, type_index_map,
+          ),
+        )
+      10U =>
+        append_encoded_section(
+          out,
+          10U,
+          rewrite_code_section_payload_for_type_index_map_raise(
+            payload, type_index_map,
+          ),
+        )
+      _ =>
+        out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), refined_type_count }
 }
 
 ///|

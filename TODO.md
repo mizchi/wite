@@ -12,7 +12,8 @@ component-model DCE の強みを活かすため、`wasm-opt` 互換よりも **c
 
 ## P1: GC / Closed-World 最適化（差別化の本丸）
 
-- [ ] `type-refining` 相当を実装する（より具体的な型へ収束）
+- [x] `type-refining` の基盤を実装する（重複 function type の正規化）
+- [ ] GC hierarchy を考慮した `type-refining` へ拡張する
 - [ ] `signature-pruning` 相当を実装する（不要 param/result の削減）
 - [x] `remove-unused-types` の基盤を実装する（core func type pruning）
 - [ ] private GC type まで `remove-unused-types` を拡張する
