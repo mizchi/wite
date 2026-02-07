@@ -1040,6 +1040,40 @@ test "optimize with rume apply removes unused table and element segment" {
 }
 
 ///|
+test "optimize with rume apply honors closed-world export roots" {
+  let bytes = sample_module_with_two_exported_functions_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_remove_unused_module_elements=true,
+    closed_world=true,
+    closed_world_root_exports=["keep"],
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.removed_sections.any(s => s.contains("exports:1")))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x07, 0x08, 0x01, 0x04, 0x6b, 0x65, 0x65, 0x70, 0x00, 0x00,
+    ]),
+  )
+  assert_true(
+    not(
+      bytes_contains_seq(optimized.bytes, [
+        0x04, 0x64, 0x72, 0x6f, 0x70, 0x00, 0x01,
+      ]),
+    ),
+  )
+}
+
+///|
 test "optimize with rume apply removes unused import/global/memory/table and remaps indices" {
   let bytes = sample_module_with_unused_import_memory_global_table_bytes()
   guard profile_module(bytes) is Ok(before_profile) else {

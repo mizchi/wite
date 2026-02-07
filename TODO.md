@@ -6,7 +6,7 @@ component-model DCE の強みを活かすため、`wasm-opt` 互換よりも **c
 
 - [x] `closed_world` 最適化モードを `OptimizeConfig` / CLI に追加する
 - [x] component 由来の root policy を定義する（WIT/export/canonical ABI）
-- [ ] root policy を core DCE / RUME に接続し、root 一貫性を担保する
+- [x] root policy を core DCE / RUME に接続し、root 一貫性を担保する
 - [ ] unsafe ケース向けに `safe mode`（closed-world 無効）を追加する
 - [ ] root 可視化レポート（なぜ keep されたか）を出せるようにする
 

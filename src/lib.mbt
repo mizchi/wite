@@ -765,6 +765,18 @@ fn read_name_string(parser : Cursor) -> String raise WalyzeError {
 }
 
 ///|
+fn bytes_to_name_string(bytes : Bytes) -> String {
+  let out : Array[Char] = []
+  for b in bytes {
+    match b.to_int().to_char() {
+      Some(ch) => out.push(ch)
+      None => out.push('?')
+    }
+  }
+  String::from_array(out[:])
+}
+
+///|
 fn parse_code_body_sizes(payload : Bytes) -> Array[UInt] raise WalyzeError {
   let parser = Cursor::new(payload)
   let body_count = parser.read_u32_leb128()
@@ -2950,6 +2962,38 @@ fn rewrite_export_section_payload_for_dce_raise(
 }
 
 ///|
+fn rewrite_export_section_payload_for_keep_names_raise(
+  payload : Bytes,
+  keep_names : Array[String],
+) -> (Bytes, UInt) raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let export_count = parser.read_u32_leb128()
+  let kept_entries : Array[Bytes] = []
+  let mut removed_count = 0U
+  for _ in 0U..<export_count {
+    let name = read_name_bytes(parser)
+    let name_string = bytes_to_name_string(name)
+    let kind = parser.read_byte().to_uint()
+    let index = parser.read_u32_leb128()
+    if keep_names.contains(name_string) {
+      let entry : Array[Byte] = []
+      append_name_bytes(entry, name)
+      entry.push(kind.to_byte())
+      entry.append(encode_u32_leb128(index)[:])
+      kept_entries.push(Bytes::from_array(entry[:]))
+    } else {
+      removed_count += 1U
+    }
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_entries.length().reinterpret_as_uint())[:])
+  for entry in kept_entries {
+    out.append(entry[:].to_array())
+  }
+  (Bytes::from_array(out[:]), removed_count)
+}
+
+///|
 fn rewrite_start_section_payload_for_dce_raise(
   payload : Bytes,
   index_map : Map[UInt, UInt],
@@ -3501,7 +3545,9 @@ fn optimize_for_size_round_raise(
     }
   }
   if config.enable_remove_unused_module_elements {
-    let rume = apply_remove_unused_module_elements_raise(optimized_bytes)
+    let rume = apply_remove_unused_module_elements_raise(
+      optimized_bytes, config,
+    )
     optimized_bytes = rume.bytes
     if rume.removed_import_count > 0U ||
       rume.removed_table_count > 0U ||
@@ -3979,6 +4025,7 @@ fn parse_forward_call_target(body_bytes : Bytes) -> UInt? {
 ///|
 fn apply_remove_unused_module_elements_raise(
   bytes : Bytes,
+  config : OptimizeConfig,
 ) -> RumeApplyResult raise WalyzeError {
   let sections = parse_core_sections_raise(bytes)
   let mut import_section_payload : Bytes? = None
@@ -3992,6 +4039,7 @@ fn apply_remove_unused_module_elements_raise(
   let used_table_indices : Array[UInt] = []
   let used_memory_indices : Array[UInt] = []
   let global_root_indices : Array[UInt] = []
+  let mut removed_export_by_name_count = 0U
   let mut analysis_complete = true
   for section in sections {
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
@@ -4004,14 +4052,23 @@ fn apply_remove_unused_module_elements_raise(
       5U => memory_section_payload = Some(payload)
       6U => global_section_payload = Some(payload)
       7U => {
-        export_section_payload = Some(payload)
-        for index in parse_export_table_indices(payload) {
+        let mut effective_export_payload = payload
+        if config.closed_world && config.closed_world_root_exports.length() > 0 {
+          let (filtered, removed) = rewrite_export_section_payload_for_keep_names_raise(
+            payload,
+            config.closed_world_root_exports,
+          )
+          effective_export_payload = filtered
+          removed_export_by_name_count += removed
+        }
+        export_section_payload = Some(effective_export_payload)
+        for index in parse_export_table_indices(effective_export_payload) {
           push_unique_u32(used_table_indices, index)
         }
-        for index in parse_export_memory_indices(payload) {
+        for index in parse_export_memory_indices(effective_export_payload) {
           push_unique_u32(used_memory_indices, index)
         }
-        for index in parse_export_global_indices(payload) {
+        for index in parse_export_global_indices(effective_export_payload) {
           push_unique_u32(global_root_indices, index)
         }
       }
@@ -4265,7 +4322,7 @@ fn apply_remove_unused_module_elements_raise(
     }
     None => ()
   }
-  let mut removed_export_count = 0U
+  let mut removed_export_count = removed_export_by_name_count
   let mut rewritten_export_payload : Bytes? = None
   match export_section_payload {
     Some(payload) => {
@@ -4273,7 +4330,7 @@ fn apply_remove_unused_module_elements_raise(
         payload, table_index_map, memory_index_map, global_index_map,
       )
       rewritten_export_payload = Some(rewritten)
-      removed_export_count = removed
+      removed_export_count += removed
     }
     None => ()
   }
