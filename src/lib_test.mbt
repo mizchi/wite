@@ -459,6 +459,81 @@ test "optimize can strip debug/dwarf/target-features sections" {
 }
 
 ///|
+test "opt level presets map to expected optimizer knobs" {
+  guard optimize_config_from_opt_level("-O0") is Some(o0) else {
+    assert_true(false)
+    return
+  }
+  assert_true(not(o0.enable_peephole))
+  assert_true(not(o0.enable_dce))
+  assert_true(not(o0.enable_dfe))
+  assert_true(not(o0.enable_merge_similar_functions))
+  assert_eq(o0.pass_rounds, 1U)
+  guard optimize_config_from_opt_level("-O2") is Some(o2) else {
+    assert_true(false)
+    return
+  }
+  assert_true(o2.enable_peephole)
+  assert_true(o2.enable_dce)
+  assert_true(not(o2.enable_dfe))
+  assert_eq(o2.pass_rounds, 2U)
+  guard optimize_config_from_opt_level("-Oz") is Some(oz) else {
+    assert_true(false)
+    return
+  }
+  assert_true(oz.enable_dce)
+  assert_true(oz.enable_dfe)
+  assert_true(oz.enable_merge_similar_functions)
+  assert_eq(oz.pass_rounds, 8U)
+  match optimize_config_from_opt_level("-Ox") {
+    Some(_) => assert_true(false)
+    None => ()
+  }
+}
+
+///|
+test "optimize with -O0 preset disables size passes" {
+  let bytes = sample_module_with_peephole_bytes()
+  let config = match optimize_config_from_opt_level("-O0") {
+    Some(v) => v
+    None => {
+      assert_true(false)
+      return
+    }
+  }
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 8U)
+}
+
+///|
+test "optimize with -O2 preset applies dce" {
+  let bytes = sample_module_with_dce_reindex_bytes()
+  let config = match optimize_config_from_opt_level("-O2") {
+    Some(v) => v
+    None => {
+      assert_true(false)
+      return
+    }
+  }
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.function_count, 2U)
+}
+
+///|
 test "profile core module metrics" {
   let bytes = sample_module_bytes()
   guard profile_module(bytes) is Ok(profile) else {

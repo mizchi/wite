@@ -24,6 +24,8 @@ pub fn error_to_string(WalyzeError) -> String
 
 pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool) -> OptimizeConfig
 
+pub fn optimize_config_from_opt_level(String) -> OptimizeConfig?
+
 pub fn optimize_for_size(Bytes, config? : OptimizeConfig) -> Result[OptimizeResult, WalyzeError]
 
 pub fn profile_component(Bytes) -> Result[ComponentProfile, String]
@@ -138,6 +140,12 @@ pub struct OptimizeConfig {
 }
 pub fn OptimizeConfig::aggressive() -> Self
 pub fn OptimizeConfig::default() -> Self
+pub fn OptimizeConfig::o0() -> Self
+pub fn OptimizeConfig::o1() -> Self
+pub fn OptimizeConfig::o2() -> Self
+pub fn OptimizeConfig::o3() -> Self
+pub fn OptimizeConfig::os() -> Self
+pub fn OptimizeConfig::oz() -> Self
 
 pub struct OptimizeResult {
   bytes : Bytes

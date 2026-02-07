@@ -11,6 +11,7 @@ It provides:
 - core wasm duplicate function elimination apply (body+type based index remap)
 - core wasm merge-similar-functions apply (forwarding thunk merge + index remap)
 - custom section strip passes (`strip-debug` / `strip-dwarf` / `strip-target-features`)
+- optimization level presets (`-O0/-O1/-O2/-O3/-Os/-Oz`, plus `--converge`)
 - size-oriented optimization pass (`wasm-opt`-style custom section stripping + vacuum + merge-blocks + remove-unused-brs + peephole + DCE + DFE + MSF)
 - static module profiler (imports/exports/functions/code-body bytes)
 - runtime profiler for zero-arg exports (call count / total ns / avg ns)
@@ -28,7 +29,7 @@ just run -- top-functions path/to/module.wasm 20
 just run -- callgraph path/to/module.wasm 20
 just run -- dce-report path/to/module.wasm 20
 just run -- runtime-profile path/to/module.wasm 100
-just run -- optimize in.wasm out.wasm --strip-dwarf --strip-target-features --converge --dce-apply --dfe-apply --msf-apply
+just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features --converge
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
 just run -- component-callgraph path/to/component.wasm 20

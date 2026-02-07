@@ -8,7 +8,7 @@ fn print_usage() -> Unit {
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
   println(
-    "  optimize <input.wasm> <output.wasm> [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply]",
+    "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply]",
   )
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
@@ -115,6 +115,8 @@ fn run_optimize(args : Array[String]) -> Unit {
   let input_path = args[2]
   let output_path = args[3]
   let mut strip_all_custom = false
+  let mut strip_name_section = true
+  let mut strip_producers_section = true
   let mut strip_debug_sections = false
   let mut strip_dwarf_sections = false
   let mut strip_target_features_section = false
@@ -127,6 +129,25 @@ fn run_optimize(args : Array[String]) -> Unit {
   let mut enable_dfe = false
   let mut enable_merge_similar_functions = false
   for i in 4..<args.length() {
+    match @walyze.optimize_config_from_opt_level(args[i]) {
+      Some(preset) => {
+        strip_all_custom = preset.strip_all_custom
+        strip_name_section = preset.strip_name_section
+        strip_producers_section = preset.strip_producers_section
+        strip_debug_sections = preset.strip_debug_sections
+        strip_dwarf_sections = preset.strip_dwarf_sections
+        strip_target_features_section = preset.strip_target_features_section
+        pass_rounds = preset.pass_rounds
+        enable_peephole = preset.enable_peephole
+        enable_vacuum = preset.enable_vacuum
+        enable_merge_blocks = preset.enable_merge_blocks
+        enable_remove_unused_brs = preset.enable_remove_unused_brs
+        enable_dce = preset.enable_dce
+        enable_dfe = preset.enable_dfe
+        enable_merge_similar_functions = preset.enable_merge_similar_functions
+      }
+      None => ()
+    }
     if args[i] == "--strip-all-custom" {
       strip_all_custom = true
     }
@@ -172,6 +193,8 @@ fn run_optimize(args : Array[String]) -> Unit {
   let keep_custom_sections = parse_keep_custom(args, 4)
   let config = @walyze.make_optimize_config(
     strip_all_custom~,
+    strip_name_section~,
+    strip_producers_section~,
     strip_debug_sections~,
     strip_dwarf_sections~,
     strip_target_features_section~,

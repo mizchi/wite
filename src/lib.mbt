@@ -96,6 +96,157 @@ pub fn OptimizeConfig::aggressive() -> Self {
 }
 
 ///|
+pub fn OptimizeConfig::o0() -> Self {
+  make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    keep_custom_sections=[],
+    pass_rounds=1U,
+    enable_peephole=false,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+}
+
+///|
+pub fn OptimizeConfig::o1() -> Self {
+  make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    keep_custom_sections=[],
+    pass_rounds=1U,
+    enable_peephole=true,
+    peephole_remove_nop=true,
+    peephole_remove_const_drop=true,
+    enable_vacuum=true,
+    enable_merge_blocks=true,
+    enable_remove_unused_brs=true,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+}
+
+///|
+pub fn OptimizeConfig::o2() -> Self {
+  make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    keep_custom_sections=[],
+    pass_rounds=2U,
+    enable_peephole=true,
+    peephole_remove_nop=true,
+    peephole_remove_const_drop=true,
+    enable_vacuum=true,
+    enable_merge_blocks=true,
+    enable_remove_unused_brs=true,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+}
+
+///|
+pub fn OptimizeConfig::o3() -> Self {
+  make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    keep_custom_sections=[],
+    pass_rounds=3U,
+    enable_peephole=true,
+    peephole_remove_nop=true,
+    peephole_remove_const_drop=true,
+    enable_vacuum=true,
+    enable_merge_blocks=true,
+    enable_remove_unused_brs=true,
+    enable_dce=true,
+    enable_dfe=true,
+    enable_merge_similar_functions=true,
+  )
+}
+
+///|
+pub fn OptimizeConfig::os() -> Self {
+  make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    keep_custom_sections=[],
+    pass_rounds=3U,
+    enable_peephole=true,
+    peephole_remove_nop=true,
+    peephole_remove_const_drop=true,
+    enable_vacuum=true,
+    enable_merge_blocks=true,
+    enable_remove_unused_brs=true,
+    enable_dce=true,
+    enable_dfe=true,
+    enable_merge_similar_functions=false,
+  )
+}
+
+///|
+pub fn OptimizeConfig::oz() -> Self {
+  make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    keep_custom_sections=[],
+    pass_rounds=8U,
+    enable_peephole=true,
+    peephole_remove_nop=true,
+    peephole_remove_const_drop=true,
+    enable_vacuum=true,
+    enable_merge_blocks=true,
+    enable_remove_unused_brs=true,
+    enable_dce=true,
+    enable_dfe=true,
+    enable_merge_similar_functions=true,
+  )
+}
+
+///|
+pub fn optimize_config_from_opt_level(level : String) -> OptimizeConfig? {
+  match level {
+    "-O0" => Some(OptimizeConfig::o0())
+    "-O1" => Some(OptimizeConfig::o1())
+    "-O" | "-O2" => Some(OptimizeConfig::o2())
+    "-O3" | "-O4" => Some(OptimizeConfig::o3())
+    "-Os" => Some(OptimizeConfig::os())
+    "-Oz" => Some(OptimizeConfig::oz())
+    _ => None
+  }
+}
+
+///|
 pub fn make_optimize_config(
   strip_all_custom? : Bool = false,
   strip_name_section? : Bool = true,
