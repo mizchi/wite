@@ -2,10 +2,10 @@
 
 ## KPI Snapshot (2026-02-07)
 
-- core size KPI (`optimize -O1`): `171331 -> 70803 bytes` (`58.6747%`)
+- core size KPI (`optimize -O1`): `171331 -> 70738 bytes` (`58.7127%`)
 - wasm-opt 参考値 (`-Oz --all-features --strip-debug --strip-dwarf --strip-target-features`): `171331 -> 66220 bytes` (`61.3497%`)
-- gap to wasm-opt: `4583 bytes` (`-2.6750pt`)
-- component-model DCE KPI: `128170 -> 64076 bytes` (`50.0070%`)
+- gap to wasm-opt: `4518 bytes` (`-2.6370pt`)
+- component-model DCE KPI: `128170 -> 64046 bytes` (`50.0304%`)
 
 上記より、当面は **core size の wasm-opt ギャップ解消** を最優先にしつつ、差別化軸である **closed-world + GC 最適化** を次優先で進める。
 
@@ -20,9 +20,12 @@
 ## P0: Core Size ギャップ解消（最優先）
 
 - [ ] core corpus 合計 gap (`gap_to_wasm_opt_ratio_pct`) を段階的に縮小する
-- [ ] `zlib.wasm` 向けに `optimize-instructions` / `precompute` / `local-cse` を優先実装する
-- [ ] 小型 fixture（`br_to_exit`, `elided-br`, `complexBinaryNames`）での pass 適用漏れを潰す
-- [ ] `gc_target_feature.wasm` の `wasm-opt` 側サイズ増ケースを比較注記し、評価対象の扱いを決める
+- [x] `zlib.wasm` 向けに `precompute` / `local-cse` の優先実装を進める（基盤実装まで完了）
+- [x] `zlib.wasm` 向け `optimize-instructions` を優先実装する（基盤実装まで完了）
+- [ ] `zlib.wasm` 向け `optimize-instructions` を拡張する（bitwise/cmp の追加簡約）
+- [x] 小型 fixture（`br_to_exit`, `elided-br`, `complexBinaryNames`）での pass 適用漏れを潰す
+- [x] `gc_target_feature.wasm` の `wasm-opt` 比較注記を KPI に反映する
+- [ ] `gc_target_feature.wasm` を主要 gap 判定に含めるか（参考値扱いにするか）方針を確定する
 
 ## P1: Closed-World 基盤
 
@@ -56,7 +59,8 @@
 
 ## P5: wasm-opt 互換パスの段階移植（拡張バックログ）
 
-- [ ] `optimize-instructions` / `precompute` / `local-cse` を優先移植する
+- [x] `optimize-instructions` を優先移植する（最小実装: i32 rhs 恒等 + same-local 簡約）
+- [x] `precompute` / `local-cse` を優先移植する（最小実装）
 - [x] `precompute` 基盤: `i32.const+i32.const+i32.add` の定数畳み込み
 - [x] `precompute` 基盤: `i32.const 0 + add/sub`, `i32.const 1 + mul` の恒等変換
 - [x] `simplify-locals` 基盤: `local.set+local.get -> local.tee`

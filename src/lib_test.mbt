@@ -904,6 +904,39 @@ fn sample_module_with_i32_identity_ops_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_optimize_instructions_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // local.get 0
+  // i32.const 0
+  // i32.or
+  // i32.const 0
+  // i32.shl
+  // local.get 0
+  // local.get 0
+  // i32.xor
+  // i32.or
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x10, 0x00, 0x20, 0x00, 0x41, 0x00, 0x72, 0x41, 0x00, 0x74, 0x20, 0x00,
+      0x20, 0x00, 0x73, 0x72, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_local_cse_get_set_get_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -2826,6 +2859,49 @@ test "optimize peephole removes i32 arithmetic identity operations" {
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x6a])))
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x6b])))
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x6c])))
+}
+
+///|
+test "optimize-instructions simplifies i32 identity and same-local patterns" {
+  let bytes = sample_module_with_optimize_instructions_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 16U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 4U)
+  assert_true(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x0b]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x72])))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x74])))
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x20, 0x00, 0x73])),
+  )
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
 }
 
 ///|

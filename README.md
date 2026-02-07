@@ -30,7 +30,7 @@ It provides:
 - core wasm inlining-optimizing base pass (trivial `() -> i32.const` callee inline)
 - core wasm dae-optimizing base pass (drop される純粋式の簡約)
 - core wasm remove-unused-types base pass (function-type pruning + call_indirect type remap + private GC type dependency-aware pruning)
-- core wasm precompute/simplify-locals/rse/coalesce-locals base pass (`i32.const+i32.const+i32.add` folding, `i32.const+i32.eqz` folding, straight-line local const propagation, `local.set+local.get -> local.tee`, `local.tee+drop -> local.set`, `local.tee+local.set(same) -> local.set`, `local.get/global.get/ref.func/ref.null + drop` elision, local simplification fixed-point rounds, unused local elimination + local index compaction)
+- core wasm optimize-instructions/precompute/simplify-locals/rse/coalesce-locals base pass (`i32.const+i32.const+i32.add` folding, `i32.const+i32.eqz` folding, i32 rhs identity elimination (`+0`, `-0`, `|0`, `^0`, `<<0`, ...), same-local simplification (`x^x -> 0`, `x-x -> 0`, `x==x -> 1`, `x|x -> x`, ...), straight-line local const propagation, `local.set+local.get -> local.tee`, `local.tee+drop -> local.set`, `local.tee+local.set(same) -> local.set`, `local.get/global.get/ref.func/ref.null + drop` elision, local simplification fixed-point rounds, unused local elimination + local index compaction)
 - custom section strip passes (`strip-debug` / `strip-dwarf` / `strip-target-features`)
 - optimization level presets (`-O0/-O1/-O2/-O3/-Os/-Oz`, plus `--converge`)
 - size-oriented optimization pass (`wasm-opt`-style custom section stripping + vacuum + merge-blocks + remove-unused-brs + peephole + DCE + DFE + MSF)
