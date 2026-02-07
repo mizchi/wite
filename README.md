@@ -13,6 +13,7 @@ It provides:
 - core wasm merge-similar-functions apply (forwarding thunk merge + index remap)
 - core wasm remove-unused-module-elements apply (unused local table/element pruning)
 - core wasm type-refining base pass (duplicate function-type canonicalization)
+- core wasm signature-pruning base pass (unused trailing param pruning + caller drop insertion)
 - core wasm remove-unused-types base pass (function-type pruning + call_indirect type remap)
 - custom section strip passes (`strip-debug` / `strip-dwarf` / `strip-target-features`)
 - optimization level presets (`-O0/-O1/-O2/-O3/-Os/-Oz`, plus `--converge`)

@@ -14,7 +14,7 @@ component-model DCE の強みを活かすため、`wasm-opt` 互換よりも **c
 
 - [x] `type-refining` の基盤を実装する（重複 function type の正規化）
 - [ ] GC hierarchy を考慮した `type-refining` へ拡張する
-- [ ] `signature-pruning` 相当を実装する（不要 param/result の削減）
+- [x] `signature-pruning` の基盤を実装する（末尾 unused param の削減 + call site drop 挿入）
 - [x] `remove-unused-types` の基盤を実装する（core func type pruning）
 - [ ] private GC type まで `remove-unused-types` を拡張する
 - [ ] 可能なら `signature-refining` / `cfp` 系を段階導入する
