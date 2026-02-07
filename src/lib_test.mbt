@@ -41,6 +41,19 @@ fn append_named_custom_section(
 }
 
 ///|
+fn find_keep_reason_entry(
+  entries : Array[KeepReasonEntry],
+  function_index : UInt,
+) -> KeepReasonEntry? {
+  for entry in entries {
+    if entry.function_index == function_index {
+      return Some(entry)
+    }
+  }
+  None
+}
+
+///|
 fn sample_module_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -864,6 +877,59 @@ test "analyze dce report extracts removable functions" {
   assert_eq(report.removable_body_bytes, 5U)
   assert_eq(report.removable_functions.length(), 1)
   assert_eq(report.removable_functions[0].function_index, 3U)
+}
+
+///|
+test "analyze keep reasons reports export and call-based keep causes" {
+  let bytes = sample_module_with_dce_reindex_bytes()
+  let config = make_optimize_config(closed_world=true, closed_world_root_exports=[
+    "main",
+  ])
+  guard analyze_keep_reasons(bytes, config~) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_true(not(report.partial))
+  assert_eq(report.entries.length(), 2)
+  guard find_keep_reason_entry(report.entries, 0U) is Some(main_entry) else {
+    assert_true(false)
+    return
+  }
+  assert_true(main_entry.reasons.any(r => r == "export:main"))
+  guard find_keep_reason_entry(report.entries, 2U) is Some(helper_entry) else {
+    assert_true(false)
+    return
+  }
+  assert_true(helper_entry.reasons.any(r => r == "call:0"))
+  match find_keep_reason_entry(report.entries, 1U) {
+    Some(_) => assert_true(false)
+    None => ()
+  }
+}
+
+///|
+test "analyze keep reasons honors safe-mode override" {
+  let bytes = sample_module_with_two_exported_functions_bytes()
+  let config = make_optimize_config(
+    closed_world=true,
+    closed_world_root_exports=["keep"],
+    safe_mode=true,
+  )
+  guard analyze_keep_reasons(bytes, config~) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.entries.length(), 2)
+  guard find_keep_reason_entry(report.entries, 0U) is Some(keep_entry) else {
+    assert_true(false)
+    return
+  }
+  assert_true(keep_entry.reasons.any(r => r == "export:keep"))
+  guard find_keep_reason_entry(report.entries, 1U) is Some(drop_entry) else {
+    assert_true(false)
+    return
+  }
+  assert_true(drop_entry.reasons.any(r => r == "export:drop"))
 }
 
 ///|

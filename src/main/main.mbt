@@ -5,6 +5,9 @@ fn print_usage() -> Unit {
   println("  profile <core.wasm>")
   println("  top-functions <core.wasm> [limit]")
   println("  callgraph <core.wasm> [limit]")
+  println(
+    "  keep-reasons <core.wasm> [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
+  )
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
   println(
@@ -452,6 +455,67 @@ fn run_callgraph(path : String, limit : UInt) -> Unit {
 }
 
 ///|
+fn run_keep_reasons(args : Array[String]) -> Unit {
+  if args.length() < 3 {
+    print_usage()
+    @sys.exit(1)
+  }
+  let path = args[2]
+  let bytes = read_bytes_or_exit(path)
+  let mut closed_world = false
+  let mut safe_mode = false
+  for i in 3..<args.length() {
+    if args[i] == "--closed-world" {
+      closed_world = true
+    }
+    if args[i] == "--safe-mode" {
+      safe_mode = true
+    }
+  }
+  let closed_world_root_exports = parse_closed_world_roots(args, 3)
+  let config = @walyze.make_optimize_config(
+    closed_world~,
+    closed_world_root_exports~,
+    safe_mode~,
+  )
+  match @walyze.analyze_keep_reasons(bytes, config~) {
+    Ok(report) => {
+      println("keep reasons:")
+      println("  partial: " + report.partial.to_string())
+      if report.entries.length() == 0 {
+        println("  entries: (none)")
+      } else {
+        println("  entries:")
+        for entry in report.entries {
+          let label = match entry.name {
+            Some(v) => v
+            None => "#\{entry.function_index.to_string()}"
+          }
+          let exports = if entry.export_names.length() == 0 {
+            ""
+          } else {
+            " exports=" + entry.export_names.join(",")
+          }
+          println(
+            "    " +
+            label +
+            " idx=" +
+            entry.function_index.to_string() +
+            exports +
+            " reasons=" +
+            entry.reasons.join(","),
+          )
+        }
+      }
+    }
+    Err(e) => {
+      println("keep-reasons failed: " + @walyze.error_to_string(e))
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
 fn run_component_profile(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
   match @walyze.profile_component(bytes) {
@@ -656,6 +720,7 @@ fn main {
       }
       run_callgraph(args[2], limit)
     }
+    "keep-reasons" => run_keep_reasons(args)
     "dce-report" => {
       if args.length() < 3 {
         print_usage()

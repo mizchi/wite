@@ -31,6 +31,7 @@ just run -- analyze path/to/module.wasm
 just run -- profile path/to/module.wasm
 just run -- top-functions path/to/module.wasm 20
 just run -- callgraph path/to/module.wasm 20
+just run -- keep-reasons path/to/module.wasm --closed-world --closed-world-root=run
 just run -- dce-report path/to/module.wasm 20
 just run -- runtime-profile path/to/module.wasm 100
 just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features --converge --rume-apply
@@ -48,6 +49,7 @@ Main APIs are in `src/lib.mbt`:
 - `analyze_section_sizes(bytes)`
 - `analyze_function_sizes(bytes)`
 - `analyze_call_graph(bytes)`
+- `analyze_keep_reasons(bytes, config=...)`
 - `analyze_dce_report(bytes)`
 - `optimize_for_size(bytes, config=...)`
 - `profile_module(bytes)`

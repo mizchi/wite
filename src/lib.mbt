@@ -404,6 +404,20 @@ pub struct ContractReport {
 }
 
 ///|
+pub struct KeepReasonEntry {
+  function_index : UInt
+  name : String?
+  export_names : Array[String]
+  reasons : Array[String]
+}
+
+///|
+pub struct KeepReasonReport {
+  partial : Bool
+  entries : Array[KeepReasonEntry]
+}
+
+///|
 pub struct ComponentRootPolicyReport {
   component_imports : Array[String]
   component_exports : Array[String]
@@ -3918,6 +3932,129 @@ pub fn analyze_call_graph(
 }
 
 ///|
+fn export_root_names_from_config(config : OptimizeConfig) -> Array[String]? {
+  if config.closed_world &&
+    not(config.safe_mode) &&
+    config.closed_world_root_exports.length() > 0 {
+    Some(config.closed_world_root_exports)
+  } else {
+    None
+  }
+}
+
+///|
+pub fn analyze_keep_reasons(
+  bytes : Bytes,
+  config? : OptimizeConfig = OptimizeConfig::default(),
+) -> Result[KeepReasonReport, WalyzeError] {
+  try? {
+    let export_root_names = export_root_names_from_config(config)
+    let graph = analyze_call_graph_raise(bytes, export_root_names)
+    let reasons_map : Map[UInt, Array[String]] = {}
+    let sections = parse_core_sections_raise(bytes)
+    for section in sections {
+      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      match section.section_id {
+        7U => {
+          let exports = parse_export_function_names(payload)
+          exports.each((index, names) => if should_include_export_root(
+              names, export_root_names,
+            ) {
+            for export_name in names {
+              map_push_string_array(reasons_map, index, "export:" + export_name)
+            }
+          })
+        }
+        8U => {
+          let start_index = parse_start_function_index(payload)
+          map_push_string_array(reasons_map, start_index, "start")
+        }
+        6U => {
+          let result = try? parse_global_section_function_refs_raise(payload)
+          match result {
+            Ok(indices) =>
+              for index in indices {
+                map_push_string_array(reasons_map, index, "global-ref.func")
+              }
+            Err(_) => ()
+          }
+        }
+        9U => {
+          let result = try? parse_element_section_function_refs_raise(payload)
+          match result {
+            Ok(indices) =>
+              for index in indices {
+                map_push_string_array(reasons_map, index, "element-ref.func")
+              }
+            Err(_) => ()
+          }
+        }
+        _ => ()
+      }
+    }
+    let index_to_pos : Map[UInt, Int] = {}
+    for i in 0..<graph.nodes.length() {
+      index_to_pos.set(graph.nodes[i].function_index, i)
+    }
+    let visited : Map[UInt, Bool] = {}
+    let parent_map : Map[UInt, UInt] = {}
+    let queue = graph.roots.copy()
+    let mut head = 0
+    while head < queue.length() {
+      let current = queue[head]
+      head += 1
+      if visited.get(current) is Some(_) {
+        continue
+      }
+      visited.set(current, true)
+      match index_to_pos.get(current) {
+        Some(pos) =>
+          for callee in graph.nodes[pos].direct_callees {
+            if visited.get(callee) is None {
+              if parent_map.get(callee) is None {
+                parent_map.set(callee, current)
+              }
+              queue.push(callee)
+            }
+          }
+        None => ()
+      }
+    }
+    let entries : Array[KeepReasonEntry] = []
+    for node in graph.nodes {
+      if node.reachable_from_roots {
+        let reasons = match reasons_map.get(node.function_index) {
+          Some(v) => v.copy()
+          None => []
+        }
+        if reasons.length() == 0 {
+          match parent_map.get(node.function_index) {
+            Some(parent) => reasons.push("call:" + parent.to_string())
+            None => reasons.push("reachable")
+          }
+        }
+        reasons.sort()
+        reasons.dedup()
+        entries.push({
+          function_index: node.function_index,
+          name: node.name,
+          export_names: node.export_names,
+          reasons,
+        })
+      }
+    }
+    entries.sort_by((a, b) => if a.function_index < b.function_index {
+      -1
+    } else if a.function_index > b.function_index {
+      1
+    } else {
+      0
+    })
+    { partial: graph.partial, entries }
+  }
+}
+
+///|
 pub fn analyze_dce_report(bytes : Bytes) -> Result[DceReport, WalyzeError] {
   match analyze_call_graph(bytes) {
     Ok(graph) => {
@@ -4454,13 +4591,7 @@ fn apply_dce_raise(
   bytes : Bytes,
   config : OptimizeConfig,
 ) -> DceApplyResult raise WalyzeError {
-  let export_root_names = if config.closed_world &&
-    not(config.safe_mode) &&
-    config.closed_world_root_exports.length() > 0 {
-    Some(config.closed_world_root_exports)
-  } else {
-    None
-  }
+  let export_root_names = export_root_names_from_config(config)
   let call_graph = analyze_call_graph_raise(bytes, export_root_names)
   if call_graph.partial {
     raise WalyzeError::InvalidFormat(
