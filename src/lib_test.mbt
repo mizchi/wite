@@ -54,6 +54,22 @@ fn find_keep_reason_entry(
 }
 
 ///|
+fn bench_core_corpus_paths() -> Array[String] {
+  [
+    "bench/corpus/core/binaryen/br_to_exit.wasm", "bench/corpus/core/binaryen/elided-br.wasm",
+    "bench/corpus/core/binaryen/complexBinaryNames.wasm", "bench/corpus/core/binaryen/empty.wasm",
+    "bench/corpus/core/binaryen/gc_target_feature.wasm", "bench/corpus/core/binaryen/zlib.wasm",
+  ]
+}
+
+///|
+fn bench_component_corpus_paths() -> Array[String] {
+  [
+    "bench/corpus/component/wac/dummy_wasi_http_0.2.0.wasm", "bench/corpus/component/wac/dummy_wasi_http_0.2.3.wasm",
+  ]
+}
+
+///|
 fn sample_module_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -2043,4 +2059,62 @@ test "component call graph report returns core module entries" {
   }
   assert_true(reports.length() > 0)
   assert_true(reports.any(r => r.graph.local_function_count > 0U))
+}
+
+///|
+test "bench corpus core fixtures are parseable as core wasm" {
+  for path in bench_core_corpus_paths() {
+    let bytes = @fs.read_file_to_bytes(path) catch {
+      _ => {
+        inspect(path, content="missing")
+        assert_true(false)
+        return
+      }
+    }
+    guard profile_module(bytes) is Ok(profile) else {
+      inspect(path, content="core parse failed")
+      assert_true(false)
+      return
+    }
+    assert_true(profile.total_bytes > 0U)
+  }
+}
+
+///|
+test "kpi core corpus -O1 does not increase size" {
+  let config = OptimizeConfig::o1()
+  for path in bench_core_corpus_paths() {
+    let bytes = @fs.read_file_to_bytes(path) catch {
+      _ => {
+        inspect(path, content="missing")
+        assert_true(false)
+        return
+      }
+    }
+    guard optimize_for_size(bytes, config~) is Ok(result) else {
+      inspect(path, content="optimize failed")
+      assert_true(false)
+      return
+    }
+    assert_true(result.after_size <= result.before_size)
+  }
+}
+
+///|
+test "bench corpus component fixtures are parseable as component wasm" {
+  for path in bench_component_corpus_paths() {
+    let bytes = @fs.read_file_to_bytes(path) catch {
+      _ => {
+        inspect(path, content="missing")
+        assert_true(false)
+        return
+      }
+    }
+    guard profile_component(bytes) is Ok(profile) else {
+      inspect(path, content="component parse failed")
+      assert_true(false)
+      return
+    }
+    assert_true(profile.total_bytes > 0U)
+  }
 }

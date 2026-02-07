@@ -71,6 +71,20 @@ just           # check + test
 just fmt       # format code
 just check     # type check
 just test      # run tests
+just bench     # run benchmark suite
+just bench-sync # sync benchmark corpus fixtures from upstream
+just kpi       # collect KPI report (size first, runtime second)
 just run       # run CLI (src/main)
 just info      # generate .mbti
 ```
+
+## Benchmark Corpus
+
+`bench/corpus/` に外部由来 fixture を配置しています。
+
+- `core/binaryen`: Binaryen 由来の core wasm サンプル
+- `component/wac`: wac 由来の component wasm サンプル
+
+同期定義は `bench/corpus/manifest.tsv` で、`just bench-sync` で commit 固定 + sha256 検証付きで再取得できます。
+
+KPI 定義と計測手順は `bench/KPI.md` を参照してください。
