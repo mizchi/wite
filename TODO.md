@@ -9,6 +9,14 @@
 
 上記より、当面は **core size の wasm-opt ギャップ解消** を最優先にしつつ、差別化軸である **closed-world + GC 最適化** を次優先で進める。
 
+## Architecture Guardrails（mwac / walyze）
+
+- [x] 役割を bundler (`mwac`) / minifier (`walyze`) として整理する
+- [x] 依存方向を `walyze -> mwac` に固定する（`mwac -> walyze` 依存を禁止）
+- [ ] `mwac` 連携点は bytes I/O 契約（生成物の入出力）として定義する
+- [ ] `walyze` 側の component 最適化 API を「WAC計画型非依存」で拡張する
+- [ ] 固定点最適化は `component bytes -> core module optimize -> component bytes` の形で設計する
+
 ## P0: Core Size ギャップ解消（最優先）
 
 - [ ] core corpus 合計 gap (`gap_to_wasm_opt_ratio_pct`) を段階的に縮小する

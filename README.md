@@ -2,6 +2,18 @@
 
 `walyze` is a MoonBit toolkit for WebAssembly binaries with a focus on component-model workflows.
 
+## Positioning (mwac + walyze)
+
+- `mwac`: WAC API / composition (bundler role)
+- `walyze`: wasm/component optimizer + profiler (minifier role)
+
+責務分離の原則:
+
+- `mwac` は合成（依存解決・instantiate/export 計画）に集中する
+- `walyze` はバイナリ最適化・解析に集中する
+- 依存方向は `walyze -> mwac` のみ（`mwac -> walyze` の直接依存は作らない）
+- 連携は「`mwac` が出力した wasm/component bytes を `walyze` が後段で最適化する」形を基本とする
+
 It provides:
 
 - core wasm section-size analysis (`twiggy`-style breakdown by section)
@@ -45,6 +57,16 @@ just run -- component-callgraph path/to/component.wasm 20
 just run -- component-dce-kpi path/to/component.wasm path/to/wit-dir
 just run -- contract path/to/component.wasm path/to/wit-dir
 just run -- root-policy path/to/component.wasm path/to/wit-dir
+```
+
+連携例（bundler + minifier）:
+
+```bash
+# mwac 側で component を生成
+# (例) mwac compose input.wac -> out.component.wasm
+
+# walyze 側で後段最適化
+just run -- optimize out.component.wasm out.component.opt.wasm -Oz --converge
 ```
 
 ## Library API
