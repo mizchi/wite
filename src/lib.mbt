@@ -1103,6 +1103,59 @@ fn skip_fd_prefixed_immediate(parser : Cursor) -> Unit raise WalyzeError {
 }
 
 ///|
+fn skip_instruction_immediate_raise(
+  parser : Cursor,
+  opcode : UInt,
+) -> Unit raise WalyzeError {
+  match opcode {
+    0x02U | 0x03U | 0x04U => skip_block_type(parser)
+    0x0cU
+    | 0x0dU
+    | 0x10U
+    | 0x20U
+    | 0x21U
+    | 0x22U
+    | 0x23U
+    | 0x24U
+    | 0x25U
+    | 0x26U
+    | 0xd2U => ignore(parser.read_u32_leb128())
+    0x11U => {
+      ignore(parser.read_u32_leb128())
+      ignore(parser.read_u32_leb128())
+    }
+    0x0eU => {
+      let count = parser.read_u32_leb128()
+      for _ in 0U..<count {
+        ignore(parser.read_u32_leb128())
+      }
+      ignore(parser.read_u32_leb128())
+    }
+    0x1cU => {
+      let count = parser.read_u32_leb128()
+      for _ in 0U..<count {
+        ignore(parser.read_byte())
+      }
+    }
+    0x28U..=0x3eU => {
+      ignore(parser.read_u32_leb128())
+      ignore(parser.read_u32_leb128())
+    }
+    0x3fU | 0x40U => ignore(parser.read_byte())
+    0x41U => skip_sleb_immediate(parser, 5)
+    0x42U => skip_sleb_immediate(parser, 10)
+    0x43U => parser.skip(4)
+    0x44U => parser.skip(8)
+    0xfcU => skip_fc_prefixed_immediate(parser)
+    0xfdU => skip_fd_prefixed_immediate(parser)
+    0xd0U => skip_heap_type(parser)
+    0x00U | 0x01U | 0x05U | 0x0bU | 0x0fU | 0x1aU | 0x1bU | 0xd1U => ()
+    0x45U..=0xc4U => ()
+    _ => raise WalyzeError::InvalidFormat("unsupported opcode in parser")
+  }
+}
+
+///|
 priv struct InstrSpan {
   start : Int
   end_ : Int
@@ -1118,52 +1171,7 @@ fn parse_instruction_spans_raise(
   while not(parser.eof()) {
     let start = parser.get_pos()
     let opcode = parser.read_byte().to_uint()
-    match opcode {
-      0x02U | 0x03U | 0x04U => skip_block_type(parser)
-      0x0cU
-      | 0x0dU
-      | 0x10U
-      | 0x20U
-      | 0x21U
-      | 0x22U
-      | 0x23U
-      | 0x24U
-      | 0x25U
-      | 0x26U
-      | 0xd2U => ignore(parser.read_u32_leb128())
-      0x11U => {
-        ignore(parser.read_u32_leb128())
-        ignore(parser.read_u32_leb128())
-      }
-      0x0eU => {
-        let count = parser.read_u32_leb128()
-        for _ in 0U..<count {
-          ignore(parser.read_u32_leb128())
-        }
-        ignore(parser.read_u32_leb128())
-      }
-      0x1cU => {
-        let count = parser.read_u32_leb128()
-        for _ in 0U..<count {
-          ignore(parser.read_byte())
-        }
-      }
-      0x28U..=0x3eU => {
-        ignore(parser.read_u32_leb128())
-        ignore(parser.read_u32_leb128())
-      }
-      0x3fU | 0x40U => ignore(parser.read_byte())
-      0x41U => skip_sleb_immediate(parser, 5)
-      0x42U => skip_sleb_immediate(parser, 10)
-      0x43U => parser.skip(4)
-      0x44U => parser.skip(8)
-      0xfcU => skip_fc_prefixed_immediate(parser)
-      0xfdU => skip_fd_prefixed_immediate(parser)
-      0xd0U => skip_heap_type(parser)
-      0x00U | 0x01U | 0x05U | 0x0bU | 0x0fU | 0x1aU | 0x1bU | 0xd1U => ()
-      0x45U..=0xc4U => ()
-      _ => raise WalyzeError::InvalidFormat("unsupported opcode in peephole")
-    }
+    skip_instruction_immediate_raise(parser, opcode)
     let end_ = parser.get_pos()
     spans.push({ start, end_, opcode })
   }
@@ -1246,6 +1254,363 @@ fn remap_function_index_raise(
         "dce remap missing function index: " + index.to_string(),
       )
   }
+}
+
+///|
+fn read_val_type_bytes_raise(parser : Cursor) -> Bytes raise WalyzeError {
+  let start = parser.get_pos()
+  let code = parser.read_byte().to_uint()
+  match code {
+    0x7fU | 0x7eU | 0x7dU | 0x7cU | 0x7bU | 0x70U | 0x6fU => ()
+    0x63U | 0x64U => skip_heap_type(parser)
+    _ =>
+      raise WalyzeError::InvalidFormat(
+        "unsupported value type in global section: " + code.to_string(),
+      )
+  }
+  let end_ = parser.get_pos()
+  parser.bytes[start:end_].to_bytes()
+}
+
+///|
+fn read_ref_type_bytes_raise(parser : Cursor) -> Bytes raise WalyzeError {
+  let start = parser.get_pos()
+  let code = parser.read_byte().to_uint()
+  match code {
+    0x70U | 0x6fU => ()
+    0x63U | 0x64U => skip_heap_type(parser)
+    _ =>
+      raise WalyzeError::InvalidFormat(
+        "unsupported reference type in element section: " + code.to_string(),
+      )
+  }
+  let end_ = parser.get_pos()
+  parser.bytes[start:end_].to_bytes()
+}
+
+///|
+fn read_const_expr_bytes_raise(
+  parser : Cursor,
+  payload : Bytes,
+) -> Bytes raise WalyzeError {
+  let start = parser.get_pos()
+  while true {
+    let opcode = parser.read_byte().to_uint()
+    skip_instruction_immediate_raise(parser, opcode)
+    if opcode == 0x0bU {
+      let end_ = parser.get_pos()
+      return payload[start:end_].to_bytes()
+    }
+  }
+  b""
+}
+
+///|
+fn rewrite_const_expr_function_indices_raise(
+  expr_bytes : Bytes,
+  index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let spans = parse_instruction_spans_raise(expr_bytes)
+  rewrite_instruction_function_indices_raise(expr_bytes, spans, index_map)
+}
+
+///|
+fn push_unique_u32(out : Array[UInt], value : UInt) -> Unit {
+  if not(out.contains(value)) {
+    out.push(value)
+  }
+}
+
+///|
+fn collect_ref_func_indices_from_expr_raise(
+  expr_bytes : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  let spans = parse_instruction_spans_raise(expr_bytes)
+  let out : Array[UInt] = []
+  for span in spans {
+    if span.opcode == 0xd2U {
+      match decode_span_u32_immediate(expr_bytes, span) {
+        Some(index) => push_unique_u32(out, index)
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode ref.func immediate in const expr",
+          )
+      }
+    }
+  }
+  out
+}
+
+///|
+fn parse_global_section_function_refs_raise(
+  payload : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[UInt] = []
+  for _ in 0U..<count {
+    ignore(read_val_type_bytes_raise(parser))
+    ignore(parser.read_byte())
+    let expr = read_const_expr_bytes_raise(parser, payload)
+    for index in collect_ref_func_indices_from_expr_raise(expr) {
+      push_unique_u32(out, index)
+    }
+  }
+  out
+}
+
+///|
+fn parse_element_section_function_refs_raise(
+  payload : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let segment_count = parser.read_u32_leb128()
+  let out : Array[UInt] = []
+  for _ in 0U..<segment_count {
+    let flags = parser.read_u32_leb128()
+    match flags {
+      0U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_ref_func_indices_from_expr_raise(offset_expr) {
+          push_unique_u32(out, index)
+        }
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          push_unique_u32(out, parser.read_u32_leb128())
+        }
+      }
+      1U => {
+        ignore(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          push_unique_u32(out, parser.read_u32_leb128())
+        }
+      }
+      2U => {
+        ignore(parser.read_u32_leb128())
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_ref_func_indices_from_expr_raise(offset_expr) {
+          push_unique_u32(out, index)
+        }
+        ignore(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          push_unique_u32(out, parser.read_u32_leb128())
+        }
+      }
+      3U => {
+        ignore(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          push_unique_u32(out, parser.read_u32_leb128())
+        }
+      }
+      4U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_ref_func_indices_from_expr_raise(offset_expr) {
+          push_unique_u32(out, index)
+        }
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          let expr = read_const_expr_bytes_raise(parser, payload)
+          for index in collect_ref_func_indices_from_expr_raise(expr) {
+            push_unique_u32(out, index)
+          }
+        }
+      }
+      5U => {
+        ignore(read_ref_type_bytes_raise(parser))
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          let expr = read_const_expr_bytes_raise(parser, payload)
+          for index in collect_ref_func_indices_from_expr_raise(expr) {
+            push_unique_u32(out, index)
+          }
+        }
+      }
+      6U => {
+        ignore(parser.read_u32_leb128())
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_ref_func_indices_from_expr_raise(offset_expr) {
+          push_unique_u32(out, index)
+        }
+        ignore(read_ref_type_bytes_raise(parser))
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          let expr = read_const_expr_bytes_raise(parser, payload)
+          for index in collect_ref_func_indices_from_expr_raise(expr) {
+            push_unique_u32(out, index)
+          }
+        }
+      }
+      7U => {
+        ignore(read_ref_type_bytes_raise(parser))
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          let expr = read_const_expr_bytes_raise(parser, payload)
+          for index in collect_ref_func_indices_from_expr_raise(expr) {
+            push_unique_u32(out, index)
+          }
+        }
+      }
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported element segment flags in parser: " + flags.to_string(),
+        )
+    }
+  }
+  out
+}
+
+///|
+fn rewrite_global_section_payload_for_index_map_raise(
+  payload : Bytes,
+  index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(count)[:])
+  for _ in 0U..<count {
+    let val_type = read_val_type_bytes_raise(parser)
+    out.append(val_type[:].to_array())
+    let mutability = parser.read_byte()
+    out.push(mutability)
+    let expr_bytes = read_const_expr_bytes_raise(parser, payload)
+    let rewritten = rewrite_const_expr_function_indices_raise(
+      expr_bytes, index_map,
+    )
+    out.append(rewritten[:].to_array())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_element_section_payload_for_index_map_raise(
+  payload : Bytes,
+  index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let segment_count = parser.read_u32_leb128()
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(segment_count)[:])
+  for _ in 0U..<segment_count {
+    let flags = parser.read_u32_leb128()
+    out.append(encode_u32_leb128(flags)[:])
+    match flags {
+      0U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        out.append(
+          rewrite_const_expr_function_indices_raise(offset_expr, index_map)[:].to_array(),
+        )
+        let func_count = parser.read_u32_leb128()
+        out.append(encode_u32_leb128(func_count)[:])
+        for _ in 0U..<func_count {
+          let index = parser.read_u32_leb128()
+          out.append(
+            encode_u32_leb128(remap_function_index_raise(index, index_map))[:],
+          )
+        }
+      }
+      1U => {
+        out.push(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        out.append(encode_u32_leb128(func_count)[:])
+        for _ in 0U..<func_count {
+          let index = parser.read_u32_leb128()
+          out.append(
+            encode_u32_leb128(remap_function_index_raise(index, index_map))[:],
+          )
+        }
+      }
+      2U => {
+        let table_index = parser.read_u32_leb128()
+        out.append(encode_u32_leb128(table_index)[:])
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        out.append(
+          rewrite_const_expr_function_indices_raise(offset_expr, index_map)[:].to_array(),
+        )
+        out.push(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        out.append(encode_u32_leb128(func_count)[:])
+        for _ in 0U..<func_count {
+          let index = parser.read_u32_leb128()
+          out.append(
+            encode_u32_leb128(remap_function_index_raise(index, index_map))[:],
+          )
+        }
+      }
+      3U => {
+        out.push(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        out.append(encode_u32_leb128(func_count)[:])
+        for _ in 0U..<func_count {
+          let index = parser.read_u32_leb128()
+          out.append(
+            encode_u32_leb128(remap_function_index_raise(index, index_map))[:],
+          )
+        }
+      }
+      4U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        out.append(
+          rewrite_const_expr_function_indices_raise(offset_expr, index_map)[:].to_array(),
+        )
+        let expr_count = parser.read_u32_leb128()
+        out.append(encode_u32_leb128(expr_count)[:])
+        for _ in 0U..<expr_count {
+          let expr_bytes = read_const_expr_bytes_raise(parser, payload)
+          out.append(
+            rewrite_const_expr_function_indices_raise(expr_bytes, index_map)[:].to_array(),
+          )
+        }
+      }
+      5U => {
+        out.append(read_ref_type_bytes_raise(parser)[:].to_array())
+        let expr_count = parser.read_u32_leb128()
+        out.append(encode_u32_leb128(expr_count)[:])
+        for _ in 0U..<expr_count {
+          let expr_bytes = read_const_expr_bytes_raise(parser, payload)
+          out.append(
+            rewrite_const_expr_function_indices_raise(expr_bytes, index_map)[:].to_array(),
+          )
+        }
+      }
+      6U => {
+        let table_index = parser.read_u32_leb128()
+        out.append(encode_u32_leb128(table_index)[:])
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        out.append(
+          rewrite_const_expr_function_indices_raise(offset_expr, index_map)[:].to_array(),
+        )
+        out.append(read_ref_type_bytes_raise(parser)[:].to_array())
+        let expr_count = parser.read_u32_leb128()
+        out.append(encode_u32_leb128(expr_count)[:])
+        for _ in 0U..<expr_count {
+          let expr_bytes = read_const_expr_bytes_raise(parser, payload)
+          out.append(
+            rewrite_const_expr_function_indices_raise(expr_bytes, index_map)[:].to_array(),
+          )
+        }
+      }
+      7U => {
+        out.append(read_ref_type_bytes_raise(parser)[:].to_array())
+        let expr_count = parser.read_u32_leb128()
+        out.append(encode_u32_leb128(expr_count)[:])
+        for _ in 0U..<expr_count {
+          let expr_bytes = read_const_expr_bytes_raise(parser, payload)
+          out.append(
+            rewrite_const_expr_function_indices_raise(expr_bytes, index_map)[:].to_array(),
+          )
+        }
+      }
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported element segment flags in rewrite: " + flags.to_string(),
+        )
+    }
+  }
+  Bytes::from_array(out[:])
 }
 
 ///|
@@ -1983,6 +2348,7 @@ pub fn analyze_call_graph(
     let export_names : Map[UInt, Array[String]] = {}
     let function_names : Map[UInt, String] = {}
     let roots : Array[UInt] = []
+    let mut partial = false
     for section in sections {
       let payload = bytes[section.payload_start:section.section_end].to_bytes()
       match section.section_id {
@@ -1999,6 +2365,34 @@ pub fn analyze_call_graph(
           let start_index = parse_start_function_index(payload)
           if not(roots.contains(start_index)) {
             roots.push(start_index)
+          }
+        }
+        6U => {
+          let refs_result = try? parse_global_section_function_refs_raise(
+            payload,
+          )
+          match refs_result {
+            Ok(indices) =>
+              for index in indices {
+                if not(roots.contains(index)) {
+                  roots.push(index)
+                }
+              }
+            Err(_) => partial = true
+          }
+        }
+        9U => {
+          let refs_result = try? parse_element_section_function_refs_raise(
+            payload,
+          )
+          match refs_result {
+            Ok(indices) =>
+              for index in indices {
+                if not(roots.contains(index)) {
+                  roots.push(index)
+                }
+              }
+            Err(_) => partial = true
           }
         }
         10U => code_bodies = parse_code_bodies(payload)
@@ -2027,7 +2421,6 @@ pub fn analyze_call_graph(
     let nodes : Array[CallGraphNode] = []
     let index_to_pos : Map[UInt, Int] = {}
     let mut has_indirect_calls = false
-    let mut partial = false
     for i in 0..<code_bodies.length() {
       let function_index = imported_function_count + i.reinterpret_as_uint()
       let body = code_bodies[i]
@@ -2311,10 +2704,19 @@ fn apply_dce_raise(bytes : Bytes) -> DceApplyResult raise WalyzeError {
               bytes[section.section_start:section.section_end].to_array(),
             )
         }
-      // Global/Element may contain ref.func references and need extra remap handling.
-      6U | 9U =>
-        raise WalyzeError::InvalidFormat(
-          "dce apply does not yet support global/element sections",
+      6U =>
+        append_encoded_section(
+          out,
+          6U,
+          rewrite_global_section_payload_for_index_map_raise(payload, index_map),
+        )
+      9U =>
+        append_encoded_section(
+          out,
+          9U,
+          rewrite_element_section_payload_for_index_map_raise(
+            payload, index_map,
+          ),
         )
       _ =>
         out.append(bytes[section.section_start:section.section_end].to_array())
@@ -2443,10 +2845,19 @@ fn apply_dfe_raise(bytes : Bytes) -> DfeApplyResult raise WalyzeError {
               bytes[section.section_start:section.section_end].to_array(),
             )
         }
-      // Global/Element may contain ref.func references and need extra remap handling.
-      6U | 9U =>
-        raise WalyzeError::InvalidFormat(
-          "dfe apply does not yet support global/element sections",
+      6U =>
+        append_encoded_section(
+          out,
+          6U,
+          rewrite_global_section_payload_for_index_map_raise(payload, index_map),
+        )
+      9U =>
+        append_encoded_section(
+          out,
+          9U,
+          rewrite_element_section_payload_for_index_map_raise(
+            payload, index_map,
+          ),
         )
       _ =>
         out.append(bytes[section.section_start:section.section_end].to_array())
@@ -2647,10 +3058,19 @@ fn apply_merge_similar_functions_raise(
               bytes[section.section_start:section.section_end].to_array(),
             )
         }
-      // Global/Element may contain ref.func references and need extra remap handling.
-      6U | 9U =>
-        raise WalyzeError::InvalidFormat(
-          "merge-similar-functions does not yet support global/element sections",
+      6U =>
+        append_encoded_section(
+          out,
+          6U,
+          rewrite_global_section_payload_for_index_map_raise(payload, index_map),
+        )
+      9U =>
+        append_encoded_section(
+          out,
+          9U,
+          rewrite_element_section_payload_for_index_map_raise(
+            payload, index_map,
+          ),
         )
       _ =>
         out.append(bytes[section.section_start:section.section_end].to_array())

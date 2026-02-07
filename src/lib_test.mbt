@@ -384,6 +384,93 @@ fn sample_module_with_similar_thunks_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_global_and_element_refs_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 3 local functions (indices 0,1,2)
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x00]))
+  // table section: 1 funcref table min=1
+  append_section(out, 4U, bytes_of([0x01, 0x70, 0x00, 0x01]))
+  // global section:
+  //   global funcref const ref.func 2 end
+  append_section(out, 6U, bytes_of([0x01, 0x70, 0x00, 0xd2, 0x02, 0x0b]))
+  // export section: export index 0 as "main"
+  append_section(
+    out,
+    7U,
+    bytes_of([0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00]),
+  )
+  // element section:
+  //   active segment table0 offset(i32.const 0)
+  //   function indices [2]
+  append_section(out, 9U, bytes_of([0x01, 0x00, 0x41, 0x00, 0x0b, 0x01, 0x02]))
+  // code section:
+  // #0: call 2, end
+  // #1: end (dead)
+  // #2: end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x04, 0x00, 0x10, 0x02, 0x0b, 0x02, 0x00, 0x0b, 0x02, 0x00, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_global_and_element_root_only_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 2 local functions (indices 0,1)
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // table section: 1 funcref table min=1
+  append_section(out, 4U, bytes_of([0x01, 0x70, 0x00, 0x01]))
+  // global section: global funcref const ref.func 1 end
+  append_section(out, 6U, bytes_of([0x01, 0x70, 0x00, 0xd2, 0x01, 0x0b]))
+  // export section: export main(index 0)
+  append_section(
+    out,
+    7U,
+    bytes_of([0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00]),
+  )
+  // element section: active segment contains function index 1
+  append_section(out, 9U, bytes_of([0x01, 0x00, 0x41, 0x00, 0x0b, 0x01, 0x01]))
+  // code section:
+  // #0: end
+  // #1: end
+  append_section(out, 10U, bytes_of([0x02, 0x02, 0x00, 0x0b, 0x02, 0x00, 0x0b]))
+  Bytes::from_array(out[:])
+}
+
+///|
+fn bytes_contains_seq(bytes : Bytes, seq : Array[Int]) -> Bool {
+  if seq.length() == 0 {
+    return true
+  }
+  if bytes.length() < seq.length() {
+    return false
+  }
+  for start in 0..<=(bytes.length() - seq.length()) {
+    let mut matched = true
+    for j in 0..<seq.length() {
+      if bytes[start + j] != seq[j].to_byte() {
+        matched = false
+        break
+      }
+    }
+    if matched {
+      return true
+    }
+  }
+  false
+}
+
+///|
 fn find_section_size(sections : Array[SectionSize], key : String) -> UInt? {
   for section in sections {
     if section.key == key {
@@ -667,6 +754,80 @@ test "optimize with dce apply removes dead and rewrites calls" {
   assert_eq(after_graph.dead_body_bytes, 0U)
   assert_eq(after_graph.nodes.length(), 2)
   assert_eq(after_graph.nodes[0].direct_callees, [1U])
+}
+
+///|
+test "optimize with dce apply rewrites global and element refs" {
+  let bytes = sample_module_with_global_and_element_refs_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  guard analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_graph.nodes.length(), 2)
+  assert_eq(after_graph.nodes[0].direct_callees, [1U])
+  assert_true(bytes_contains_seq(optimized.bytes, [0xd2, 0x01, 0x0b]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0xd2, 0x02, 0x0b])))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0b, 0x01, 0x01]),
+  )
+}
+
+///|
+test "analyze call graph treats global and element refs as roots" {
+  let bytes = sample_module_with_global_and_element_root_only_bytes()
+  guard analyze_call_graph(bytes) is Ok(graph) else {
+    assert_true(false)
+    return
+  }
+  assert_true(graph.roots.contains(0U))
+  assert_true(graph.roots.contains(1U))
+  assert_eq(graph.dead_body_bytes, 0U)
+}
+
+///|
+test "optimize with dce keeps functions referenced by global/element roots" {
+  let bytes = sample_module_with_global_and_element_root_only_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_true(
+    not(optimized.removed_sections.any(s => s.contains("dce:functions:"))),
+  )
 }
 
 ///|
