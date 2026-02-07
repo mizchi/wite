@@ -67,6 +67,50 @@
   - `directize` 自体の書換件数と、その後段（DCE/RUME）で実サイズがどれだけ追加で落ちたかを追跡する
   - 主要KPI（`-O1` サイズ）とは別に、最適化連鎖の効き方を診断するための補助指標
 
+### before/after 階層ヒートマップ（第一KPI診断）
+
+- 指標: `hierarchical_before_after_heatmap`
+- 定義:
+  - 対象: `bench/corpus/core/binaryen/*.wasm`
+  - 実行: `optimize -O1` の `before/after` を比較
+  - 階層:
+    - section: `module bytes` 差分
+    - function: `profile code_body_bytes` 差分
+    - block: `block-sizes total_instruction_bytes` 差分
+  - 算出:
+    - `*_gain_bytes = before - after`
+    - `*_gain_ratio_pct = *_gain_bytes / before * 100`
+    - `heat` は比率に応じた段階バー（`+.` ～ `+########`）
+
+### pass waterfall（第一KPI診断）
+
+- 指標: `pass_waterfall_gain`
+- 定義:
+  - 対象: `bench/corpus/core/binaryen/*.wasm`
+  - ステージ順:
+    - `strip`: `--strip-debug --strip-dwarf --strip-target-features --rounds=1 --no-peephole --no-vacuum --no-merge-blocks --no-remove-unused-brs`
+    - `code`: `--strip-debug --strip-dwarf --strip-target-features --rounds=2`
+    - `dce`: `code + --dce-apply --dfe-apply --msf-apply`
+    - `rume`: `dce + --rume-apply`
+  - 算出:
+    - `strip_gain = before - strip_after`
+    - `code_gain = strip_after - code_after`
+    - `dce_gain = code_after - dce_after`
+    - `rume_gain = dce_after - rume_after`
+    - `total_gain = before - rume_after`
+
+### no-change 理由ダッシュボード（第一KPI診断）
+
+- 指標: `no_change_reason_dashboard`
+- 定義:
+  - 対象: `o1 / strip / code / dce / rume` 各ステージの `--verbose` 出力
+  - 集計:
+    - `no-change reasons:` の文言を抽出
+    - stage + 正規化カテゴリ + 原文理由で件数化
+    - サンプルファイル（最大3件）を併記
+- 目的:
+  - 「最適化できない理由」を定量化し、次の実装優先順位に直結させる
+
 ## 第二KPI: 実行速度
 
 - 指標: `moon_bench_mean`
@@ -88,7 +132,10 @@ just kpi
 
 - `bench/kpi/latest.md`: 人間向けサマリ
 - `bench/kpi/size.tsv`: サイズKPIの明細（walyze + wasm-opt 参考値 + 差分）
+- `bench/kpi/heatmap.tsv`: before/after 階層ヒートマップ（section/function/block）
+- `bench/kpi/pass_waterfall.tsv`: pass waterfall の段階別差分
 - `bench/kpi/directize_chain.tsv`: directize→DCE→RUME 連鎖の段階差分
+- `bench/kpi/no_change_reasons.tsv`: no-change 理由ダッシュボードの生データ
 - `bench/kpi/component_dce.tsv`: component-model DCE サイズKPIの明細
 - `bench/kpi/runtime.tsv`: 速度KPIの明細
 - `bench/kpi/bench.raw.log`: `moon bench` の生ログ

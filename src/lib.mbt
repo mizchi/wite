@@ -339,6 +339,30 @@ pub struct FunctionSize {
 }
 
 ///|
+pub struct CodeBlockSize {
+  function_index : UInt
+  function_name : String?
+  export_names : Array[String]
+  block_index : UInt
+  depth : UInt
+  kind : String
+  start_offset : UInt
+  end_offset : UInt
+  instruction_count : UInt
+  total_bytes : UInt
+}
+
+///|
+pub struct CodeBlockSizeReport {
+  partial : Bool
+  function_count : UInt
+  block_count : UInt
+  total_body_bytes : UInt
+  total_instruction_bytes : UInt
+  blocks : Array[CodeBlockSize]
+}
+
+///|
 pub struct CallGraphNode {
   function_index : UInt
   body_bytes : UInt
@@ -1394,6 +1418,13 @@ priv struct InstrSpan {
   start : Int
   end_ : Int
   opcode : UInt
+}
+
+///|
+priv struct OpenCodeBlock {
+  entry_index : Int
+  start_span_index : Int
+  start_offset : Int
 }
 
 ///|
@@ -6333,6 +6364,205 @@ pub fn analyze_function_sizes(
       0
     })
     functions
+  }
+}
+
+///|
+fn code_block_kind_from_opcode(opcode : UInt) -> String? {
+  match opcode {
+    0x02U => Some("block")
+    0x03U => Some("loop")
+    0x04U => Some("if")
+    _ => None
+  }
+}
+
+///|
+fn collect_function_code_blocks(
+  function_index : UInt,
+  function_name : String?,
+  export_names : Array[String],
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> (Array[CodeBlockSize], Bool) {
+  let entries : Array[CodeBlockSize] = []
+  let instr_size = instr_bytes.length().reinterpret_as_uint()
+  entries.push({
+    function_index,
+    function_name,
+    export_names,
+    block_index: 0U,
+    depth: 0U,
+    kind: "function",
+    start_offset: 0U,
+    end_offset: instr_size,
+    instruction_count: spans.length().reinterpret_as_uint(),
+    total_bytes: instr_size,
+  })
+  let mut next_block_index = 1U
+  let open_stack : Array[OpenCodeBlock] = []
+  for i in 0..<spans.length() {
+    let span = spans[i]
+    match code_block_kind_from_opcode(span.opcode) {
+      Some(kind) => {
+        let depth = open_stack.length().reinterpret_as_uint() + 1U
+        let start_offset = span.start.reinterpret_as_uint()
+        entries.push({
+          function_index,
+          function_name,
+          export_names,
+          block_index: next_block_index,
+          depth,
+          kind,
+          start_offset,
+          end_offset: start_offset,
+          instruction_count: 0U,
+          total_bytes: 0U,
+        })
+        open_stack.push({
+          entry_index: entries.length() - 1,
+          start_span_index: i,
+          start_offset: span.start,
+        })
+        next_block_index += 1U
+      }
+      None => ()
+    }
+    if span.opcode == 0x0bU && open_stack.length() > 0 {
+      let open = open_stack[open_stack.length() - 1]
+      ignore(open_stack.pop())
+      let prev = entries[open.entry_index]
+      entries[open.entry_index] = {
+        function_index: prev.function_index,
+        function_name: prev.function_name,
+        export_names: prev.export_names,
+        block_index: prev.block_index,
+        depth: prev.depth,
+        kind: prev.kind,
+        start_offset: prev.start_offset,
+        end_offset: span.end_.reinterpret_as_uint(),
+        instruction_count: (i - open.start_span_index + 1)
+          .reinterpret_as_uint(),
+        total_bytes: (span.end_ - open.start_offset).reinterpret_as_uint(),
+      }
+    }
+  }
+  if open_stack.length() == 0 {
+    return (entries, true)
+  }
+  let filtered : Array[CodeBlockSize] = []
+  for entry in entries {
+    if entry.kind == "function" || entry.total_bytes > 0U {
+      filtered.push(entry)
+    }
+  }
+  (filtered, false)
+}
+
+///|
+pub fn analyze_code_block_sizes(
+  bytes : Bytes,
+) -> Result[CodeBlockSizeReport, WalyzeError] {
+  try? {
+    let sections = parse_core_sections_raise(bytes)
+    let mut imported_function_count = 0U
+    let mut local_function_count = 0U
+    let mut code_bodies : Array[Bytes] = []
+    let export_names : Map[UInt, Array[String]] = {}
+    let function_names : Map[UInt, String] = {}
+    for section in sections {
+      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      match section.section_id {
+        2U => imported_function_count += parse_import_function_count(payload)
+        3U => local_function_count += parse_vec_count(payload)
+        7U =>
+          merge_export_function_names(
+            export_names,
+            parse_export_function_names(payload),
+          )
+        10U => code_bodies = parse_code_bodies(payload)
+        0U =>
+          match section.custom_name {
+            Some(name) =>
+              if name == "name" {
+                parse_name_section_function_names(payload).each((
+                  index,
+                  function_name,
+                ) => function_names.set(index, function_name))
+              }
+            None => ()
+          }
+        _ => ()
+      }
+    }
+    if code_bodies.length().reinterpret_as_uint() != local_function_count {
+      raise WalyzeError::InvalidFormat(
+        "function/code section count mismatch: function=" +
+        local_function_count.to_string() +
+        " code=" +
+        code_bodies.length().to_string(),
+      )
+    }
+    let blocks : Array[CodeBlockSize] = []
+    let mut partial = false
+    let mut total_body_bytes = 0U
+    let mut total_instruction_bytes = 0U
+    for i in 0..<code_bodies.length() {
+      let function_index = imported_function_count + i.reinterpret_as_uint()
+      let body = code_bodies[i]
+      total_body_bytes += body.length().reinterpret_as_uint()
+      let prefix_end_result = try? parse_local_decl_prefix_end(body)
+      match prefix_end_result {
+        Ok(prefix_end) => {
+          let instr_bytes = body[prefix_end:body.length()].to_bytes()
+          total_instruction_bytes += instr_bytes.length().reinterpret_as_uint()
+          match parse_instruction_spans(instr_bytes) {
+            Some(spans) => {
+              let exports = match export_names.get(function_index) {
+                Some(v) => v
+                None => []
+              }
+              let (function_blocks, complete) = collect_function_code_blocks(
+                function_index,
+                function_names.get(function_index),
+                exports,
+                instr_bytes,
+                spans,
+              )
+              blocks.append(function_blocks[:])
+              if not(complete) {
+                partial = true
+              }
+            }
+            None => partial = true
+          }
+        }
+        Err(_) => partial = true
+      }
+    }
+    blocks.sort_by((a, b) => if a.total_bytes > b.total_bytes {
+      -1
+    } else if a.total_bytes < b.total_bytes {
+      1
+    } else if a.function_index < b.function_index {
+      -1
+    } else if a.function_index > b.function_index {
+      1
+    } else if a.block_index < b.block_index {
+      -1
+    } else if a.block_index > b.block_index {
+      1
+    } else {
+      0
+    })
+    {
+      partial,
+      function_count: local_function_count,
+      block_count: blocks.length().reinterpret_as_uint(),
+      total_body_bytes,
+      total_instruction_bytes,
+      blocks,
+    }
   }
 }
 

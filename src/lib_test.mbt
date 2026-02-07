@@ -559,6 +559,36 @@ fn sample_module_with_named_functions_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_nested_blocks_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // block
+  //   loop
+  //     i32.const 0
+  //     br_if 0
+  //   end
+  // end
+  // end(function)
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0c, 0x00, 0x02, 0x40, 0x03, 0x40, 0x41, 0x00, 0x0d, 0x00, 0x0b, 0x0b,
+      0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_dead_function_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1865,6 +1895,32 @@ test "analyze function sizes with names and exports" {
   assert_eq(functions[1].body_bytes, 2U)
   assert_eq(functions[1].name, Some("small"))
   assert_eq(functions[1].export_names, ["small"])
+}
+
+///|
+test "analyze code block sizes for nested block module" {
+  let bytes = sample_module_with_nested_blocks_bytes()
+  guard analyze_code_block_sizes(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_true(not(report.partial))
+  assert_eq(report.function_count, 1U)
+  assert_eq(report.block_count, 3U)
+  assert_eq(report.total_body_bytes, 12U)
+  assert_eq(report.total_instruction_bytes, 11U)
+  assert_eq(report.blocks.length(), 3)
+  assert_eq(report.blocks[0].kind, "function")
+  assert_eq(report.blocks[0].depth, 0U)
+  assert_eq(report.blocks[0].total_bytes, 11U)
+  assert_eq(report.blocks[0].instruction_count, 7U)
+  assert_eq(report.blocks[1].kind, "block")
+  assert_eq(report.blocks[1].depth, 1U)
+  assert_eq(report.blocks[1].total_bytes, 10U)
+  assert_eq(report.blocks[2].kind, "loop")
+  assert_eq(report.blocks[2].depth, 2U)
+  assert_eq(report.blocks[2].total_bytes, 7U)
+  assert_eq(report.blocks[2].instruction_count, 4U)
 }
 
 ///|

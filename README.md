@@ -18,6 +18,7 @@ It provides:
 
 - core wasm section-size analysis (`twiggy`-style breakdown by section)
 - core wasm top-function size analysis (`twiggy top`-style by code body size)
+- core wasm code-block size analysis (`function/block/loop/if` bytes + instruction counts)
 - core wasm call graph + dead-body analysis (export/start roots)
 - core wasm call graph roots from global/element `ref.func`
 - core wasm DCE report + apply (callgraph-based function-level pruning)
@@ -49,6 +50,7 @@ It provides:
 just run -- analyze path/to/module.wasm
 just run -- profile path/to/module.wasm
 just run -- top-functions path/to/module.wasm 20
+just run -- block-sizes path/to/module.wasm 20
 just run -- callgraph path/to/module.wasm 20
 just run -- keep-reasons path/to/module.wasm --closed-world --closed-world-root=run
 just run -- dce-report path/to/module.wasm 20
@@ -78,6 +80,7 @@ Main APIs are in `src/lib.mbt`:
 
 - `analyze_section_sizes(bytes)`
 - `analyze_function_sizes(bytes)`
+- `analyze_code_block_sizes(bytes)`
 - `analyze_call_graph(bytes)`
 - `analyze_keep_reasons(bytes, config=...)`
 - `analyze_dce_report(bytes)`
@@ -101,7 +104,7 @@ just check     # type check
 just test      # run tests
 just bench     # run benchmark suite
 just bench-sync # sync benchmark corpus fixtures from upstream
-just kpi       # collect KPI report (size first, runtime second, wasm-opt reference + directize->DCE->RUME diagnostics)
+just kpi       # collect KPI report (size first, runtime second, wasm-opt ref + heatmap/waterfall/no-change diagnostics)
 just run       # run CLI (src/main)
 just info      # generate .mbti
 ```

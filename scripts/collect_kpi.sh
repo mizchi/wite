@@ -6,6 +6,9 @@ OUT_DIR="$ROOT_DIR/bench/kpi"
 SIZE_TSV="$OUT_DIR/size.tsv"
 COMPONENT_DCE_TSV="$OUT_DIR/component_dce.tsv"
 DIRECTIZE_CHAIN_TSV="$OUT_DIR/directize_chain.tsv"
+HEATMAP_TSV="$OUT_DIR/heatmap.tsv"
+PASS_WATERFALL_TSV="$OUT_DIR/pass_waterfall.tsv"
+NO_CHANGE_REASON_TSV="$OUT_DIR/no_change_reasons.tsv"
 RUNTIME_TSV="$OUT_DIR/runtime.tsv"
 BENCH_RAW_LOG="$OUT_DIR/bench.raw.log"
 LATEST_MD="$OUT_DIR/latest.md"
@@ -43,8 +46,151 @@ cleanup() {
 }
 trap cleanup EXIT
 
+ratio_pct() {
+  local before="$1"
+  local after="$2"
+  awk -v b="$before" -v a="$after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }'
+}
+
+gain_ratio_pct() {
+  local base="$1"
+  local gain="$2"
+  awk -v b="$base" -v g="$gain" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", (g * 100.0) / b } }'
+}
+
+extract_optimized_line() {
+  local output="$1"
+  printf '%s\n' "$output" | awk '/^optimized: / { print; exit }'
+}
+
+parse_optimized_before_after() {
+  local line="$1"
+  local before after
+  before="$(echo "$line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\1/')"
+  after="$(echo "$line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\2/')"
+  if [[ ! "$before" =~ ^[0-9]+$ || ! "$after" =~ ^[0-9]+$ ]]; then
+    return 1
+  fi
+  echo "$before $after"
+}
+
+parse_profile_code_body_bytes() {
+  local wasm_path="$1"
+  moon run src/main --target js -- profile "$wasm_path" 2>/dev/null |
+    awk -F ': ' '/^  code_body_bytes: / { print $2; exit }'
+}
+
+parse_block_total_instruction_bytes() {
+  local wasm_path="$1"
+  moon run src/main --target js -- block-sizes "$wasm_path" 0 2>/dev/null |
+    awk -F ': ' '/^  total_instruction_bytes: / { print $2; exit }'
+}
+
+heat_bar_from_ratio_pct() {
+  local ratio_pct="$1"
+  awk -v r="$ratio_pct" 'BEGIN {
+    v = r + 0.0
+    sign = v < 0 ? "-" : "+"
+    if (v < 0) v = -v
+    level = 0
+    if (v >= 0.25) level = 1
+    if (v >= 0.50) level = 2
+    if (v >= 1.00) level = 3
+    if (v >= 2.00) level = 4
+    if (v >= 4.00) level = 5
+    if (v >= 8.00) level = 6
+    if (v >= 12.00) level = 7
+    if (v >= 20.00) level = 8
+    bar = ""
+    for (i = 0; i < level; i++) bar = bar "#"
+    if (bar == "") bar = "."
+    printf "%s%s", sign, bar
+  }'
+}
+
+normalize_no_change_reason() {
+  local reason="$1"
+  case "$reason" in
+    *"no custom section exists for strip passes"*)
+      echo "strip:no-custom-section"
+      ;;
+    *"configured custom-section strip targets were not present"*)
+      echo "strip:target-not-present"
+      ;;
+    *"no code section exists for code-level passes"*)
+      echo "code:no-code-section"
+      ;;
+    *"code-level passes found no reducible instruction patterns"*)
+      echo "code:no-reducible-pattern"
+      ;;
+    *"dce skipped: partial call graph"*)
+      echo "dce:partial-callgraph"
+      ;;
+    *"dce found no removable functions"*)
+      echo "dce:no-removable-functions"
+      ;;
+    *"dce analysis failed"*)
+      echo "dce:analysis-failed"
+      ;;
+    *"unable to inspect section layout for no-change diagnostics"*)
+      echo "diag:section-inspect-failed"
+      ;;
+    *"module is already optimized for active passes"*)
+      echo "common:already-optimized"
+      ;;
+    *"size-neutral rewrite only (bytes changed but size unchanged)"*)
+      echo "common:size-neutral-rewrite"
+      ;;
+    *"no optimization pass is enabled in config"*)
+      echo "common:no-pass-enabled"
+      ;;
+    *)
+      echo "other"
+      ;;
+  esac
+}
+
+declare -A NO_CHANGE_REASON_COUNT=()
+declare -A NO_CHANGE_REASON_EXAMPLE=()
+
+record_no_change_reasons() {
+  local output="$1"
+  local stage="$2"
+  local rel="$3"
+  local reason_line
+  reason_line="$(printf '%s\n' "$output" | awk '/^no-change reasons: / { sub(/^no-change reasons: /, ""); print; exit }')"
+  if [[ -z "${reason_line:-}" ]]; then
+    return
+  fi
+  local reason
+  IFS=',' read -ra reasons <<< "$reason_line"
+  for reason in "${reasons[@]}"; do
+    reason="$(echo "$reason" | sed -E 's/^[[:space:]]+//; s/[[:space:]]+$//')"
+    if [[ -z "$reason" ]]; then
+      continue
+    fi
+    local category
+    category="$(normalize_no_change_reason "$reason")"
+    local key="${stage}|${category}|${reason}"
+    local prev_count="${NO_CHANGE_REASON_COUNT[$key]:-0}"
+    NO_CHANGE_REASON_COUNT[$key]=$((prev_count + 1))
+    local prev_example="${NO_CHANGE_REASON_EXAMPLE[$key]:-}"
+    if [[ -z "$prev_example" ]]; then
+      NO_CHANGE_REASON_EXAMPLE[$key]="$rel"
+    elif [[ ",$prev_example," != *",$rel,"* ]]; then
+      local count_examples
+      count_examples="$(printf '%s\n' "$prev_example" | awk -F ', ' '{ print NF }')"
+      if [[ "$count_examples" -lt 3 ]]; then
+        NO_CHANGE_REASON_EXAMPLE[$key]="$prev_example, $rel"
+      fi
+    fi
+  done
+}
+
 echo -e "file\tbefore_bytes\twalyze_after_bytes\twalyze_reduction_ratio_pct\twasm_opt_after_bytes\twasm_opt_reduction_ratio_pct\tgap_to_wasm_opt_bytes\tgap_to_wasm_opt_ratio_pct\twasm_opt_status" > "$SIZE_TSV"
 echo -e "file\tbefore_bytes\tpre_dce_after_bytes\tpost_dce_after_bytes\tpost_rume_after_bytes\tdce_gain_bytes\trume_gain_bytes\ttotal_gain_bytes\tdirectize_calls\tstatus" > "$DIRECTIZE_CHAIN_TSV"
+echo -e "file\tbefore_bytes\tafter_bytes\tsection_gain_bytes\tsection_gain_ratio_pct\tfunction_before_bytes\tfunction_after_bytes\tfunction_gain_bytes\tfunction_gain_ratio_pct\tblock_before_instruction_bytes\tblock_after_instruction_bytes\tblock_gain_bytes\tblock_gain_ratio_pct\theat_section\theat_function\theat_block\tstatus" > "$HEATMAP_TSV"
+echo -e "file\tbefore_bytes\tstrip_after_bytes\tcode_after_bytes\tdce_after_bytes\trume_after_bytes\tstrip_gain_bytes\tcode_gain_bytes\tdce_gain_bytes\trume_gain_bytes\ttotal_gain_bytes\tstatus" > "$PASS_WATERFALL_TSV"
 
 total_before=0
 total_after=0
@@ -72,6 +218,27 @@ directize_total_gain=0
 directize_total_calls=0
 directize_success_files=0
 
+heatmap_total_section_gain=0
+heatmap_total_function_before=0
+heatmap_total_function_after=0
+heatmap_total_function_gain=0
+heatmap_total_block_before=0
+heatmap_total_block_after=0
+heatmap_total_block_gain=0
+heatmap_success_files=0
+
+waterfall_total_before=0
+waterfall_total_strip_after=0
+waterfall_total_code_after=0
+waterfall_total_dce_after=0
+waterfall_total_rume_after=0
+waterfall_total_strip_gain=0
+waterfall_total_code_gain=0
+waterfall_total_dce_gain=0
+waterfall_total_rume_gain=0
+waterfall_total_gain=0
+waterfall_success_files=0
+
 while IFS= read -r file; do
   core_file_count=$((core_file_count + 1))
   rel="${file#$ROOT_DIR/}"
@@ -83,24 +250,26 @@ while IFS= read -r file; do
       break
     fi
   done
-  line="$(
-    moon run src/main --target js -- optimize "$rel" "$tmp_wasm" -O1 2>&1 |
-      awk '/^optimized: / { print; exit }'
-  )"
+  if ! o1_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" -O1 --verbose 2>&1)"; then
+    echo "failed to optimize with -O1: $rel" >&2
+    exit 1
+  fi
+  record_no_change_reasons "$o1_output" "o1" "$rel"
+  line="$(extract_optimized_line "$o1_output")"
   if [[ -z "${line:-}" ]]; then
     echo "failed to parse optimize output: $rel" >&2
     exit 1
   fi
 
-  before="$(echo "$line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\1/')"
-  after="$(echo "$line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\2/')"
-  if [[ ! "$before" =~ ^[0-9]+$ || ! "$after" =~ ^[0-9]+$ ]]; then
+  if ! parsed_before_after="$(parse_optimized_before_after "$line")"; then
     echo "invalid optimize output: $line" >&2
     exit 1
   fi
+  read -r before after <<< "$parsed_before_after"
 
-  ratio_pct="$(awk -v b="$before" -v a="$after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+  ratio_pct="$(ratio_pct "$before" "$after")"
 
+  strip_after="NA"
   pre_dce_before="NA"
   pre_dce_after="NA"
   post_dce_after="NA"
@@ -110,43 +279,74 @@ while IFS= read -r file; do
   total_gain_bytes="NA"
   directize_calls="NA"
   directize_status="ok"
+  waterfall_status="ok"
+  strip_gain_bytes="NA"
+  code_gain_bytes="NA"
+  waterfall_total_gain_bytes="NA"
 
-  if pre_dce_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 2>&1)"; then
-    pre_dce_line="$(printf '%s\n' "$pre_dce_output" | awk '/^optimized: / { print; exit }')"
-    pre_dce_before="$(echo "$pre_dce_line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\1/')"
-    pre_dce_after="$(echo "$pre_dce_line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\2/')"
-    if [[ ! "$pre_dce_before" =~ ^[0-9]+$ || ! "$pre_dce_after" =~ ^[0-9]+$ ]]; then
+  if strip_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=1 --no-peephole --no-vacuum --no-merge-blocks --no-remove-unused-brs --verbose 2>&1)"; then
+    record_no_change_reasons "$strip_output" "strip" "$rel"
+    strip_line="$(extract_optimized_line "$strip_output")"
+    if [[ -n "${strip_line:-}" ]] && parsed_before_after="$(parse_optimized_before_after "$strip_line")"; then
+      read -r strip_before strip_after <<< "$parsed_before_after"
+      if [[ "$strip_before" != "$before" ]]; then
+        waterfall_status="strip-before-mismatch"
+      fi
+    else
+      waterfall_status="strip-parse-error"
+      strip_after="NA"
+    fi
+  else
+    waterfall_status="strip-error"
+  fi
+
+  if pre_dce_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --verbose 2>&1)"; then
+    record_no_change_reasons "$pre_dce_output" "code" "$rel"
+    pre_dce_line="$(extract_optimized_line "$pre_dce_output")"
+    if [[ -n "${pre_dce_line:-}" ]] && parsed_before_after="$(parse_optimized_before_after "$pre_dce_line")"; then
+      read -r pre_dce_before pre_dce_after <<< "$parsed_before_after"
+    else
       directize_status="pre-dce-parse-error"
+      waterfall_status="code-parse-error"
       pre_dce_before="NA"
       pre_dce_after="NA"
     fi
   else
     directize_status="pre-dce-error"
+    waterfall_status="code-error"
   fi
 
   if [[ "$directize_status" == "ok" ]]; then
-    if post_dce_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --dce-apply --dfe-apply --msf-apply 2>&1)"; then
-      post_dce_line="$(printf '%s\n' "$post_dce_output" | awk '/^optimized: / { print; exit }')"
-      post_dce_after="$(echo "$post_dce_line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\2/')"
-      if [[ ! "$post_dce_after" =~ ^[0-9]+$ ]]; then
+    if post_dce_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --dce-apply --dfe-apply --msf-apply --verbose 2>&1)"; then
+      record_no_change_reasons "$post_dce_output" "dce" "$rel"
+      post_dce_line="$(extract_optimized_line "$post_dce_output")"
+      if [[ -n "${post_dce_line:-}" ]] && parsed_before_after="$(parse_optimized_before_after "$post_dce_line")"; then
+        read -r post_dce_before post_dce_after <<< "$parsed_before_after"
+      else
         directize_status="post-dce-parse-error"
+        waterfall_status="dce-parse-error"
         post_dce_after="NA"
       fi
     else
       directize_status="post-dce-error"
+      waterfall_status="dce-error"
     fi
   fi
 
   if [[ "$directize_status" == "ok" ]]; then
-    if post_rume_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --dce-apply --dfe-apply --msf-apply --rume-apply 2>&1)"; then
-      post_rume_line="$(printf '%s\n' "$post_rume_output" | awk '/^optimized: / { print; exit }')"
-      post_rume_after="$(echo "$post_rume_line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\2/')"
-      if [[ ! "$post_rume_after" =~ ^[0-9]+$ ]]; then
+    if post_rume_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --dce-apply --dfe-apply --msf-apply --rume-apply --verbose 2>&1)"; then
+      record_no_change_reasons "$post_rume_output" "rume" "$rel"
+      post_rume_line="$(extract_optimized_line "$post_rume_output")"
+      if [[ -n "${post_rume_line:-}" ]] && parsed_before_after="$(parse_optimized_before_after "$post_rume_line")"; then
+        read -r post_rume_before post_rume_after <<< "$parsed_before_after"
+      else
         directize_status="post-rume-parse-error"
+        waterfall_status="rume-parse-error"
         post_rume_after="NA"
       fi
     else
       directize_status="post-rume-error"
+      waterfall_status="rume-error"
     fi
   fi
 
@@ -158,6 +358,53 @@ while IFS= read -r file; do
     dce_gain_bytes=$((pre_dce_after - post_dce_after))
     rume_gain_bytes=$((post_dce_after - post_rume_after))
     total_gain_bytes=$((pre_dce_after - post_rume_after))
+  fi
+
+  if [[ "$waterfall_status" == "ok" && "$strip_after" =~ ^[0-9]+$ && "$pre_dce_after" =~ ^[0-9]+$ && "$post_dce_after" =~ ^[0-9]+$ && "$post_rume_after" =~ ^[0-9]+$ ]]; then
+    strip_gain_bytes=$((before - strip_after))
+    code_gain_bytes=$((strip_after - pre_dce_after))
+    waterfall_dce_gain_bytes=$((pre_dce_after - post_dce_after))
+    waterfall_rume_gain_bytes=$((post_dce_after - post_rume_after))
+    waterfall_total_gain_bytes=$((before - post_rume_after))
+  else
+    if [[ "$waterfall_status" == "ok" ]]; then
+      waterfall_status="waterfall-parse-error"
+    fi
+    waterfall_dce_gain_bytes="NA"
+    waterfall_rume_gain_bytes="NA"
+  fi
+
+  function_before_bytes="$(parse_profile_code_body_bytes "$rel" || true)"
+  function_after_bytes="$(parse_profile_code_body_bytes "$tmp_wasm" || true)"
+  block_before_instruction_bytes="$(parse_block_total_instruction_bytes "$rel" || true)"
+  block_after_instruction_bytes="$(parse_block_total_instruction_bytes "$tmp_wasm" || true)"
+  heat_status="ok"
+  section_gain_bytes=$((before - after))
+  section_gain_ratio_pct="$(gain_ratio_pct "$before" "$section_gain_bytes")"
+  function_gain_bytes="NA"
+  function_gain_ratio_pct="NA"
+  block_gain_bytes="NA"
+  block_gain_ratio_pct="NA"
+  heat_section="$(heat_bar_from_ratio_pct "$section_gain_ratio_pct")"
+  heat_function="NA"
+  heat_block="NA"
+
+  if [[ ! "$function_before_bytes" =~ ^[0-9]+$ || ! "$function_after_bytes" =~ ^[0-9]+$ ]]; then
+    heat_status="profile-parse-error"
+  else
+    function_gain_bytes=$((function_before_bytes - function_after_bytes))
+    function_gain_ratio_pct="$(gain_ratio_pct "$function_before_bytes" "$function_gain_bytes")"
+    heat_function="$(heat_bar_from_ratio_pct "$function_gain_ratio_pct")"
+  fi
+
+  if [[ ! "$block_before_instruction_bytes" =~ ^[0-9]+$ || ! "$block_after_instruction_bytes" =~ ^[0-9]+$ ]]; then
+    if [[ "$heat_status" == "ok" ]]; then
+      heat_status="block-parse-error"
+    fi
+  else
+    block_gain_bytes=$((block_before_instruction_bytes - block_after_instruction_bytes))
+    block_gain_ratio_pct="$(gain_ratio_pct "$block_before_instruction_bytes" "$block_gain_bytes")"
+    heat_block="$(heat_bar_from_ratio_pct "$block_gain_ratio_pct")"
   fi
 
   wasm_opt_after="NA"
@@ -196,6 +443,8 @@ while IFS= read -r file; do
 
   echo -e "$rel\t$before\t$after\t$ratio_pct\t$wasm_opt_after\t$wasm_opt_ratio_pct\t$gap_to_wasm_opt_bytes\t$gap_to_wasm_opt_ratio_pct\t$wasm_opt_status" >> "$SIZE_TSV"
   echo -e "$rel\t$pre_dce_before\t$pre_dce_after\t$post_dce_after\t$post_rume_after\t$dce_gain_bytes\t$rume_gain_bytes\t$total_gain_bytes\t$directize_calls\t$directize_status" >> "$DIRECTIZE_CHAIN_TSV"
+  echo -e "$rel\t$before\t$after\t$section_gain_bytes\t$section_gain_ratio_pct\t$function_before_bytes\t$function_after_bytes\t$function_gain_bytes\t$function_gain_ratio_pct\t$block_before_instruction_bytes\t$block_after_instruction_bytes\t$block_gain_bytes\t$block_gain_ratio_pct\t$heat_section\t$heat_function\t$heat_block\t$heat_status" >> "$HEATMAP_TSV"
+  echo -e "$rel\t$before\t$strip_after\t$pre_dce_after\t$post_dce_after\t$post_rume_after\t$strip_gain_bytes\t$code_gain_bytes\t$waterfall_dce_gain_bytes\t$waterfall_rume_gain_bytes\t$waterfall_total_gain_bytes\t$waterfall_status" >> "$PASS_WATERFALL_TSV"
 
   total_before=$((total_before + before))
   total_after=$((total_after + after))
@@ -215,35 +464,81 @@ while IFS= read -r file; do
     directize_total_calls=$((directize_total_calls + directize_calls))
     directize_success_files=$((directize_success_files + 1))
   fi
+  if [[ "$heat_status" == "ok" ]]; then
+    heatmap_total_section_gain=$((heatmap_total_section_gain + section_gain_bytes))
+    heatmap_total_function_before=$((heatmap_total_function_before + function_before_bytes))
+    heatmap_total_function_after=$((heatmap_total_function_after + function_after_bytes))
+    heatmap_total_function_gain=$((heatmap_total_function_gain + function_gain_bytes))
+    heatmap_total_block_before=$((heatmap_total_block_before + block_before_instruction_bytes))
+    heatmap_total_block_after=$((heatmap_total_block_after + block_after_instruction_bytes))
+    heatmap_total_block_gain=$((heatmap_total_block_gain + block_gain_bytes))
+    heatmap_success_files=$((heatmap_success_files + 1))
+  fi
+  if [[ "$waterfall_status" == "ok" ]]; then
+    waterfall_total_before=$((waterfall_total_before + before))
+    waterfall_total_strip_after=$((waterfall_total_strip_after + strip_after))
+    waterfall_total_code_after=$((waterfall_total_code_after + pre_dce_after))
+    waterfall_total_dce_after=$((waterfall_total_dce_after + post_dce_after))
+    waterfall_total_rume_after=$((waterfall_total_rume_after + post_rume_after))
+    waterfall_total_strip_gain=$((waterfall_total_strip_gain + strip_gain_bytes))
+    waterfall_total_code_gain=$((waterfall_total_code_gain + code_gain_bytes))
+    waterfall_total_dce_gain=$((waterfall_total_dce_gain + waterfall_dce_gain_bytes))
+    waterfall_total_rume_gain=$((waterfall_total_rume_gain + waterfall_rume_gain_bytes))
+    waterfall_total_gain=$((waterfall_total_gain + waterfall_total_gain_bytes))
+    waterfall_success_files=$((waterfall_success_files + 1))
+  fi
 done < <(find "$ROOT_DIR/bench/corpus/core/binaryen" -type f -name '*.wasm' | sort)
 
-total_ratio_pct="$(awk -v b="$total_before" -v a="$total_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+total_ratio_pct="$(ratio_pct "$total_before" "$total_after")"
 wasm_opt_total_ratio_pct="NA"
 wasm_opt_total_walyze_ratio_pct="NA"
 wasm_opt_total_gap_bytes="NA"
 wasm_opt_total_gap_ratio_pct="NA"
-primary_gap_ratio_pct="$(awk -v b="$primary_gap_before" -v a="$primary_gap_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+primary_gap_ratio_pct="$(ratio_pct "$primary_gap_before" "$primary_gap_after")"
 primary_gap_wasm_opt_ratio_pct="NA"
 primary_gap_wasm_opt_walyze_ratio_pct="NA"
 primary_gap_to_wasm_opt_bytes="NA"
 primary_gap_to_wasm_opt_ratio_pct="NA"
 if [[ "$wasm_opt_success_files" -gt 0 ]]; then
-  wasm_opt_total_ratio_pct="$(awk -v b="$wasm_opt_total_before" -v a="$wasm_opt_total_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
-  wasm_opt_total_walyze_ratio_pct="$(awk -v b="$wasm_opt_total_before" -v a="$wasm_opt_total_walyze_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+  wasm_opt_total_ratio_pct="$(ratio_pct "$wasm_opt_total_before" "$wasm_opt_total_after")"
+  wasm_opt_total_walyze_ratio_pct="$(ratio_pct "$wasm_opt_total_before" "$wasm_opt_total_walyze_after")"
   wasm_opt_total_gap_bytes=$((wasm_opt_total_walyze_after - wasm_opt_total_after))
   wasm_opt_total_gap_ratio_pct="$(awk -v w="$wasm_opt_total_walyze_ratio_pct" -v o="$wasm_opt_total_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
 fi
 if [[ "$primary_gap_wasm_opt_success_files" -gt 0 ]]; then
-  primary_gap_wasm_opt_ratio_pct="$(awk -v b="$primary_gap_wasm_opt_total_before" -v a="$primary_gap_wasm_opt_total_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
-  primary_gap_wasm_opt_walyze_ratio_pct="$(awk -v b="$primary_gap_wasm_opt_total_before" -v a="$primary_gap_wasm_opt_total_walyze_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+  primary_gap_wasm_opt_ratio_pct="$(ratio_pct "$primary_gap_wasm_opt_total_before" "$primary_gap_wasm_opt_total_after")"
+  primary_gap_wasm_opt_walyze_ratio_pct="$(ratio_pct "$primary_gap_wasm_opt_total_before" "$primary_gap_wasm_opt_total_walyze_after")"
   primary_gap_to_wasm_opt_bytes=$((primary_gap_wasm_opt_total_walyze_after - primary_gap_wasm_opt_total_after))
   primary_gap_to_wasm_opt_ratio_pct="$(awk -v w="$primary_gap_wasm_opt_walyze_ratio_pct" -v o="$primary_gap_wasm_opt_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
 fi
 
-directize_total_post_rume_reduction_ratio_pct="$(awk -v b="$directize_total_before" -v a="$directize_total_post_rume_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
-directize_total_dce_gain_ratio_pct="$(awk -v b="$directize_total_pre_dce_after" -v g="$directize_total_dce_gain" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", (g * 100.0) / b } }')"
-directize_total_rume_gain_ratio_pct="$(awk -v b="$directize_total_post_dce_after" -v g="$directize_total_rume_gain" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", (g * 100.0) / b } }')"
-directize_total_gain_ratio_pct="$(awk -v b="$directize_total_pre_dce_after" -v g="$directize_total_gain" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", (g * 100.0) / b } }')"
+directize_total_post_rume_reduction_ratio_pct="$(ratio_pct "$directize_total_before" "$directize_total_post_rume_after")"
+directize_total_dce_gain_ratio_pct="$(gain_ratio_pct "$directize_total_pre_dce_after" "$directize_total_dce_gain")"
+directize_total_rume_gain_ratio_pct="$(gain_ratio_pct "$directize_total_post_dce_after" "$directize_total_rume_gain")"
+directize_total_gain_ratio_pct="$(gain_ratio_pct "$directize_total_pre_dce_after" "$directize_total_gain")"
+
+heatmap_total_section_gain_ratio_pct="$(gain_ratio_pct "$total_before" "$heatmap_total_section_gain")"
+heatmap_total_function_gain_ratio_pct="$(gain_ratio_pct "$heatmap_total_function_before" "$heatmap_total_function_gain")"
+heatmap_total_block_gain_ratio_pct="$(gain_ratio_pct "$heatmap_total_block_before" "$heatmap_total_block_gain")"
+heatmap_total_section_heat="$(heat_bar_from_ratio_pct "$heatmap_total_section_gain_ratio_pct")"
+heatmap_total_function_heat="$(heat_bar_from_ratio_pct "$heatmap_total_function_gain_ratio_pct")"
+heatmap_total_block_heat="$(heat_bar_from_ratio_pct "$heatmap_total_block_gain_ratio_pct")"
+
+waterfall_total_strip_gain_ratio_pct="$(gain_ratio_pct "$waterfall_total_before" "$waterfall_total_strip_gain")"
+waterfall_total_code_gain_ratio_pct="$(gain_ratio_pct "$waterfall_total_strip_after" "$waterfall_total_code_gain")"
+waterfall_total_dce_gain_ratio_pct="$(gain_ratio_pct "$waterfall_total_code_after" "$waterfall_total_dce_gain")"
+waterfall_total_rume_gain_ratio_pct="$(gain_ratio_pct "$waterfall_total_dce_after" "$waterfall_total_rume_gain")"
+waterfall_total_gain_ratio_pct="$(gain_ratio_pct "$waterfall_total_before" "$waterfall_total_gain")"
+
+echo -e "stage\tcategory\treason\tcount\tsample_files" > "$NO_CHANGE_REASON_TSV"
+if [[ "${#NO_CHANGE_REASON_COUNT[@]}" -gt 0 ]]; then
+  for key in "${!NO_CHANGE_REASON_COUNT[@]}"; do
+    IFS='|' read -r stage category reason <<< "$key"
+    count="${NO_CHANGE_REASON_COUNT[$key]}"
+    sample_files="${NO_CHANGE_REASON_EXAMPLE[$key]:-}"
+    echo -e "$stage\t$category\t$reason\t$count\t$sample_files"
+  done | sort -t $'\t' -k4,4nr -k1,1 -k2,2 >> "$NO_CHANGE_REASON_TSV"
+fi
 
 echo -e "file\tcomponent_bytes\tcore_before_bytes\tcore_after_bytes\treduction_ratio_pct\tcore_module_count\troot_count" > "$COMPONENT_DCE_TSV"
 
@@ -362,6 +657,42 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
   awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9 }' "$SIZE_TSV"
   echo
+  echo "## Before/After Diff Heatmap (section -> function -> block)"
+  echo
+  echo "- success_files: $heatmap_success_files/$core_file_count"
+  echo "- total_section_gain_bytes: $heatmap_total_section_gain"
+  echo "- total_section_gain_ratio_pct: $heatmap_total_section_gain_ratio_pct"
+  echo "- total_section_heat: $heatmap_total_section_heat"
+  echo "- total_function_gain_bytes: $heatmap_total_function_gain"
+  echo "- total_function_gain_ratio_pct: $heatmap_total_function_gain_ratio_pct"
+  echo "- total_function_heat: $heatmap_total_function_heat"
+  echo "- total_block_gain_bytes: $heatmap_total_block_gain"
+  echo "- total_block_gain_ratio_pct: $heatmap_total_block_gain_ratio_pct"
+  echo "- total_block_heat: $heatmap_total_block_heat"
+  echo
+  echo "| file | section_gain_bytes | section_gain_ratio_pct | section_heat | function_gain_bytes | function_gain_ratio_pct | function_heat | block_gain_bytes | block_gain_ratio_pct | block_heat | status |"
+  echo "| --- | ---: | ---: | --- | ---: | ---: | --- | ---: | ---: | --- | --- |"
+  awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $4, $5, $14, $8, $9, $15, $12, $13, $16, $17 }' "$HEATMAP_TSV"
+  echo
+  echo "## Pass Waterfall (priority 1 diagnostics)"
+  echo
+  echo "- stage_order: strip -> code -> dce -> rume"
+  echo "- success_files: $waterfall_success_files/$core_file_count"
+  echo "- total_strip_gain_bytes: $waterfall_total_strip_gain"
+  echo "- total_strip_gain_ratio_pct: $waterfall_total_strip_gain_ratio_pct"
+  echo "- total_code_gain_bytes: $waterfall_total_code_gain"
+  echo "- total_code_gain_ratio_pct: $waterfall_total_code_gain_ratio_pct"
+  echo "- total_dce_gain_bytes: $waterfall_total_dce_gain"
+  echo "- total_dce_gain_ratio_pct: $waterfall_total_dce_gain_ratio_pct"
+  echo "- total_rume_gain_bytes: $waterfall_total_rume_gain"
+  echo "- total_rume_gain_ratio_pct: $waterfall_total_rume_gain_ratio_pct"
+  echo "- total_gain_bytes: $waterfall_total_gain"
+  echo "- total_gain_ratio_pct: $waterfall_total_gain_ratio_pct"
+  echo
+  echo "| file | before_bytes | strip_after_bytes | code_after_bytes | dce_after_bytes | rume_after_bytes | strip_gain_bytes | code_gain_bytes | dce_gain_bytes | rume_gain_bytes | total_gain_bytes | status |"
+  echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
+  awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12 }' "$PASS_WATERFALL_TSV"
+  echo
   echo "## Directize -> DCE -> RUME Delta (priority 1 diagnostics)"
   echo
   echo "- stage_config: \`--strip-debug --strip-dwarf --strip-target-features --rounds=2\` + \`--dce-apply --dfe-apply --msf-apply\` (+ optional \`--rume-apply\`)"
@@ -382,6 +713,12 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo "| file | before_bytes | pre_dce_after_bytes | post_dce_after_bytes | post_rume_after_bytes | dce_gain_bytes | rume_gain_bytes | total_gain_bytes | directize_calls | status |"
   echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
   awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10 }' "$DIRECTIZE_CHAIN_TSV"
+  echo
+  echo "## No-Change Reason Dashboard"
+  echo
+  echo "| stage | category | reason | count | sample_files |"
+  echo "| --- | --- | --- | ---: | --- |"
+  awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5 }' "$NO_CHANGE_REASON_TSV"
   echo
   echo "## Component-model DCE Size KPI (priority 1)"
   echo
@@ -404,7 +741,10 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 echo "kpi report written:"
 echo "  $LATEST_MD"
 echo "  $SIZE_TSV"
+echo "  $HEATMAP_TSV"
+echo "  $PASS_WATERFALL_TSV"
 echo "  $DIRECTIZE_CHAIN_TSV"
+echo "  $NO_CHANGE_REASON_TSV"
 echo "  $COMPONENT_DCE_TSV"
 echo "  $RUNTIME_TSV"
 echo "  $BENCH_RAW_LOG"

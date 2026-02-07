@@ -4,6 +4,7 @@ fn print_usage() -> Unit {
   println("  analyze <core.wasm>")
   println("  profile <core.wasm>")
   println("  top-functions <core.wasm> [limit]")
+  println("  block-sizes <core.wasm> [limit]")
   println("  callgraph <core.wasm> [limit]")
   println(
     "  keep-reasons <core.wasm> [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
@@ -387,6 +388,74 @@ fn print_function_sizes(
       exports,
     )
     printed += 1U
+  }
+}
+
+///|
+fn print_code_block_sizes(
+  blocks : Array[@walyze.CodeBlockSize],
+  limit : UInt,
+) -> Unit {
+  let mut printed = 0U
+  for block in blocks {
+    if printed >= limit {
+      break
+    }
+    let label = match block.function_name {
+      Some(name) => name
+      None => "#\{block.function_index.to_string()}"
+    }
+    let exports = if block.export_names.length() == 0 {
+      ""
+    } else {
+      " exports=" + block.export_names.join(",")
+    }
+    println(
+      "    " +
+      label +
+      " idx=" +
+      block.function_index.to_string() +
+      " block=" +
+      block.block_index.to_string() +
+      " kind=" +
+      block.kind +
+      " depth=" +
+      block.depth.to_string() +
+      " bytes=" +
+      block.total_bytes.to_string() +
+      " instrs=" +
+      block.instruction_count.to_string() +
+      " span=" +
+      block.start_offset.to_string() +
+      ".." +
+      block.end_offset.to_string() +
+      exports,
+    )
+    printed += 1U
+  }
+}
+
+///|
+fn run_block_sizes(path : String, limit : UInt) -> Unit {
+  let bytes = read_bytes_or_exit(path)
+  match @walyze.analyze_code_block_sizes(bytes) {
+    Ok(report) => {
+      println("code block size analysis:")
+      println("  partial: " + report.partial.to_string())
+      println("  function_count: " + report.function_count.to_string())
+      println("  block_count: " + report.block_count.to_string())
+      println("  total_body_bytes: " + report.total_body_bytes.to_string())
+      println(
+        "  total_instruction_bytes: " +
+        report.total_instruction_bytes.to_string(),
+      )
+      println("  blocks:")
+      print_code_block_sizes(report.blocks, limit)
+    }
+    Err(e) => {
+      println("block-sizes failed: " + @walyze.error_to_string(e))
+      @sys.exit(1)
+    }
   }
 }
 
@@ -873,6 +942,18 @@ fn main {
         20U
       }
       run_top_functions(args[2], limit)
+    }
+    "block-sizes" => {
+      if args.length() < 3 {
+        print_usage()
+        @sys.exit(1)
+      }
+      let limit = if args.length() >= 4 {
+        parse_uint_or_exit(args[3], "limit")
+      } else {
+        20U
+      }
+      run_block_sizes(args[2], limit)
     }
     "callgraph" => {
       if args.length() < 3 {
