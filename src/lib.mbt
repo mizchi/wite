@@ -394,6 +394,16 @@ pub struct ContractReport {
 }
 
 ///|
+pub struct ComponentRootPolicyReport {
+  component_imports : Array[String]
+  component_exports : Array[String]
+  wit_imports : Array[String]
+  wit_exports : Array[String]
+  canonical_abi_roots : Array[String]
+  root_name_candidates : Array[String]
+}
+
+///|
 pub struct RuntimeFunctionProfile {
   name : String
   calls : UInt
@@ -4972,6 +4982,69 @@ pub fn analyze_component_contract(
     wit_exports,
     missing_component_imports,
     missing_component_exports,
+  })
+}
+
+///|
+fn collect_canonical_abi_root_names(
+  component_exports : Array[String],
+  wit_exports : Array[String],
+) -> Array[String] {
+  let roots : Array[String] = ["cabi_realloc"]
+  for name in component_exports {
+    match name.strip_prefix("cabi_") {
+      Some(_) => roots.push(name)
+      None => ()
+    }
+  }
+  for name in wit_exports {
+    roots.push("cabi_post_" + name)
+  }
+  unique_sorted(roots)
+}
+
+///|
+pub fn analyze_component_root_policy(
+  bytes : Bytes,
+  resolved_wit? : @wit.ResolveInput? = None,
+) -> Result[ComponentRootPolicyReport, String] {
+  let detail = match @mwac_component.parse_component_detail(bytes) {
+    Ok(v) => v
+    Err(e) => return Err("component detail parse failed: " + e.to_string())
+  }
+  let component_imports = unique_sorted(
+    detail.imports.map(item => item.name.to_string()),
+  )
+  let component_exports = unique_sorted(
+    detail.exports.map(item => item.name.to_string()),
+  )
+  let mut wit_imports : Array[String] = []
+  let mut wit_exports : Array[String] = []
+  match resolved_wit {
+    Some(resolved) => {
+      if resolved.world_id < 0 ||
+        resolved.world_id >= resolved.resolve.worlds.length() {
+        return Err("invalid world id: " + resolved.world_id.to_string())
+      }
+      let world = resolved.resolve.worlds[resolved.world_id]
+      wit_imports = unique_sorted(world_keys(world.imports))
+      wit_exports = unique_sorted(world_keys(world.exports))
+    }
+    None => ()
+  }
+  let canonical_abi_roots = collect_canonical_abi_root_names(
+    component_exports, wit_exports,
+  )
+  let root_name_candidates = component_exports.copy()
+  root_name_candidates.append(wit_exports[:])
+  root_name_candidates.append(canonical_abi_roots[:])
+  Ok({
+    component_imports,
+    component_exports,
+    wit_imports,
+    wit_exports,
+    canonical_abi_roots,
+    root_name_candidates: unique_sorted(root_name_candidates),
   })
 }
 

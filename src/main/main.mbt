@@ -14,6 +14,7 @@ fn print_usage() -> Unit {
   println("  component-top-functions <component.wasm> [limit]")
   println("  component-callgraph <component.wasm> [limit]")
   println("  contract <component.wasm> <wit-dir>")
+  println("  root-policy <component.wasm> [wit-dir]")
 }
 
 ///|
@@ -559,6 +560,37 @@ fn run_contract(component_path : String, wit_path : String) -> Unit {
 }
 
 ///|
+fn run_root_policy(component_path : String, wit_path : String?) -> Unit {
+  let bytes = read_bytes_or_exit(component_path)
+  let resolved_wit : @wit.ResolveInput? = match wit_path {
+    Some(path) =>
+      match @wit.resolve_path(path) {
+        Ok(v) => Some(v)
+        Err(e) => {
+          println("wit resolve failed: " + e.to_string())
+          @sys.exit(1)
+          None
+        }
+      }
+    None => None
+  }
+  match @walyze.analyze_component_root_policy(bytes, resolved_wit~) {
+    Ok(policy) => {
+      println("component imports: " + policy.component_imports.join(", "))
+      println("component exports: " + policy.component_exports.join(", "))
+      println("wit imports: " + policy.wit_imports.join(", "))
+      println("wit exports: " + policy.wit_exports.join(", "))
+      println("canonical abi roots: " + policy.canonical_abi_roots.join(", "))
+      println("root candidates: " + policy.root_name_candidates.join(", "))
+    }
+    Err(msg) => {
+      println("root-policy analyze failed: " + msg)
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
 fn main {
   let args = @sys.get_cli_args()
   if args.length() < 2 {
@@ -666,6 +698,14 @@ fn main {
         @sys.exit(1)
       }
       run_contract(args[2], args[3])
+    }
+    "root-policy" => {
+      if args.length() < 3 {
+        print_usage()
+        @sys.exit(1)
+      }
+      let wit_path = if args.length() >= 4 { Some(args[3]) } else { None }
+      run_root_policy(args[2], wit_path)
     }
     _ => {
       print_usage()

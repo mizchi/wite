@@ -14,6 +14,8 @@ pub fn analyze_component_contract(Bytes, @wit.ResolveInput) -> Result[ContractRe
 
 pub fn analyze_component_function_sizes(Bytes) -> Result[Array[ComponentFunctionSizeReport], String]
 
+pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput?) -> Result[ComponentRootPolicyReport, String]
+
 pub fn analyze_dce_report(Bytes) -> Result[DceReport, WalyzeError]
 
 pub fn analyze_function_sizes(Bytes) -> Result[Array[FunctionSize], WalyzeError]
@@ -83,6 +85,15 @@ pub struct ComponentProfile {
   nested_component_count : UInt
   sections : Array[SectionSize]
   core_modules : Array[ModuleProfile]
+}
+
+pub struct ComponentRootPolicyReport {
+  component_imports : Array[String]
+  component_exports : Array[String]
+  wit_imports : Array[String]
+  wit_exports : Array[String]
+  canonical_abi_roots : Array[String]
+  root_name_candidates : Array[String]
 }
 
 pub struct ContractReport {

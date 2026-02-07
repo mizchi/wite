@@ -21,6 +21,7 @@ It provides:
 - component core-module top-function size reports
 - component core-module call graph reports
 - WIT contract gap analysis (`mizchi/wit` integration)
+- component root-policy report (`component exports` + `WIT exports` + canonical ABI candidates)
 
 ## CLI
 
@@ -36,6 +37,7 @@ just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
 just run -- component-callgraph path/to/component.wasm 20
 just run -- contract path/to/component.wasm path/to/wit-dir
+just run -- root-policy path/to/component.wasm path/to/wit-dir
 ```
 
 ## Library API
@@ -53,6 +55,7 @@ Main APIs are in `src/lib.mbt`:
 - `analyze_component_function_sizes(bytes)`
 - `analyze_component_call_graphs(bytes)`
 - `analyze_component_contract(bytes, resolved_wit)`
+- `analyze_component_root_policy(bytes, resolved_wit=...)`
 
 ## Development
 

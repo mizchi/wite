@@ -1306,6 +1306,36 @@ test "component contract report with wit resolve" {
 }
 
 ///|
+test "component root policy report combines component/wit/canonical roots" {
+  let component_path = "../mwac/examples/hello/hello.component.wasm"
+  let wit_path = "../mwac/examples/hello/wit"
+  let bytes = @fs.read_file_to_bytes(component_path) catch {
+    _ => {
+      inspect("skip", content="skip")
+      return
+    }
+  }
+  let resolved = match @wit.resolve_path(wit_path) {
+    Ok(v) => v
+    Err(_) => {
+      inspect("skip", content="skip")
+      return
+    }
+  }
+  guard analyze_component_root_policy(bytes, resolved_wit=Some(resolved))
+    is Ok(policy) else {
+    assert_true(false)
+    return
+  }
+  assert_true(policy.component_exports.length() > 0)
+  assert_true(policy.wit_exports.length() > 0)
+  assert_true(policy.canonical_abi_roots.contains("cabi_realloc"))
+  assert_true(
+    policy.root_name_candidates.length() >= policy.component_exports.length(),
+  )
+}
+
+///|
 test "component function size report returns core module entries" {
   let component_path = "../mwac/examples/hello/hello.component.wasm"
   let bytes = @fs.read_file_to_bytes(component_path) catch {
