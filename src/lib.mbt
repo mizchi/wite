@@ -49,6 +49,7 @@ pub struct OptimizeConfig {
   enable_merge_similar_functions : Bool
   enable_remove_unused_module_elements : Bool
   closed_world : Bool
+  closed_world_root_exports : Array[String]
 }
 
 ///|
@@ -73,6 +74,7 @@ pub fn OptimizeConfig::default() -> Self {
     enable_merge_similar_functions: false,
     enable_remove_unused_module_elements: false,
     closed_world: false,
+    closed_world_root_exports: [],
   }
 }
 
@@ -98,6 +100,7 @@ pub fn OptimizeConfig::aggressive() -> Self {
     enable_merge_similar_functions: false,
     enable_remove_unused_module_elements: false,
     closed_world: false,
+    closed_world_root_exports: [],
   }
 }
 
@@ -276,6 +279,7 @@ pub fn make_optimize_config(
   enable_merge_similar_functions? : Bool = false,
   enable_remove_unused_module_elements? : Bool = false,
   closed_world? : Bool = false,
+  closed_world_root_exports? : Array[String] = [],
 ) -> OptimizeConfig {
   {
     strip_all_custom,
@@ -297,6 +301,7 @@ pub fn make_optimize_config(
     enable_merge_similar_functions,
     enable_remove_unused_module_elements,
     closed_world,
+    closed_world_root_exports,
   }
 }
 
@@ -2915,20 +2920,31 @@ fn rewrite_export_section_payload_for_dce_raise(
 ) -> Bytes raise WalyzeError {
   let parser = Cursor::new(payload)
   let export_count = parser.read_u32_leb128()
-  let out : Array[Byte] = []
-  out.append(encode_u32_leb128(export_count)[:])
+  let kept_entries : Array[Bytes] = []
   for _ in 0U..<export_count {
     let name = read_name_bytes(parser)
     let kind = parser.read_byte().to_uint()
     let index = parser.read_u32_leb128()
-    append_name_bytes(out, name)
-    out.push(kind.to_byte())
-    let remapped = if kind == 0U {
-      remap_function_index_raise(index, index_map)
+    let entry : Array[Byte] = []
+    append_name_bytes(entry, name)
+    entry.push(kind.to_byte())
+    if kind == 0U {
+      match index_map.get(index) {
+        Some(remapped) => {
+          entry.append(encode_u32_leb128(remapped)[:])
+          kept_entries.push(Bytes::from_array(entry[:]))
+        }
+        None => ()
+      }
     } else {
-      index
+      entry.append(encode_u32_leb128(index)[:])
+      kept_entries.push(Bytes::from_array(entry[:]))
     }
-    out.append(encode_u32_leb128(remapped)[:])
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_entries.length().reinterpret_as_uint())[:])
+  for entry in kept_entries {
+    out.append(entry[:].to_array())
   }
   Bytes::from_array(out[:])
 }
@@ -3440,7 +3456,7 @@ fn optimize_for_size_round_raise(
   }
   let mut optimized_bytes = Bytes::from_array(stage1_out[:])
   if config.enable_dce {
-    let dce = apply_dce_raise(optimized_bytes)
+    let dce = apply_dce_raise(optimized_bytes, config)
     optimized_bytes = dce.bytes
     if dce.removed_function_count > 0U {
       removed_sections.push(
@@ -3660,176 +3676,194 @@ pub fn analyze_function_sizes(
 }
 
 ///|
+fn should_include_export_root(
+  names : Array[String],
+  export_root_names : Array[String]?,
+) -> Bool {
+  match export_root_names {
+    Some(allowed) => names.any(name => allowed.contains(name))
+    None => true
+  }
+}
+
+///|
+fn analyze_call_graph_raise(
+  bytes : Bytes,
+  export_root_names : Array[String]?,
+) -> CallGraphReport raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut imported_function_count = 0U
+  let mut local_function_count = 0U
+  let mut code_bodies : Array[Bytes] = []
+  let export_names : Map[UInt, Array[String]] = {}
+  let function_names : Map[UInt, String] = {}
+  let roots : Array[UInt] = []
+  let mut partial = false
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U => imported_function_count += parse_import_function_count(payload)
+      3U => local_function_count += parse_vec_count(payload)
+      7U => {
+        let parsed = parse_export_function_names(payload)
+        merge_export_function_names(export_names, parsed)
+        parsed.each((index, names) => if should_include_export_root(
+            names, export_root_names,
+          ) &&
+          not(roots.contains(index)) {
+          roots.push(index)
+        })
+      }
+      8U => {
+        let start_index = parse_start_function_index(payload)
+        if not(roots.contains(start_index)) {
+          roots.push(start_index)
+        }
+      }
+      6U => {
+        let refs_result = try? parse_global_section_function_refs_raise(payload)
+        match refs_result {
+          Ok(indices) =>
+            for index in indices {
+              if not(roots.contains(index)) {
+                roots.push(index)
+              }
+            }
+          Err(_) => partial = true
+        }
+      }
+      9U => {
+        let refs_result = try? parse_element_section_function_refs_raise(
+          payload,
+        )
+        match refs_result {
+          Ok(indices) =>
+            for index in indices {
+              if not(roots.contains(index)) {
+                roots.push(index)
+              }
+            }
+          Err(_) => partial = true
+        }
+      }
+      10U => code_bodies = parse_code_bodies(payload)
+      0U =>
+        match section.custom_name {
+          Some(name) =>
+            if name == "name" {
+              parse_name_section_function_names(payload).each((
+                index,
+                function_name,
+              ) => function_names.set(index, function_name))
+            }
+          None => ()
+        }
+      _ => ()
+    }
+  }
+  if code_bodies.length().reinterpret_as_uint() != local_function_count {
+    raise WalyzeError::InvalidFormat(
+      "function/code section count mismatch: function=" +
+      local_function_count.to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let nodes : Array[CallGraphNode] = []
+  let index_to_pos : Map[UInt, Int] = {}
+  let mut has_indirect_calls = false
+  for i in 0..<code_bodies.length() {
+    let function_index = imported_function_count + i.reinterpret_as_uint()
+    let body = code_bodies[i]
+    let mut direct_callees : Array[UInt] = []
+    let prefix_result = try? parse_local_decl_prefix_end(body)
+    match prefix_result {
+      Ok(prefix_end) => {
+        let instr_bytes = body[prefix_end:body.length()].to_bytes()
+        match parse_instruction_spans(instr_bytes) {
+          Some(spans) => {
+            let (callees, body_has_indirect) = collect_direct_callees(
+              instr_bytes, spans,
+            )
+            direct_callees = callees
+            if body_has_indirect {
+              has_indirect_calls = true
+            }
+          }
+          None => partial = true
+        }
+      }
+      Err(_) => partial = true
+    }
+    index_to_pos.set(function_index, nodes.length())
+    nodes.push({
+      function_index,
+      body_bytes: body.length().reinterpret_as_uint(),
+      name: function_names.get(function_index),
+      export_names: match export_names.get(function_index) {
+        Some(v) => v
+        None => []
+      },
+      direct_callees,
+      reachable_from_roots: false,
+    })
+  }
+  let visited : Map[UInt, Bool] = {}
+  let queue = roots.copy()
+  let mut head = 0
+  while head < queue.length() {
+    let index = queue[head]
+    head += 1
+    if visited.get(index) is Some(_) {
+      continue
+    }
+    visited.set(index, true)
+    match index_to_pos.get(index) {
+      Some(pos) =>
+        for callee in nodes[pos].direct_callees {
+          if visited.get(callee) is None {
+            queue.push(callee)
+          }
+        }
+      None => ()
+    }
+  }
+  let mut reachable_body_bytes = 0U
+  let mut dead_body_bytes = 0U
+  for i in 0..<nodes.length() {
+    let node = nodes[i]
+    let reachable = visited.get(node.function_index) is Some(_)
+    if reachable {
+      reachable_body_bytes += node.body_bytes
+    } else {
+      dead_body_bytes += node.body_bytes
+    }
+    nodes[i] = {
+      function_index: node.function_index,
+      body_bytes: node.body_bytes,
+      name: node.name,
+      export_names: node.export_names,
+      direct_callees: node.direct_callees,
+      reachable_from_roots: reachable,
+    }
+  }
+  {
+    imported_function_count,
+    local_function_count,
+    roots,
+    has_indirect_calls,
+    partial,
+    reachable_body_bytes,
+    dead_body_bytes,
+    nodes,
+  }
+}
+
+///|
 pub fn analyze_call_graph(
   bytes : Bytes,
 ) -> Result[CallGraphReport, WalyzeError] {
-  try? {
-    let sections = parse_core_sections_raise(bytes)
-    let mut imported_function_count = 0U
-    let mut local_function_count = 0U
-    let mut code_bodies : Array[Bytes] = []
-    let export_names : Map[UInt, Array[String]] = {}
-    let function_names : Map[UInt, String] = {}
-    let roots : Array[UInt] = []
-    let mut partial = false
-    for section in sections {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
-      match section.section_id {
-        2U => imported_function_count += parse_import_function_count(payload)
-        3U => local_function_count += parse_vec_count(payload)
-        7U => {
-          let parsed = parse_export_function_names(payload)
-          merge_export_function_names(export_names, parsed)
-          parsed.each((index, _) => if not(roots.contains(index)) {
-            roots.push(index)
-          })
-        }
-        8U => {
-          let start_index = parse_start_function_index(payload)
-          if not(roots.contains(start_index)) {
-            roots.push(start_index)
-          }
-        }
-        6U => {
-          let refs_result = try? parse_global_section_function_refs_raise(
-            payload,
-          )
-          match refs_result {
-            Ok(indices) =>
-              for index in indices {
-                if not(roots.contains(index)) {
-                  roots.push(index)
-                }
-              }
-            Err(_) => partial = true
-          }
-        }
-        9U => {
-          let refs_result = try? parse_element_section_function_refs_raise(
-            payload,
-          )
-          match refs_result {
-            Ok(indices) =>
-              for index in indices {
-                if not(roots.contains(index)) {
-                  roots.push(index)
-                }
-              }
-            Err(_) => partial = true
-          }
-        }
-        10U => code_bodies = parse_code_bodies(payload)
-        0U =>
-          match section.custom_name {
-            Some(name) =>
-              if name == "name" {
-                parse_name_section_function_names(payload).each((
-                  index,
-                  function_name,
-                ) => function_names.set(index, function_name))
-              }
-            None => ()
-          }
-        _ => ()
-      }
-    }
-    if code_bodies.length().reinterpret_as_uint() != local_function_count {
-      raise WalyzeError::InvalidFormat(
-        "function/code section count mismatch: function=" +
-        local_function_count.to_string() +
-        " code=" +
-        code_bodies.length().to_string(),
-      )
-    }
-    let nodes : Array[CallGraphNode] = []
-    let index_to_pos : Map[UInt, Int] = {}
-    let mut has_indirect_calls = false
-    for i in 0..<code_bodies.length() {
-      let function_index = imported_function_count + i.reinterpret_as_uint()
-      let body = code_bodies[i]
-      let mut direct_callees : Array[UInt] = []
-      let prefix_result = try? parse_local_decl_prefix_end(body)
-      match prefix_result {
-        Ok(prefix_end) => {
-          let instr_bytes = body[prefix_end:body.length()].to_bytes()
-          match parse_instruction_spans(instr_bytes) {
-            Some(spans) => {
-              let (callees, body_has_indirect) = collect_direct_callees(
-                instr_bytes, spans,
-              )
-              direct_callees = callees
-              if body_has_indirect {
-                has_indirect_calls = true
-              }
-            }
-            None => partial = true
-          }
-        }
-        Err(_) => partial = true
-      }
-      index_to_pos.set(function_index, nodes.length())
-      nodes.push({
-        function_index,
-        body_bytes: body.length().reinterpret_as_uint(),
-        name: function_names.get(function_index),
-        export_names: match export_names.get(function_index) {
-          Some(v) => v
-          None => []
-        },
-        direct_callees,
-        reachable_from_roots: false,
-      })
-    }
-    let visited : Map[UInt, Bool] = {}
-    let queue = roots.copy()
-    let mut head = 0
-    while head < queue.length() {
-      let index = queue[head]
-      head += 1
-      if visited.get(index) is Some(_) {
-        continue
-      }
-      visited.set(index, true)
-      match index_to_pos.get(index) {
-        Some(pos) =>
-          for callee in nodes[pos].direct_callees {
-            if visited.get(callee) is None {
-              queue.push(callee)
-            }
-          }
-        None => ()
-      }
-    }
-    let mut reachable_body_bytes = 0U
-    let mut dead_body_bytes = 0U
-    for i in 0..<nodes.length() {
-      let node = nodes[i]
-      let reachable = visited.get(node.function_index) is Some(_)
-      if reachable {
-        reachable_body_bytes += node.body_bytes
-      } else {
-        dead_body_bytes += node.body_bytes
-      }
-      nodes[i] = {
-        function_index: node.function_index,
-        body_bytes: node.body_bytes,
-        name: node.name,
-        export_names: node.export_names,
-        direct_callees: node.direct_callees,
-        reachable_from_roots: reachable,
-      }
-    }
-    {
-      imported_function_count,
-      local_function_count,
-      roots,
-      has_indirect_calls,
-      partial,
-      reachable_body_bytes,
-      dead_body_bytes,
-      nodes,
-    }
-  }
+  try? analyze_call_graph_raise(bytes, None)
 }
 
 ///|
@@ -4352,11 +4386,17 @@ fn apply_remove_unused_module_elements_raise(
 }
 
 ///|
-fn apply_dce_raise(bytes : Bytes) -> DceApplyResult raise WalyzeError {
-  let call_graph = match analyze_call_graph(bytes) {
-    Ok(v) => v
-    Err(e) => raise e
+fn apply_dce_raise(
+  bytes : Bytes,
+  config : OptimizeConfig,
+) -> DceApplyResult raise WalyzeError {
+  let export_root_names = if config.closed_world &&
+    config.closed_world_root_exports.length() > 0 {
+    Some(config.closed_world_root_exports)
+  } else {
+    None
   }
+  let call_graph = analyze_call_graph_raise(bytes, export_root_names)
   if call_graph.partial {
     raise WalyzeError::InvalidFormat(
       "dce apply requires complete call graph (partial=false)",

@@ -192,6 +192,28 @@ fn sample_module_with_dead_function_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_two_exported_functions_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 2 local functions
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export index 0 as "keep", index 1 as "drop"
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x02, 0x04, 0x6b, 0x65, 0x65, 0x70, 0x00, 0x00, 0x04, 0x64, 0x72, 0x6f, 0x70,
+      0x00, 0x01,
+    ]),
+  )
+  // code section: 2 bodies, each is (locals=0, end)
+  append_section(out, 10U, bytes_of([0x02, 0x02, 0x00, 0x0b, 0x02, 0x00, 0x0b]))
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_fc_opcode_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -685,8 +707,13 @@ test "opt level presets map to expected optimizer knobs" {
 test "make optimize config can enable closed-world mode" {
   let default_config = make_optimize_config()
   assert_true(not(default_config.closed_world))
+  assert_eq(default_config.closed_world_root_exports.length(), 0)
   let closed_world_config = make_optimize_config(closed_world=true)
   assert_true(closed_world_config.closed_world)
+  let closed_world_with_roots = make_optimize_config(closed_world=true, closed_world_root_exports=[
+    "keep",
+  ])
+  assert_eq(closed_world_with_roots.closed_world_root_exports, ["keep"])
 }
 
 ///|
@@ -865,6 +892,52 @@ test "optimize with dce apply removes dead and rewrites calls" {
   assert_eq(after_graph.dead_body_bytes, 0U)
   assert_eq(after_graph.nodes.length(), 2)
   assert_eq(after_graph.nodes[0].direct_callees, [1U])
+}
+
+///|
+test "optimize with closed-world dce filters export roots by name" {
+  let bytes = sample_module_with_two_exported_functions_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.function_count, 2U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    closed_world=true,
+    closed_world_root_exports=["keep"],
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.function_count, 1U)
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x07, 0x08, 0x01, 0x04, 0x6b, 0x65, 0x65, 0x70, 0x00, 0x00,
+    ]),
+  )
+  assert_true(
+    not(
+      bytes_contains_seq(optimized.bytes, [
+        0x04, 0x64, 0x72, 0x6f, 0x70, 0x00, 0x01,
+      ]),
+    ),
+  )
 }
 
 ///|
