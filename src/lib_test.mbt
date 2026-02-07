@@ -693,6 +693,56 @@ fn sample_module_with_local_chain_simplify_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_br_if_const_zero_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // block
+  //   i32.const 0
+  //   br_if 0
+  // end
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x01, 0x09, 0x00, 0x02, 0x40, 0x41, 0x00, 0x0d, 0x00, 0x0b, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_br_if_const_nonzero_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // block
+  //   i32.const 1
+  //   br_if 0
+  // end
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x01, 0x09, 0x00, 0x02, 0x40, 0x41, 0x01, 0x0d, 0x00, 0x0b, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_unreachable_tail_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1106,9 +1156,10 @@ test "opt level presets map to expected optimizer knobs" {
     return
   }
   assert_true(o1.enable_peephole)
-  assert_true(not(o1.enable_dce))
+  assert_true(o1.enable_dce)
   assert_true(o1.enable_dfe)
   assert_true(o1.enable_merge_similar_functions)
+  assert_eq(o1.pass_rounds, 2U)
   assert_true(o1.strip_debug_sections)
   assert_true(o1.strip_dwarf_sections)
   assert_true(o1.strip_target_features_section)
@@ -2348,6 +2399,134 @@ test "optimize local simplify chain reaches fixed-point" {
   assert_eq(after.code_body_bytes, 2U)
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x22, 0x00])))
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x00])))
+}
+
+///|
+test "optimize precompute removes i32.const 0 + br_if" {
+  let bytes = sample_module_with_br_if_const_zero_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 9U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 5U)
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0d, 0x00])))
+}
+
+///|
+test "optimize precompute rewrites i32.const nonzero + br_if to br" {
+  let bytes = sample_module_with_br_if_const_nonzero_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 9U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 7U)
+  assert_true(bytes_contains_seq(optimized.bytes, [0x02, 0x40, 0x0c, 0x00, 0x0b]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x0d, 0x00])))
+}
+
+///|
+test "optimize with dce apply skips partial call graph modules" {
+  let bytes = @fs.read_file_to_bytes(
+    "bench/corpus/core/binaryen/gc_target_feature.wasm",
+  ) catch {
+    _ => {
+      assert_true(false)
+      return
+    }
+  }
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(optimized.before_size, optimized.after_size)
+  assert_eq(optimized.removed_sections.length(), 0)
+}
+
+///|
+test "optimize -O1 runs dce and drops empty function/code sections" {
+  let bytes = @fs.read_file_to_bytes("bench/corpus/core/binaryen/br_to_exit.wasm")
+  catch {
+    _ => {
+      assert_true(false)
+      return
+    }
+  }
+  let config = OptimizeConfig::o1()
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(optimized.after_size, 8U)
+  guard profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 0U)
+  assert_eq(profile.code_body_count, 0U)
 }
 
 ///|

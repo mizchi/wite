@@ -140,14 +140,14 @@ pub fn OptimizeConfig::o1() -> Self {
     strip_dwarf_sections=true,
     strip_target_features_section=true,
     keep_custom_sections=[],
-    pass_rounds=1U,
+    pass_rounds=2U,
     enable_peephole=true,
     peephole_remove_nop=true,
     peephole_remove_const_drop=true,
     enable_vacuum=true,
     enable_merge_blocks=true,
     enable_remove_unused_brs=true,
-    enable_dce=false,
+    enable_dce=true,
     enable_dfe=true,
     enable_merge_similar_functions=true,
   )
@@ -3930,6 +3930,42 @@ fn apply_precompute_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
 }
 
 ///|
+fn apply_precompute_br_if_const(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() &&
+      spans[i].opcode == 0x41U &&
+      spans[i + 1].opcode == 0x0dU {
+      match
+        decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
+        Some(0U) => {
+          i += 2
+          continue
+        }
+        Some(_) =>
+          if spans[i + 1].end_ > spans[i + 1].start + 1 {
+            out.push(0x0cU.to_byte())
+            out.append(
+              instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_array(),
+            )
+            i += 2
+            continue
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
@@ -4292,9 +4328,10 @@ fn optimize_instruction_bytes(
   config : OptimizeConfig,
 ) -> Bytes {
   let mut current_bytes = instr_bytes
-  if config.peephole_remove_nop || config.peephole_remove_const_drop {
+  if config.enable_peephole {
     current_bytes = apply_precompute_i32_add(current_bytes)
     current_bytes = apply_precompute_i32_identity_ops(current_bytes)
+    current_bytes = apply_precompute_br_if_const(current_bytes)
     let mut local_simplify_round = 0
     while local_simplify_round < 4 {
       let before_local_simplify = current_bytes
@@ -6111,9 +6148,12 @@ fn apply_dce_raise(
   let export_root_names = export_root_names_from_config(config)
   let call_graph = analyze_call_graph_raise(bytes, export_root_names)
   if call_graph.partial {
-    raise WalyzeError::InvalidFormat(
-      "dce apply requires complete call graph (partial=false)",
-    )
+    return {
+      bytes,
+      removed_function_count: 0U,
+      removed_body_bytes: 0U,
+      dropped_name_section: false,
+    }
   }
   let local_count = UInt::reinterpret_as_int(call_graph.local_function_count)
   if local_count < 0 {
@@ -6160,12 +6200,15 @@ fn apply_dce_raise(
   for section in sections {
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
     match section.section_id {
-      3U =>
-        append_encoded_section(
-          out,
-          3U,
-          rewrite_function_section_payload_for_dce_raise(payload, keep_local),
+      3U => {
+        let rewritten = rewrite_function_section_payload_for_dce_raise(
+          payload,
+          keep_local,
         )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 3U, rewritten)
+        }
+      }
       7U =>
         append_encoded_section(
           out,
@@ -6178,14 +6221,16 @@ fn apply_dce_raise(
           8U,
           rewrite_start_section_payload_for_dce_raise(payload, index_map),
         )
-      10U =>
-        append_encoded_section(
-          out,
-          10U,
-          rewrite_code_section_payload_for_dce_raise(
-            payload, keep_local, index_map,
-          ),
+      10U => {
+        let rewritten = rewrite_code_section_payload_for_dce_raise(
+          payload,
+          keep_local,
+          index_map,
         )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 10U, rewritten)
+        }
+      }
       0U =>
         match section.custom_name {
           Some(name) =>
