@@ -3090,3 +3090,33 @@ test "component dce corpus can run component core optimize kpi config" {
     assert_true(report.total_core_after_bytes <= report.total_core_before_bytes)
   }
 }
+
+///|
+test "component dce corpus applies dce and strictly shrinks core size" {
+  for path in bench_component_dce_corpus_paths() {
+    let bytes = @fs.read_file_to_bytes(path) catch {
+      _ => {
+        inspect(path, content="missing")
+        assert_true(false)
+        return
+      }
+    }
+    guard analyze_component_root_policy(bytes) is Ok(policy) else {
+      inspect(path, content="root policy failed")
+      assert_true(false)
+      return
+    }
+    let config = component_dce_kpi_optimize_config(policy.root_name_candidates)
+    guard analyze_component_core_optimize(bytes, config~) is Ok(report) else {
+      inspect(path, content="component core optimize failed")
+      assert_true(false)
+      return
+    }
+    assert_true(report.total_core_after_bytes < report.total_core_before_bytes)
+    assert_true(
+      report.entries.any(entry =>
+        entry.removed_sections.any(s => s.contains("dce:functions:"))
+      ),
+    )
+  }
+}
