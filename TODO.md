@@ -38,7 +38,7 @@
 - [ ] GC hierarchy を考慮した `type-refining` へ拡張する
 - [x] `signature-pruning` の基盤を実装する（末尾 unused param の削減 + call site drop 挿入）
 - [x] `remove-unused-types` の基盤を実装する（core func type pruning）
-- [ ] private GC type まで `remove-unused-types` を拡張する
+- [x] private GC type まで `remove-unused-types` を拡張する
 - [ ] 可能なら `signature-refining` / `cfp` 系を段階導入する
 - [ ] component root policy と GC 最適化の整合テストを追加する
 
@@ -71,7 +71,9 @@
 - [x] `simplify-locals*` 基盤: local 簡約パイプラインを固定点で反復する
 - [x] `rse` 基盤: `local.tee x; local.set x -> local.set x`
 - [x] `coalesce-locals` 最小実装（unused local 削減 + local index 圧縮）
-- [ ] `inlining-optimizing` / `dae-optimizing` / `duplicate-import-elimination` を検討する
+- [x] `inlining-optimizing` の最小実装（`() -> i32.const` callee の call inline）
+- [x] `dae-optimizing` の最小実装（drop される純粋式の除去）
+- [ ] `duplicate-import-elimination` を検討する
 - [ ] `simplify-globals*` / `reorder-globals` / `memory-packing` を検討する
 
 ## P6: 計測と品質

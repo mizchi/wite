@@ -3110,30 +3110,179 @@ fn parse_function_type_indices(
 }
 
 ///|
-fn parse_type_section_entries_raise(
+priv struct ParsedTypeSectionEntry {
+  raw : Bytes
+  form : UInt
+  referenced_type_indices : Array[UInt]
+}
+
+///|
+fn maybe_collect_heap_type_ref_index(
+  heap_type_bytes : Array[Byte],
+  referenced_type_indices : Array[UInt],
+) -> Unit {
+  if heap_type_bytes.length() == 0 {
+    return
+  }
+  let last = heap_type_bytes[heap_type_bytes.length() - 1].to_uint()
+  // Signed heaptype immediates with sign bit set are negative builtins.
+  if (last & 0x40U) != 0U {
+    return
+  }
+  match decode_u32_leb128_bytes(Bytes::from_array(heap_type_bytes[:])) {
+    Some(type_index) => push_unique_u32(referenced_type_indices, type_index)
+    None => ()
+  }
+}
+
+///|
+fn read_heap_type_and_collect_refs_raise(
+  parser : Cursor,
+  referenced_type_indices : Array[UInt],
+  context : String,
+) -> Unit raise WalyzeError {
+  let bytes : Array[Byte] = []
+  let first = parser.read_byte()
+  bytes.push(first)
+  if (first & 0x80) != 0 {
+    let mut consumed = 1
+    while true {
+      let b = parser.read_byte()
+      bytes.push(b)
+      consumed += 1
+      if consumed > 5 {
+        raise WalyzeError::InvalidFormat("heap type s33 overflow in " + context)
+      }
+      if (b & 0x80) == 0 {
+        break
+      }
+    }
+  }
+  maybe_collect_heap_type_ref_index(bytes, referenced_type_indices)
+}
+
+///|
+fn read_type_entry_val_type_refs_raise(
+  parser : Cursor,
+  referenced_type_indices : Array[UInt],
+  context : String,
+) -> Unit raise WalyzeError {
+  let code = parser.read_byte().to_uint()
+  match code {
+    0x7fU | 0x7eU | 0x7dU | 0x7cU | 0x7bU | 0x70U | 0x6fU => ()
+    0x63U | 0x64U =>
+      read_heap_type_and_collect_refs_raise(
+        parser, referenced_type_indices, context,
+      )
+    _ =>
+      raise WalyzeError::InvalidFormat(
+        "unsupported value type in " + context + ": " + code.to_string(),
+      )
+  }
+}
+
+///|
+fn read_type_entry_storage_type_refs_raise(
+  parser : Cursor,
+  referenced_type_indices : Array[UInt],
+  context : String,
+) -> Unit raise WalyzeError {
+  let code = parser.read_byte().to_uint()
+  match code {
+    0x78U | 0x77U => ()
+    0x7fU | 0x7eU | 0x7dU | 0x7cU | 0x7bU | 0x70U | 0x6fU => ()
+    0x63U | 0x64U =>
+      read_heap_type_and_collect_refs_raise(
+        parser, referenced_type_indices, context,
+      )
+    _ =>
+      raise WalyzeError::InvalidFormat(
+        "unsupported storage type in " + context + ": " + code.to_string(),
+      )
+  }
+}
+
+///|
+fn read_type_entry_field_type_refs_raise(
+  parser : Cursor,
+  referenced_type_indices : Array[UInt],
+  context : String,
+) -> Unit raise WalyzeError {
+  read_type_entry_storage_type_refs_raise(
+    parser, referenced_type_indices, context,
+  )
+  let mutability = parser.read_byte().to_uint()
+  if mutability > 1U {
+    raise WalyzeError::InvalidFormat(
+      "invalid field mutability in " + context + ": " + mutability.to_string(),
+    )
+  }
+}
+
+///|
+fn parse_type_section_entries_with_refs_raise(
   payload : Bytes,
-) -> Array[Bytes] raise WalyzeError {
+  context : String,
+) -> Array[ParsedTypeSectionEntry] raise WalyzeError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
-  let out : Array[Bytes] = []
+  let out : Array[ParsedTypeSectionEntry] = []
   for _ in 0U..<count {
     let start = parser.get_pos()
     let form = parser.read_byte().to_uint()
-    if form != 0x60U {
-      raise WalyzeError::InvalidFormat(
-        "unsupported type form in remove-unused-types: " + form.to_string(),
-      )
-    }
-    let param_count = parser.read_u32_leb128()
-    for _ in 0U..<param_count {
-      ignore(read_val_type_bytes_raise(parser))
-    }
-    let result_count = parser.read_u32_leb128()
-    for _ in 0U..<result_count {
-      ignore(read_val_type_bytes_raise(parser))
+    let referenced_type_indices : Array[UInt] = []
+    match form {
+      0x60U => {
+        let param_count = parser.read_u32_leb128()
+        for _ in 0U..<param_count {
+          read_type_entry_val_type_refs_raise(
+            parser, referenced_type_indices, context,
+          )
+        }
+        let result_count = parser.read_u32_leb128()
+        for _ in 0U..<result_count {
+          read_type_entry_val_type_refs_raise(
+            parser, referenced_type_indices, context,
+          )
+        }
+      }
+      0x5fU => {
+        let field_count = parser.read_u32_leb128()
+        for _ in 0U..<field_count {
+          read_type_entry_field_type_refs_raise(
+            parser, referenced_type_indices, context,
+          )
+        }
+      }
+      0x5eU =>
+        read_type_entry_field_type_refs_raise(
+          parser, referenced_type_indices, context,
+        )
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported type form in " + context + ": " + form.to_string(),
+        )
     }
     let end_ = parser.get_pos()
-    out.push(payload[start:end_].to_bytes())
+    out.push({
+      raw: payload[start:end_].to_bytes(),
+      form,
+      referenced_type_indices,
+    })
+  }
+  out
+}
+
+///|
+fn parse_type_section_entries_raise(
+  payload : Bytes,
+) -> Array[Bytes] raise WalyzeError {
+  let parsed = parse_type_section_entries_with_refs_raise(
+    payload, "type parser",
+  )
+  let out : Array[Bytes] = []
+  for entry in parsed {
+    out.push(entry.raw)
   }
   out
 }
@@ -3785,6 +3934,387 @@ fn rewrite_code_body_calls_for_signature_pruning_raise(
   let out : Array[Byte] = body_bytes[0:prefix_end].to_array()
   out.append(rewritten_instr[:].to_array())
   Bytes::from_array(out[:])
+}
+
+///|
+fn is_single_i32_val_type(val_type : Bytes) -> Bool {
+  val_type.length() == 1 && val_type[0].to_uint() == 0x7fU
+}
+
+///|
+fn extract_inlining_replacement_instr_raise(
+  body_bytes : Bytes,
+  type_entry : FunctionTypeEntry,
+) -> Bytes? raise WalyzeError {
+  if type_entry.params.length() > 0 {
+    return None
+  }
+  let prefix = parse_local_decl_prefix_raise(body_bytes)
+  if prefix.local_types.length() > 0 {
+    return None
+  }
+  let instr_bytes = body_bytes[prefix.prefix_end:body_bytes.length()].to_bytes()
+  let spans = parse_instruction_spans_raise(instr_bytes)
+  if type_entry.results.length() == 1 &&
+    is_single_i32_val_type(type_entry.results[0]) &&
+    spans.length() == 2 &&
+    spans[0].opcode == 0x41U &&
+    spans[1].opcode == 0x0bU {
+    return Some(instr_bytes[spans[0].start:spans[0].end_].to_bytes())
+  }
+  None
+}
+
+///|
+fn rewrite_instruction_calls_for_inlining_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  replacement_by_function_index : Map[UInt, Bytes],
+) -> (Bytes, UInt) raise WalyzeError {
+  let out : Array[Byte] = []
+  let mut rewritten_call_count = 0U
+  for span in spans {
+    if span.opcode == 0x10U {
+      if span.end_ <= span.start + 1 {
+        raise WalyzeError::InvalidFormat("invalid call immediate in inlining")
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let target = match decode_u32_leb128_bytes(imm) {
+        Some(v) => v
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode call immediate in inlining",
+          )
+      }
+      match replacement_by_function_index.get(target) {
+        Some(replacement) => {
+          let call_span_len = (span.end_ - span.start).reinterpret_as_uint()
+          let replacement_len = replacement.length().reinterpret_as_uint()
+          if replacement_len <= call_span_len {
+            out.append(replacement[:].to_array())
+            rewritten_call_count += 1U
+          } else {
+            out.append(instr_bytes[span.start:span.end_].to_array())
+          }
+        }
+        None => out.append(instr_bytes[span.start:span.end_].to_array())
+      }
+    } else {
+      out.append(instr_bytes[span.start:span.end_].to_array())
+    }
+  }
+  (Bytes::from_array(out[:]), rewritten_call_count)
+}
+
+///|
+priv struct InliningApplyResult {
+  bytes : Bytes
+  inlined_call_count : UInt
+}
+
+///|
+fn apply_inlining_optimizing(bytes : Bytes) -> InliningApplyResult {
+  let result = try? apply_inlining_optimizing_raise(bytes)
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, inlined_call_count: 0U }
+  }
+}
+
+///|
+fn apply_inlining_optimizing_raise(
+  bytes : Bytes,
+) -> InliningApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut type_section_payload : Bytes? = None
+  let mut function_section_payload : Bytes? = None
+  let mut code_section_payload : Bytes? = None
+  let mut imported_function_count = 0U
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      1U => type_section_payload = Some(payload)
+      2U => imported_function_count += parse_import_function_count(payload)
+      3U => function_section_payload = Some(payload)
+      10U => code_section_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let type_payload = match type_section_payload {
+    Some(v) => v
+    None => return { bytes, inlined_call_count: 0U }
+  }
+  let function_payload = match function_section_payload {
+    Some(v) => v
+    None => return { bytes, inlined_call_count: 0U }
+  }
+  let code_payload = match code_section_payload {
+    Some(v) => v
+    None => return { bytes, inlined_call_count: 0U }
+  }
+  let type_entries = parse_function_type_entries_raise(type_payload, "inlining")
+  let function_type_indices = parse_function_type_indices(function_payload)
+  let code_bodies = parse_code_bodies(code_payload)
+  if function_type_indices.length() != code_bodies.length() {
+    raise WalyzeError::InvalidFormat(
+      "function/code section count mismatch for inlining: function=" +
+      function_type_indices.length().to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let type_count_u = type_entries.length().reinterpret_as_uint()
+  let replacement_by_function_index : Map[UInt, Bytes] = {}
+  for i in 0..<code_bodies.length() {
+    let type_index = function_type_indices[i]
+    if type_index >= type_count_u {
+      raise WalyzeError::InvalidFormat(
+        "type index out of range in inlining: " + type_index.to_string(),
+      )
+    }
+    let type_pos = UInt::reinterpret_as_int(type_index)
+    if type_pos < 0 || type_pos >= type_entries.length() {
+      raise WalyzeError::InvalidFormat(
+        "type index position out of range in inlining: " +
+        type_index.to_string(),
+      )
+    }
+    match
+      extract_inlining_replacement_instr_raise(
+        code_bodies[i],
+        type_entries[type_pos],
+      ) {
+      Some(replacement) =>
+        replacement_by_function_index.set(
+          imported_function_count + i.reinterpret_as_uint(),
+          replacement,
+        )
+      None => ()
+    }
+  }
+  let mut has_candidate = false
+  replacement_by_function_index.each((_, _) => has_candidate = true)
+  if not(has_candidate) {
+    return { bytes, inlined_call_count: 0U }
+  }
+  let rewritten_bodies : Array[Bytes] = []
+  let mut inlined_call_count = 0U
+  for body in code_bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    let (rewritten_instr, rewritten_call_count) = rewrite_instruction_calls_for_inlining_raise(
+      instr_bytes, spans, replacement_by_function_index,
+    )
+    inlined_call_count += rewritten_call_count
+    if rewritten_call_count > 0U {
+      let rewritten_body : Array[Byte] = body[0:prefix_end].to_array()
+      rewritten_body.append(rewritten_instr[:].to_array())
+      rewritten_bodies.push(Bytes::from_array(rewritten_body[:]))
+    } else {
+      rewritten_bodies.push(body)
+    }
+  }
+  if inlined_call_count == 0U {
+    return { bytes, inlined_call_count: 0U }
+  }
+  let rewritten_code_payload = encode_code_section_payload_from_bodies(
+    rewritten_bodies,
+  )
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    if section.section_id == 10U {
+      append_encoded_section(out, 10U, rewritten_code_payload)
+    } else {
+      out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), inlined_call_count }
+}
+
+///|
+fn is_dae_pure_producer_opcode(opcode : UInt) -> Bool {
+  is_drop_elidable_producer_opcode(opcode)
+}
+
+///|
+fn is_dae_pure_i32_unary_opcode(opcode : UInt) -> Bool {
+  opcode == 0x45U || opcode == 0x67U || opcode == 0x68U || opcode == 0x69U
+}
+
+///|
+fn is_dae_pure_i32_binary_opcode(opcode : UInt) -> Bool {
+  opcode == 0x46U ||
+  opcode == 0x47U ||
+  opcode == 0x48U ||
+  opcode == 0x49U ||
+  opcode == 0x4aU ||
+  opcode == 0x4bU ||
+  opcode == 0x4cU ||
+  opcode == 0x4dU ||
+  opcode == 0x4eU ||
+  opcode == 0x4fU ||
+  opcode == 0x50U ||
+  opcode == 0x51U ||
+  opcode == 0x52U ||
+  opcode == 0x53U ||
+  opcode == 0x54U ||
+  opcode == 0x55U ||
+  opcode == 0x56U ||
+  opcode == 0x57U ||
+  opcode == 0x58U ||
+  opcode == 0x59U ||
+  opcode == 0x5aU ||
+  opcode == 0x5bU ||
+  opcode == 0x5cU ||
+  opcode == 0x5dU ||
+  opcode == 0x5eU ||
+  opcode == 0x5fU ||
+  opcode == 0x60U ||
+  opcode == 0x61U ||
+  opcode == 0x62U ||
+  opcode == 0x63U ||
+  opcode == 0x64U ||
+  opcode == 0x65U ||
+  opcode == 0x66U ||
+  opcode == 0x6aU ||
+  opcode == 0x6bU ||
+  opcode == 0x6cU ||
+  opcode == 0x71U ||
+  opcode == 0x72U ||
+  opcode == 0x73U ||
+  opcode == 0x74U ||
+  opcode == 0x75U ||
+  opcode == 0x76U ||
+  opcode == 0x77U ||
+  opcode == 0x78U
+}
+
+///|
+fn rewrite_instruction_for_dae_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> (Bytes, UInt) {
+  let out : Array[Byte] = []
+  let mut removed_instr_count = 0U
+  let mut i = 0
+  while i < spans.length() {
+    if i + 3 < spans.length() &&
+      is_dae_pure_producer_opcode(spans[i].opcode) &&
+      is_dae_pure_producer_opcode(spans[i + 1].opcode) &&
+      is_dae_pure_i32_binary_opcode(spans[i + 2].opcode) &&
+      spans[i + 3].opcode == 0x1aU {
+      removed_instr_count += 4U
+      i += 4
+      continue
+    }
+    if i + 2 < spans.length() &&
+      is_dae_pure_producer_opcode(spans[i].opcode) &&
+      is_dae_pure_i32_unary_opcode(spans[i + 1].opcode) &&
+      spans[i + 2].opcode == 0x1aU {
+      removed_instr_count += 3U
+      i += 3
+      continue
+    }
+    if i + 1 < spans.length() &&
+      is_dae_pure_producer_opcode(spans[i].opcode) &&
+      spans[i + 1].opcode == 0x1aU {
+      removed_instr_count += 2U
+      i += 2
+      continue
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  (Bytes::from_array(out[:]), removed_instr_count)
+}
+
+///|
+fn apply_dae_instruction_bytes_raise(
+  instr_bytes : Bytes,
+) -> (Bytes, UInt) raise WalyzeError {
+  let mut current = instr_bytes
+  let mut removed_instr_count = 0U
+  let mut rounds = 0
+  while rounds < 16 {
+    let spans = parse_instruction_spans_raise(current)
+    let (rewritten, removed) = rewrite_instruction_for_dae_raise(current, spans)
+    if removed == 0U {
+      break
+    }
+    current = rewritten
+    removed_instr_count += removed
+    rounds += 1
+  }
+  (current, removed_instr_count)
+}
+
+///|
+priv struct DaeApplyResult {
+  bytes : Bytes
+  removed_instr_count : UInt
+}
+
+///|
+fn apply_dae_optimizing(bytes : Bytes) -> DaeApplyResult {
+  let result = try? apply_dae_optimizing_raise(bytes)
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, removed_instr_count: 0U }
+  }
+}
+
+///|
+fn apply_dae_optimizing_raise(
+  bytes : Bytes,
+) -> DaeApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut code_section_payload : Bytes? = None
+  for section in sections {
+    if section.section_id == 10U {
+      code_section_payload = Some(
+        bytes[section.payload_start:section.section_end].to_bytes(),
+      )
+      break
+    }
+  }
+  let code_payload = match code_section_payload {
+    Some(v) => v
+    None => return { bytes, removed_instr_count: 0U }
+  }
+  let code_bodies = parse_code_bodies(code_payload)
+  let rewritten_bodies : Array[Bytes] = []
+  let mut removed_instr_count = 0U
+  for body in code_bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let (rewritten_instr, removed) = apply_dae_instruction_bytes_raise(
+      instr_bytes,
+    )
+    removed_instr_count += removed
+    if removed > 0U {
+      let rewritten_body : Array[Byte] = body[0:prefix_end].to_array()
+      rewritten_body.append(rewritten_instr[:].to_array())
+      rewritten_bodies.push(Bytes::from_array(rewritten_body[:]))
+    } else {
+      rewritten_bodies.push(body)
+    }
+  }
+  if removed_instr_count == 0U {
+    return { bytes, removed_instr_count: 0U }
+  }
+  let rewritten_code_payload = encode_code_section_payload_from_bodies(
+    rewritten_bodies,
+  )
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    if section.section_id == 10U {
+      append_encoded_section(out, 10U, rewritten_code_payload)
+    } else {
+      out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), removed_instr_count }
 }
 
 ///|
@@ -5446,6 +5976,20 @@ fn optimize_for_size_round_raise(
       )
     }
   }
+  if config.enable_dce {
+    let inlining = apply_inlining_optimizing(optimized_bytes)
+    optimized_bytes = inlining.bytes
+    if inlining.inlined_call_count > 0U {
+      removed_sections.push(
+        "inlining:calls:" + inlining.inlined_call_count.to_string(),
+      )
+    }
+    let dae = apply_dae_optimizing(optimized_bytes)
+    optimized_bytes = dae.bytes
+    if dae.removed_instr_count > 0U {
+      removed_sections.push("dae:instrs:" + dae.removed_instr_count.to_string())
+    }
+  }
   { bytes: optimized_bytes, removed_sections }
 }
 
@@ -6494,7 +7038,19 @@ fn apply_type_refining_raise(
     Some(v) => v
     None => return { bytes, refined_type_count: 0U }
   }
-  let type_entries = parse_type_section_entries_raise(type_payload)
+  let parsed_type_entries = parse_type_section_entries_with_refs_raise(
+    type_payload, "type-refine",
+  )
+  for entry in parsed_type_entries {
+    // type-refine currently rewrites only function/import/code type indices.
+    if entry.form != 0x60U {
+      return { bytes, refined_type_count: 0U }
+    }
+  }
+  let type_entries : Array[Bytes] = []
+  for entry in parsed_type_entries {
+    type_entries.push(entry.raw)
+  }
   if type_entries.length() <= 1 {
     return { bytes, refined_type_count: 0U }
   }
@@ -6836,7 +7392,9 @@ fn apply_remove_unused_types_raise(
     Some(v) => v
     None => return { bytes, removed_type_count: 0U }
   }
-  let type_entries = parse_type_section_entries_raise(type_payload)
+  let type_entries = parse_type_section_entries_with_refs_raise(
+    type_payload, "remove-unused-types",
+  )
   if type_entries.length() == 0 {
     return { bytes, removed_type_count: 0U }
   }
@@ -6873,6 +7431,31 @@ fn apply_remove_unused_types_raise(
         "type index out of range in remove-unused-types: " +
         type_index.to_string(),
       )
+    }
+  }
+  let queue = used_type_indices.copy()
+  let mut queue_head = 0
+  while queue_head < queue.length() {
+    let current = queue[queue_head]
+    queue_head += 1
+    let current_pos = UInt::reinterpret_as_int(current)
+    if current_pos < 0 || current_pos >= type_entries.length() {
+      raise WalyzeError::InvalidFormat(
+        "type index position out of range in remove-unused-types: " +
+        current.to_string(),
+      )
+    }
+    for dep in type_entries[current_pos].referenced_type_indices {
+      if dep >= type_count_u {
+        raise WalyzeError::InvalidFormat(
+          "referenced type index out of range in remove-unused-types: " +
+          dep.to_string(),
+        )
+      }
+      if not(used_type_indices.contains(dep)) {
+        push_unique_u32(used_type_indices, dep)
+        queue.push(dep)
+      }
     }
   }
   let keep_types : Array[Bool] = []
