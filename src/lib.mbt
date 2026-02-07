@@ -3918,6 +3918,30 @@ fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
 }
 
 ///|
+fn apply_simplify_local_tee_drop_to_set(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() &&
+      spans[i].opcode == 0x22U &&
+      spans[i + 1].opcode == 0x1aU &&
+      spans[i].end_ > spans[i].start + 1 {
+      out.push(0x21U.to_byte())
+      out.append(instr_bytes[spans[i].start + 1:spans[i].end_].to_array())
+      i += 2
+      continue
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn apply_basic_peephole_to_spans(
   spans : Array[InstrSpan],
   config : OptimizeConfig,
@@ -4083,6 +4107,7 @@ fn optimize_instruction_bytes(
   if config.peephole_remove_nop || config.peephole_remove_const_drop {
     current_bytes = apply_precompute_i32_add(current_bytes)
     current_bytes = apply_simplify_local_set_get_to_tee(current_bytes)
+    current_bytes = apply_simplify_local_tee_drop_to_set(current_bytes)
   }
   let spans = match parse_instruction_spans(current_bytes) {
     Some(v) => v

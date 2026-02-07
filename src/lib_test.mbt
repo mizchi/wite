@@ -466,6 +466,30 @@ fn sample_module_with_local_get_drop_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_local_tee_drop_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=1, local group(count=1, i32)
+  // i32.const 42
+  // local.tee 0
+  // drop
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x01, 0x09, 0x01, 0x01, 0x7f, 0x41, 0x2a, 0x22, 0x00, 0x1a, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_unreachable_tail_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1862,6 +1886,40 @@ test "optimize peephole removes local.get+drop" {
   }
   assert_eq(after.code_body_bytes, 2U)
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x1a])))
+}
+
+///|
+test "optimize peephole rewrites local.tee+drop to local.set" {
+  let bytes = sample_module_with_local_tee_drop_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 9U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 8U)
+  assert_true(bytes_contains_seq(optimized.bytes, [0x21, 0x00]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x22, 0x00, 0x1a])))
 }
 
 ///|

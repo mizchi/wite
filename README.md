@@ -15,7 +15,7 @@ It provides:
 - core wasm type-refining base pass (duplicate function-type canonicalization)
 - core wasm signature-pruning base pass (unused trailing param pruning + caller drop insertion)
 - core wasm remove-unused-types base pass (function-type pruning + call_indirect type remap)
-- core wasm precompute/simplify-locals base pass (`i32.const+i32.const+i32.add` folding, `local.set+local.get -> local.tee`, `local.get/global.get/ref.func/ref.null + drop` elision)
+- core wasm precompute/simplify-locals base pass (`i32.const+i32.const+i32.add` folding, `local.set+local.get -> local.tee`, `local.tee+drop -> local.set`, `local.get/global.get/ref.func/ref.null + drop` elision)
 - custom section strip passes (`strip-debug` / `strip-dwarf` / `strip-target-features`)
 - optimization level presets (`-O0/-O1/-O2/-O3/-Os/-Oz`, plus `--converge`)
 - size-oriented optimization pass (`wasm-opt`-style custom section stripping + vacuum + merge-blocks + remove-unused-brs + peephole + DCE + DFE + MSF)
