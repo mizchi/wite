@@ -15,6 +15,7 @@ It provides:
 - custom section strip passes (`strip-debug` / `strip-dwarf` / `strip-target-features`)
 - optimization level presets (`-O0/-O1/-O2/-O3/-Os/-Oz`, plus `--converge`)
 - size-oriented optimization pass (`wasm-opt`-style custom section stripping + vacuum + merge-blocks + remove-unused-brs + peephole + DCE + DFE + MSF)
+- closed-world root filtering (`--closed-world --closed-world-root=...`, with `--safe-mode` override)
 - static module profiler (imports/exports/functions/code-body bytes)
 - runtime profiler for zero-arg exports (call count / total ns / avg ns)
 - component model profiling (`mizchi/mwac` integration)

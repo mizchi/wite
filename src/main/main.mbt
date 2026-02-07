@@ -8,7 +8,7 @@ fn print_usage() -> Unit {
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
   println(
-    "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>]",
+    "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
   )
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
@@ -143,6 +143,7 @@ fn run_optimize(args : Array[String]) -> Unit {
   let mut enable_merge_similar_functions = false
   let mut enable_remove_unused_module_elements = false
   let mut closed_world = false
+  let mut safe_mode = false
   for i in 4..<args.length() {
     match @walyze.optimize_config_from_opt_level(args[i]) {
       Some(preset) => {
@@ -162,6 +163,7 @@ fn run_optimize(args : Array[String]) -> Unit {
         enable_merge_similar_functions = preset.enable_merge_similar_functions
         enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
         closed_world = preset.closed_world
+        safe_mode = preset.safe_mode
       }
       None => ()
     }
@@ -212,6 +214,9 @@ fn run_optimize(args : Array[String]) -> Unit {
     if args[i] == "--closed-world" {
       closed_world = true
     }
+    if args[i] == "--safe-mode" {
+      safe_mode = true
+    }
   }
   let keep_custom_sections = parse_keep_custom(args, 4)
   let closed_world_root_exports = parse_closed_world_roots(args, 4)
@@ -234,6 +239,7 @@ fn run_optimize(args : Array[String]) -> Unit {
     enable_remove_unused_module_elements~,
     closed_world~,
     closed_world_root_exports~,
+    safe_mode~,
   )
   let bytes = read_bytes_or_exit(input_path)
   match @walyze.optimize_for_size(bytes, config~) {

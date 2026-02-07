@@ -678,6 +678,7 @@ test "opt level presets map to expected optimizer knobs" {
   assert_true(not(o0.enable_dfe))
   assert_true(not(o0.enable_merge_similar_functions))
   assert_true(not(o0.closed_world))
+  assert_true(not(o0.safe_mode))
   assert_eq(o0.pass_rounds, 1U)
   guard optimize_config_from_opt_level("-O2") is Some(o2) else {
     assert_true(false)
@@ -687,6 +688,7 @@ test "opt level presets map to expected optimizer knobs" {
   assert_true(o2.enable_dce)
   assert_true(not(o2.enable_dfe))
   assert_true(not(o2.closed_world))
+  assert_true(not(o2.safe_mode))
   assert_eq(o2.pass_rounds, 2U)
   guard optimize_config_from_opt_level("-Oz") is Some(oz) else {
     assert_true(false)
@@ -696,6 +698,7 @@ test "opt level presets map to expected optimizer knobs" {
   assert_true(oz.enable_dfe)
   assert_true(oz.enable_merge_similar_functions)
   assert_true(not(oz.closed_world))
+  assert_true(not(oz.safe_mode))
   assert_eq(oz.pass_rounds, 8U)
   match optimize_config_from_opt_level("-Ox") {
     Some(_) => assert_true(false)
@@ -708,12 +711,19 @@ test "make optimize config can enable closed-world mode" {
   let default_config = make_optimize_config()
   assert_true(not(default_config.closed_world))
   assert_eq(default_config.closed_world_root_exports.length(), 0)
+  assert_true(not(default_config.safe_mode))
   let closed_world_config = make_optimize_config(closed_world=true)
   assert_true(closed_world_config.closed_world)
   let closed_world_with_roots = make_optimize_config(closed_world=true, closed_world_root_exports=[
     "keep",
   ])
   assert_eq(closed_world_with_roots.closed_world_root_exports, ["keep"])
+  let safe_mode_config = make_optimize_config(
+    closed_world=true,
+    closed_world_root_exports=["keep"],
+    safe_mode=true,
+  )
+  assert_true(safe_mode_config.safe_mode)
 }
 
 ///|
@@ -938,6 +948,36 @@ test "optimize with closed-world dce filters export roots by name" {
       ]),
     ),
   )
+}
+
+///|
+test "optimize with safe-mode disables closed-world dce filtering" {
+  let bytes = sample_module_with_two_exported_functions_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    closed_world=true,
+    closed_world_root_exports=["keep"],
+    safe_mode=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    not(optimized.removed_sections.any(s => s.contains("dce:functions:"))),
+  )
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.function_count, 2U)
 }
 
 ///|

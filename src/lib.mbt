@@ -50,6 +50,7 @@ pub struct OptimizeConfig {
   enable_remove_unused_module_elements : Bool
   closed_world : Bool
   closed_world_root_exports : Array[String]
+  safe_mode : Bool
 }
 
 ///|
@@ -75,6 +76,7 @@ pub fn OptimizeConfig::default() -> Self {
     enable_remove_unused_module_elements: false,
     closed_world: false,
     closed_world_root_exports: [],
+    safe_mode: false,
   }
 }
 
@@ -101,6 +103,7 @@ pub fn OptimizeConfig::aggressive() -> Self {
     enable_remove_unused_module_elements: false,
     closed_world: false,
     closed_world_root_exports: [],
+    safe_mode: false,
   }
 }
 
@@ -280,6 +283,7 @@ pub fn make_optimize_config(
   enable_remove_unused_module_elements? : Bool = false,
   closed_world? : Bool = false,
   closed_world_root_exports? : Array[String] = [],
+  safe_mode? : Bool = false,
 ) -> OptimizeConfig {
   {
     strip_all_custom,
@@ -302,6 +306,7 @@ pub fn make_optimize_config(
     enable_remove_unused_module_elements,
     closed_world,
     closed_world_root_exports,
+    safe_mode,
   }
 }
 
@@ -4053,7 +4058,9 @@ fn apply_remove_unused_module_elements_raise(
       6U => global_section_payload = Some(payload)
       7U => {
         let mut effective_export_payload = payload
-        if config.closed_world && config.closed_world_root_exports.length() > 0 {
+        if config.closed_world &&
+          not(config.safe_mode) &&
+          config.closed_world_root_exports.length() > 0 {
           let (filtered, removed) = rewrite_export_section_payload_for_keep_names_raise(
             payload,
             config.closed_world_root_exports,
@@ -4448,6 +4455,7 @@ fn apply_dce_raise(
   config : OptimizeConfig,
 ) -> DceApplyResult raise WalyzeError {
   let export_root_names = if config.closed_world &&
+    not(config.safe_mode) &&
     config.closed_world_root_exports.length() > 0 {
     Some(config.closed_world_root_exports)
   } else {
