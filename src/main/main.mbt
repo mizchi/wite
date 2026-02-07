@@ -16,6 +16,9 @@ fn print_usage() -> Unit {
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
   println("  component-callgraph <component.wasm> [limit]")
+  println(
+    "  component-dce-kpi <component.wasm> [wit-dir] [--closed-world-root=<export-name>] [--safe-mode]",
+  )
   println("  contract <component.wasm> <wit-dir>")
   println("  root-policy <component.wasm> [wit-dir]")
 }
@@ -612,6 +615,117 @@ fn run_component_callgraph(path : String, limit : UInt) -> Unit {
 }
 
 ///|
+fn run_component_dce_kpi(args : Array[String]) -> Unit {
+  if args.length() < 3 {
+    print_usage()
+    @sys.exit(1)
+  }
+  let component_path = args[2]
+  let bytes = read_bytes_or_exit(component_path)
+  let mut wit_path : String? = None
+  let mut safe_mode = false
+  for i in 3..<args.length() {
+    if args[i] == "--safe-mode" {
+      safe_mode = true
+    } else if not(args[i].has_prefix("--")) && wit_path is None {
+      wit_path = Some(args[i])
+    }
+  }
+  let resolved_wit : @wit.ResolveInput? = match wit_path {
+    Some(path) =>
+      match @wit.resolve_path(path) {
+        Ok(v) => Some(v)
+        Err(e) => {
+          println("wit resolve failed: " + e.to_string())
+          @sys.exit(1)
+          None
+        }
+      }
+    None => None
+  }
+  let policy = match
+    @walyze.analyze_component_root_policy(bytes, resolved_wit~) {
+    Ok(v) => v
+    Err(msg) => {
+      println("component-dce-kpi root policy failed: " + msg)
+      @sys.exit(1)
+      return
+    }
+  }
+  let roots = policy.root_name_candidates.copy()
+  roots.append(parse_closed_world_roots(args, 3)[:])
+  roots.sort()
+  roots.dedup()
+  let config = @walyze.make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    pass_rounds=1U,
+    enable_peephole=false,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=true,
+    closed_world=true,
+    closed_world_root_exports=roots,
+    safe_mode~,
+  )
+  match @walyze.analyze_component_core_optimize(bytes, config~) {
+    Ok(report) => {
+      println("component dce kpi:")
+      println(
+        "  total_component_bytes: " + report.total_component_bytes.to_string(),
+      )
+      println("  core_module_count: " + report.core_module_count.to_string())
+      println(
+        "  total_core_before_bytes: " +
+        report.total_core_before_bytes.to_string(),
+      )
+      println(
+        "  total_core_after_bytes: " + report.total_core_after_bytes.to_string(),
+      )
+      println("  root_count: " + roots.length().to_string())
+      for entry in report.entries {
+        println(
+          "  core module #" +
+          entry.module_index.to_string() +
+          " " +
+          entry.before_bytes.to_string() +
+          " -> " +
+          entry.after_bytes.to_string() +
+          " bytes",
+        )
+      }
+      println(
+        "kpi-total-component-bytes=" + report.total_component_bytes.to_string(),
+      )
+      println(
+        "kpi-total-core-before-bytes=" +
+        report.total_core_before_bytes.to_string(),
+      )
+      println(
+        "kpi-total-core-after-bytes=" +
+        report.total_core_after_bytes.to_string(),
+      )
+      println("kpi-core-module-count=" + report.core_module_count.to_string())
+      println("kpi-root-count=" + roots.length().to_string())
+    }
+    Err(msg) => {
+      println("component-dce-kpi failed: " + msg)
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
 fn run_contract(component_path : String, wit_path : String) -> Unit {
   let bytes = read_bytes_or_exit(component_path)
   match @wit.resolve_path(wit_path) {
@@ -777,6 +891,7 @@ fn main {
       }
       run_component_callgraph(args[2], limit)
     }
+    "component-dce-kpi" => run_component_dce_kpi(args)
     "contract" => {
       if args.length() < 4 {
         print_usage()

@@ -394,6 +394,23 @@ pub struct ComponentCallGraphReport {
 }
 
 ///|
+pub struct ComponentCoreOptimizeEntry {
+  module_index : UInt
+  before_bytes : UInt
+  after_bytes : UInt
+  removed_sections : Array[String]
+}
+
+///|
+pub struct ComponentCoreOptimizeReport {
+  total_component_bytes : UInt
+  core_module_count : UInt
+  total_core_before_bytes : UInt
+  total_core_after_bytes : UInt
+  entries : Array[ComponentCoreOptimizeEntry]
+}
+
+///|
 pub struct ContractReport {
   component_imports : Array[String]
   component_exports : Array[String]
@@ -6489,6 +6506,49 @@ pub fn analyze_component_call_graphs(
     reports.push({ module_index: i.reinterpret_as_uint(), graph })
   }
   Ok(reports)
+}
+
+///|
+pub fn analyze_component_core_optimize(
+  bytes : Bytes,
+  config? : OptimizeConfig = OptimizeConfig::default(),
+) -> Result[ComponentCoreOptimizeReport, String] {
+  let detail = match @mwac_component.parse_component_detail(bytes) {
+    Ok(v) => v
+    Err(e) => return Err("component detail parse failed: " + e.to_string())
+  }
+  let entries : Array[ComponentCoreOptimizeEntry] = []
+  let mut total_core_before_bytes = 0U
+  let mut total_core_after_bytes = 0U
+  for i in 0..<detail.core_modules.length() {
+    let core_bytes = detail.core_modules[i]
+    let before_bytes = core_bytes.length().reinterpret_as_uint()
+    let optimized = match optimize_for_size(core_bytes, config~) {
+      Ok(v) => v
+      Err(e) =>
+        return Err(
+          "core module optimize failed at index " +
+          i.to_string() +
+          ": " +
+          walyze_error_to_string(e),
+        )
+    }
+    total_core_before_bytes += before_bytes
+    total_core_after_bytes += optimized.after_size
+    entries.push({
+      module_index: i.reinterpret_as_uint(),
+      before_bytes,
+      after_bytes: optimized.after_size,
+      removed_sections: optimized.removed_sections,
+    })
+  }
+  Ok({
+    total_component_bytes: bytes.length().reinterpret_as_uint(),
+    core_module_count: detail.core_modules.length().reinterpret_as_uint(),
+    total_core_before_bytes,
+    total_core_after_bytes,
+    entries,
+  })
 }
 
 ///|

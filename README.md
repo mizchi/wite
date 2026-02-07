@@ -42,6 +42,7 @@ just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features 
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
 just run -- component-callgraph path/to/component.wasm 20
+just run -- component-dce-kpi path/to/component.wasm path/to/wit-dir
 just run -- contract path/to/component.wasm path/to/wit-dir
 just run -- root-policy path/to/component.wasm path/to/wit-dir
 ```
@@ -84,6 +85,7 @@ just info      # generate .mbti
 
 - `core/binaryen`: Binaryen 由来の core wasm サンプル
 - `component/wac`: wac 由来の component wasm サンプル
+- `component-dce/mwac`: component-model DCE KPI 専用の component サンプル
 
 同期定義は `bench/corpus/manifest.tsv` で、`just bench-sync` で commit 固定 + sha256 検証付きで再取得できます。
 

@@ -24,6 +24,9 @@ repo_url() {
     wac)
       echo "https://raw.githubusercontent.com/bytecodealliance/wac/$commit/$path"
       ;;
+    mwac)
+      echo "https://raw.githubusercontent.com/mizchi/mwac/$commit/$path"
+      ;;
     *)
       echo "unknown repo: $repo" >&2
       return 1

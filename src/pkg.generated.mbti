@@ -12,6 +12,8 @@ pub fn analyze_component_call_graphs(Bytes) -> Result[Array[ComponentCallGraphRe
 
 pub fn analyze_component_contract(Bytes, @wit.ResolveInput) -> Result[ContractReport, String]
 
+pub fn analyze_component_core_optimize(Bytes, config? : OptimizeConfig) -> Result[ComponentCoreOptimizeReport, String]
+
 pub fn analyze_component_function_sizes(Bytes) -> Result[Array[ComponentFunctionSizeReport], String]
 
 pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput?) -> Result[ComponentRootPolicyReport, String]
@@ -70,6 +72,21 @@ pub struct CallGraphReport {
 pub struct ComponentCallGraphReport {
   module_index : UInt
   graph : CallGraphReport
+}
+
+pub struct ComponentCoreOptimizeEntry {
+  module_index : UInt
+  before_bytes : UInt
+  after_bytes : UInt
+  removed_sections : Array[String]
+}
+
+pub struct ComponentCoreOptimizeReport {
+  total_component_bytes : UInt
+  core_module_count : UInt
+  total_core_before_bytes : UInt
+  total_core_after_bytes : UInt
+  entries : Array[ComponentCoreOptimizeEntry]
 }
 
 pub struct ComponentFunctionSizeReport {

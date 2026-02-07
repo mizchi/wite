@@ -49,4 +49,5 @@ component-model DCE の強みを活かすため、`wasm-opt` 互換よりも **c
 
 - [x] ベンチセット（component + core）初版を整備する（Binaryen/wac fixture + `moon bench` 導線）
 - [x] KPI を明文化する（優先順: サイズ削減率 > 実行時間、`bench/KPI.md` + `just kpi`）
+- [x] component-model DCE KPI 専用 corpus を追加する（`bench/corpus/component-dce/mwac`）
 - [ ] 各 pass に Red/Green テストを追加し、回帰防止を徹底する

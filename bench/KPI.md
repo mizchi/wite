@@ -16,6 +16,17 @@
   - 値が大きいほど良い
   - 既存値からの悪化を回帰とみなす
 
+### component-model DCE 専用（第一KPI）
+
+- 指標: `size_reduction_ratio_component_dce_core_modules`
+- 定義:
+  - 対象: `bench/corpus/component-dce/**/*.wasm`
+  - 実行: `component-dce-kpi`（closed-world root policy + core module DCE）
+  - 算出: `(sum(core_before_bytes) - sum(core_after_bytes)) / sum(core_before_bytes)`
+- 判定:
+  - 値が大きいほど良い
+  - 既存値からの悪化を回帰とみなす
+
 ## 第二KPI: 実行速度
 
 - 指標: `moon_bench_mean`
@@ -37,5 +48,6 @@ just kpi
 
 - `bench/kpi/latest.md`: 人間向けサマリ
 - `bench/kpi/size.tsv`: サイズKPIの明細
+- `bench/kpi/component_dce.tsv`: component-model DCE サイズKPIの明細
 - `bench/kpi/runtime.tsv`: 速度KPIの明細
 - `bench/kpi/bench.raw.log`: `moon bench` の生ログ

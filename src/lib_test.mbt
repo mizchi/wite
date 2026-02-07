@@ -70,6 +70,40 @@ fn bench_component_corpus_paths() -> Array[String] {
 }
 
 ///|
+fn bench_component_dce_corpus_paths() -> Array[String] {
+  [
+    "bench/corpus/component-dce/mwac/hello.component.wasm", "bench/corpus/component-dce/mwac/wac_hello.wasm",
+    "bench/corpus/component-dce/mwac/wac_greeter.wasm",
+  ]
+}
+
+///|
+fn component_dce_kpi_optimize_config(roots : Array[String]) -> OptimizeConfig {
+  make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    pass_rounds=1U,
+    enable_peephole=false,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=true,
+    closed_world=true,
+    closed_world_root_exports=roots,
+    safe_mode=false,
+  )
+}
+
+///|
 fn sample_module_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -2116,5 +2150,53 @@ test "bench corpus component fixtures are parseable as component wasm" {
       return
     }
     assert_true(profile.total_bytes > 0U)
+  }
+}
+
+///|
+test "component dce corpus fixtures are parseable as component wasm" {
+  for path in bench_component_dce_corpus_paths() {
+    let bytes = @fs.read_file_to_bytes(path) catch {
+      _ => {
+        inspect(path, content="missing")
+        assert_true(false)
+        return
+      }
+    }
+    guard profile_component(bytes) is Ok(profile) else {
+      inspect(path, content="component parse failed")
+      assert_true(false)
+      return
+    }
+    assert_true(profile.total_bytes > 0U)
+  }
+}
+
+///|
+test "component dce corpus can run component core optimize kpi config" {
+  for path in bench_component_dce_corpus_paths() {
+    let bytes = @fs.read_file_to_bytes(path) catch {
+      _ => {
+        inspect(path, content="missing")
+        assert_true(false)
+        return
+      }
+    }
+    guard analyze_component_root_policy(bytes) is Ok(policy) else {
+      inspect(path, content="root policy failed")
+      assert_true(false)
+      return
+    }
+    let config = component_dce_kpi_optimize_config(policy.root_name_candidates)
+    guard analyze_component_core_optimize(bytes, config~) is Ok(report) else {
+      inspect(path, content="component core optimize failed")
+      assert_true(false)
+      return
+    }
+    assert_eq(
+      report.entries.length().reinterpret_as_uint(),
+      report.core_module_count,
+    )
+    assert_true(report.total_core_after_bytes <= report.total_core_before_bytes)
   }
 }
