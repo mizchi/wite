@@ -28,6 +28,16 @@
   - `size.tsv` と `latest.md` に `walyze` との差分（bytes / ratio）を併記
   - `wasm-opt` がない環境では `NA` として継続実行
 
+### wasm-opt gap 判定スコープ（固定）
+
+- 主要 gap 判定:
+  - 対象: `bench/corpus/core/binaryen/*.wasm` から `gc_target_feature.wasm` を除外
+  - 理由: GC feature 由来の乖離が大きく、core size 主戦場の比較ノイズになるため
+  - レポート: `latest.md` の `total_*` / `gap_to_wasm_opt_*` はこの主要スコープで集計
+- 参考 gap（全件）:
+  - 対象: core corpus 全件（`gc_target_feature.wasm` を含む）
+  - レポート: `latest.md` の `reference_*` に併記し、トレンド監視に使う
+
 ### component-model DCE 専用（第一KPI）
 
 - 指標: `size_reduction_ratio_component_dce_core_modules`

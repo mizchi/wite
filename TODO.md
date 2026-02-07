@@ -2,19 +2,20 @@
 
 ## KPI Snapshot (2026-02-07)
 
-- core size KPI (`optimize -O1`): `171396 -> 70795 bytes` (`58.6951%`)
-- wasm-opt 参考値 (`-Oz --all-features --strip-debug --strip-dwarf --strip-target-features`): `171396 -> 66254 bytes` (`61.3445%`)
-- gap to wasm-opt: `4541 bytes` (`-2.6494pt`)
+- core size KPI (`optimize -O1`, 主要 gap 判定 / `gc_target_feature.wasm` 除外): `171361 -> 70794 bytes` (`58.6872%`)
+- wasm-opt 参考値 (`-Oz --all-features --strip-debug --strip-dwarf --strip-target-features`, 同スコープ): `171361 -> 66296 bytes` (`61.3121%`)
+- gap to wasm-opt (主要): `4498 bytes` (`-2.6249pt`)
+- gap to wasm-opt (参考: 全 core corpus): `4541 bytes` (`-2.6486pt`)
 - component-model DCE KPI: `128170 -> 64046 bytes` (`50.0304%`)
-- directize→DCE→RUME 診断: `success_files=6/7`, `dce_gain=1614 bytes`, `rume_gain=11 bytes`, `directize_calls_total=0`
+- directize→DCE→RUME 診断: `success_files=7/8`, `dce_gain=1620 bytes`, `rume_gain=26 bytes`, `directize_calls_total=1`
 
 上記より、当面は **core size の wasm-opt ギャップ解消** を最優先にしつつ、差別化軸である **closed-world + GC 最適化** を次優先で進める。
 
 ## Next Up (2026-02-07)
 
-- [ ] N2 (P0): `gc_target_feature.wasm` を主要 gap 判定に含める方針を確定し、KPI 集計ルールを固定する
-- [ ] N6 (P3): directize が効く corpus / fixture（`directize_calls_total > 0`）を追加して、連鎖KPIを有効化する
 - [ ] N5 (P2): GC hierarchy を考慮した `type-refining` に着手し、closed-world と組み合わせた差分を測る
+- [ ] N8 (P3): `remove-unused-module-elements` と index rewrite の境界テストを拡充する
+- [ ] N9 (Guardrails): `mwac` 連携点の bytes I/O 契約（入出力）を文書化する
 
 ## Architecture Guardrails（mwac / walyze）
 
@@ -32,7 +33,7 @@
 - [x] `zlib.wasm` 向け `optimize-instructions` を拡張する（bitwise/cmp の追加簡約）
 - [x] 小型 fixture（`br_to_exit`, `elided-br`, `complexBinaryNames`）での pass 適用漏れを潰す
 - [x] `gc_target_feature.wasm` の `wasm-opt` 比較注記を KPI に反映する
-- [ ] `gc_target_feature.wasm` を主要 gap 判定に含めるか（参考値扱いにするか）方針を確定する
+- [x] `gc_target_feature.wasm` は主要 gap 判定から除外し、参考値（`reference_*`）として併記する方針に固定する
 
 ## P1: Closed-World 基盤
 
@@ -56,7 +57,7 @@
 
 - [x] `directize` 相当を導入する（`i32.const + call_indirect` の安全な直接化）
 - [x] directize 後に DCE / RUME が追加で効くことを検証する（KPI 可視化を追加）
-- [ ] directize が効く core corpus を追加し、`directize_calls_total > 0` を継続観測できるようにする
+- [x] directize が効く core corpus を追加し、`directize_calls_total > 0` を継続観測できるようにする
 - [x] RUME が効く core corpus を追加し、`rume_gain_bytes > 0` を継続観測できるようにする
 - [ ] `remove-unused-module-elements` と index rewrite の境界テストを拡充する
 

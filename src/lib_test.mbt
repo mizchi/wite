@@ -2444,6 +2444,77 @@ test "kpi rume gain fixture has positive post-dce to post-rume delta" {
 }
 
 ///|
+test "kpi directize gain fixture records directize call rewrite" {
+  let bytes = @fs.read_file_to_bytes(
+    "bench/corpus/core/binaryen/directize_gain_fixture.wasm",
+  ) catch {
+    _ => {
+      assert_true(false)
+      return
+    }
+  }
+  let pre_config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=true,
+    strip_producers_section=true,
+    strip_debug_sections=true,
+    strip_dwarf_sections=true,
+    strip_target_features_section=true,
+    pass_rounds=2U,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  let post_dce_config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=true,
+    strip_producers_section=true,
+    strip_debug_sections=true,
+    strip_dwarf_sections=true,
+    strip_target_features_section=true,
+    pass_rounds=2U,
+    enable_dce=true,
+    enable_dfe=true,
+    enable_merge_similar_functions=true,
+    enable_remove_unused_module_elements=false,
+  )
+  let post_rume_config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=true,
+    strip_producers_section=true,
+    strip_debug_sections=true,
+    strip_dwarf_sections=true,
+    strip_target_features_section=true,
+    pass_rounds=2U,
+    enable_dce=true,
+    enable_dfe=true,
+    enable_merge_similar_functions=true,
+    enable_remove_unused_module_elements=true,
+  )
+
+  guard optimize_for_size(bytes, config=pre_config) is Ok(pre) else {
+    assert_true(false)
+    return
+  }
+  guard optimize_for_size(bytes, config=post_dce_config) is Ok(post_dce) else {
+    assert_true(false)
+    return
+  }
+  guard optimize_for_size(bytes, config=post_rume_config) is Ok(post_rume) else {
+    assert_true(false)
+    return
+  }
+
+  assert_true(post_dce.after_size < pre.after_size)
+  assert_true(
+    post_dce.removed_sections.any(s => s.contains("directize:calls:1")),
+  )
+  assert_true(post_rume.after_size <= post_dce.after_size)
+  assert_true(runtime_zero_arg_export_behaviors_equal(bytes, post_rume.bytes))
+}
+
+///|
 test "optimize with dfe apply merges duplicate functions" {
   let bytes = sample_module_with_duplicate_functions_bytes()
   guard profile_module(bytes) is Ok(before_profile) else {

@@ -17,6 +17,11 @@ WASM_OPT_ARGS=(
   --strip-dwarf
   --strip-target-features
 )
+PRIMARY_GAP_EXCLUDED_BASENAMES=(
+  "gc_target_feature.wasm"
+)
+PRIMARY_GAP_SCOPE="core corpus excluding gc_target_feature.wasm"
+REFERENCE_GAP_SCOPE="all core corpus files (includes gc_target_feature.wasm)"
 
 if [[ -z "$WASM_OPT_BIN" ]]; then
   WASM_OPT_BIN="$(command -v wasm-opt || true)"
@@ -44,11 +49,18 @@ echo -e "file\tbefore_bytes\tpre_dce_after_bytes\tpost_dce_after_bytes\tpost_rum
 total_before=0
 total_after=0
 core_file_count=0
+primary_gap_before=0
+primary_gap_after=0
+primary_gap_file_count=0
 
 wasm_opt_total_before=0
 wasm_opt_total_walyze_after=0
 wasm_opt_total_after=0
 wasm_opt_success_files=0
+primary_gap_wasm_opt_total_before=0
+primary_gap_wasm_opt_total_walyze_after=0
+primary_gap_wasm_opt_total_after=0
+primary_gap_wasm_opt_success_files=0
 
 directize_total_before=0
 directize_total_pre_dce_after=0
@@ -63,6 +75,14 @@ directize_success_files=0
 while IFS= read -r file; do
   core_file_count=$((core_file_count + 1))
   rel="${file#$ROOT_DIR/}"
+  base="$(basename "$file")"
+  primary_gap_included=1
+  for excluded in "${PRIMARY_GAP_EXCLUDED_BASENAMES[@]}"; do
+    if [[ "$base" == "$excluded" ]]; then
+      primary_gap_included=0
+      break
+    fi
+  done
   line="$(
     moon run src/main --target js -- optimize "$rel" "$tmp_wasm" -O1 2>&1 |
       awk '/^optimized: / { print; exit }'
@@ -159,6 +179,12 @@ while IFS= read -r file; do
         wasm_opt_total_walyze_after=$((wasm_opt_total_walyze_after + after))
         wasm_opt_total_after=$((wasm_opt_total_after + wasm_opt_after))
         wasm_opt_success_files=$((wasm_opt_success_files + 1))
+        if [[ "$primary_gap_included" -eq 1 ]]; then
+          primary_gap_wasm_opt_total_before=$((primary_gap_wasm_opt_total_before + before))
+          primary_gap_wasm_opt_total_walyze_after=$((primary_gap_wasm_opt_total_walyze_after + after))
+          primary_gap_wasm_opt_total_after=$((primary_gap_wasm_opt_total_after + wasm_opt_after))
+          primary_gap_wasm_opt_success_files=$((primary_gap_wasm_opt_success_files + 1))
+        fi
       else
         wasm_opt_status="invalid-output"
         wasm_opt_after="NA"
@@ -173,6 +199,11 @@ while IFS= read -r file; do
 
   total_before=$((total_before + before))
   total_after=$((total_after + after))
+  if [[ "$primary_gap_included" -eq 1 ]]; then
+    primary_gap_before=$((primary_gap_before + before))
+    primary_gap_after=$((primary_gap_after + after))
+    primary_gap_file_count=$((primary_gap_file_count + 1))
+  fi
   if [[ "$directize_status" == "ok" ]]; then
     directize_total_before=$((directize_total_before + pre_dce_before))
     directize_total_pre_dce_after=$((directize_total_pre_dce_after + pre_dce_after))
@@ -191,11 +222,22 @@ wasm_opt_total_ratio_pct="NA"
 wasm_opt_total_walyze_ratio_pct="NA"
 wasm_opt_total_gap_bytes="NA"
 wasm_opt_total_gap_ratio_pct="NA"
+primary_gap_ratio_pct="$(awk -v b="$primary_gap_before" -v a="$primary_gap_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+primary_gap_wasm_opt_ratio_pct="NA"
+primary_gap_wasm_opt_walyze_ratio_pct="NA"
+primary_gap_to_wasm_opt_bytes="NA"
+primary_gap_to_wasm_opt_ratio_pct="NA"
 if [[ "$wasm_opt_success_files" -gt 0 ]]; then
   wasm_opt_total_ratio_pct="$(awk -v b="$wasm_opt_total_before" -v a="$wasm_opt_total_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
   wasm_opt_total_walyze_ratio_pct="$(awk -v b="$wasm_opt_total_before" -v a="$wasm_opt_total_walyze_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
   wasm_opt_total_gap_bytes=$((wasm_opt_total_walyze_after - wasm_opt_total_after))
   wasm_opt_total_gap_ratio_pct="$(awk -v w="$wasm_opt_total_walyze_ratio_pct" -v o="$wasm_opt_total_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
+fi
+if [[ "$primary_gap_wasm_opt_success_files" -gt 0 ]]; then
+  primary_gap_wasm_opt_ratio_pct="$(awk -v b="$primary_gap_wasm_opt_total_before" -v a="$primary_gap_wasm_opt_total_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+  primary_gap_wasm_opt_walyze_ratio_pct="$(awk -v b="$primary_gap_wasm_opt_total_before" -v a="$primary_gap_wasm_opt_total_walyze_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+  primary_gap_to_wasm_opt_bytes=$((primary_gap_wasm_opt_total_walyze_after - primary_gap_wasm_opt_total_after))
+  primary_gap_to_wasm_opt_ratio_pct="$(awk -v w="$primary_gap_wasm_opt_walyze_ratio_pct" -v o="$primary_gap_wasm_opt_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
 fi
 
 directize_total_post_rume_reduction_ratio_pct="$(awk -v b="$directize_total_before" -v a="$directize_total_post_rume_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
@@ -287,20 +329,33 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo
   echo "## Size KPI (priority 1)"
   echo
-  echo "- total_before_bytes: $total_before"
-  echo "- total_after_bytes: $total_after"
-  echo "- total_reduction_ratio_pct: $total_ratio_pct"
+  echo "- primary_gap_scope: $PRIMARY_GAP_SCOPE"
+  echo "- primary_gap_excluded_files: ${PRIMARY_GAP_EXCLUDED_BASENAMES[*]}"
+  echo "- total_before_bytes: $primary_gap_before"
+  echo "- total_after_bytes: $primary_gap_after"
+  echo "- total_reduction_ratio_pct: $primary_gap_ratio_pct"
   if [[ "$HAS_WASM_OPT" -eq 1 ]]; then
     echo "- wasm_opt_reference: \`$WASM_OPT_BIN ${WASM_OPT_ARGS[*]}\`"
   else
     echo '- wasm_opt_reference: unavailable (`wasm-opt` not found; install Binaryen or set `WASM_OPT_BIN`)'
   fi
-  echo "- wasm_opt_success_files: $wasm_opt_success_files/$core_file_count"
+  echo "- wasm_opt_success_files: $primary_gap_wasm_opt_success_files/$primary_gap_file_count"
+  if [[ "$primary_gap_wasm_opt_success_files" -gt 0 ]]; then
+    echo "- wasm_opt_total_after_bytes: $primary_gap_wasm_opt_total_after"
+    echo "- wasm_opt_total_reduction_ratio_pct: $primary_gap_wasm_opt_ratio_pct"
+    echo "- gap_to_wasm_opt_bytes: $primary_gap_to_wasm_opt_bytes"
+    echo "- gap_to_wasm_opt_ratio_pct: $primary_gap_to_wasm_opt_ratio_pct"
+  fi
+  echo "- reference_scope: $REFERENCE_GAP_SCOPE"
+  echo "- reference_total_before_bytes: $total_before"
+  echo "- reference_total_after_bytes: $total_after"
+  echo "- reference_total_reduction_ratio_pct: $total_ratio_pct"
+  echo "- reference_wasm_opt_success_files: $wasm_opt_success_files/$core_file_count"
   if [[ "$wasm_opt_success_files" -gt 0 ]]; then
-    echo "- wasm_opt_total_after_bytes: $wasm_opt_total_after"
-    echo "- wasm_opt_total_reduction_ratio_pct: $wasm_opt_total_ratio_pct"
-    echo "- gap_to_wasm_opt_bytes: $wasm_opt_total_gap_bytes"
-    echo "- gap_to_wasm_opt_ratio_pct: $wasm_opt_total_gap_ratio_pct"
+    echo "- reference_wasm_opt_total_after_bytes: $wasm_opt_total_after"
+    echo "- reference_wasm_opt_total_reduction_ratio_pct: $wasm_opt_total_ratio_pct"
+    echo "- reference_gap_to_wasm_opt_bytes: $wasm_opt_total_gap_bytes"
+    echo "- reference_gap_to_wasm_opt_ratio_pct: $wasm_opt_total_gap_ratio_pct"
   fi
   echo
   echo "| file | before_bytes | walyze_after_bytes | walyze_reduction_ratio_pct | wasm_opt_after_bytes | wasm_opt_reduction_ratio_pct | gap_to_wasm_opt_bytes | gap_to_wasm_opt_ratio_pct | wasm_opt_status |"
