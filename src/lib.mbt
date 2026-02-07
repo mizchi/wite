@@ -37,8 +37,12 @@ pub struct OptimizeConfig {
   enable_peephole : Bool
   peephole_remove_nop : Bool
   peephole_remove_const_drop : Bool
+  enable_vacuum : Bool
+  enable_merge_blocks : Bool
+  enable_remove_unused_brs : Bool
   enable_dce : Bool
   enable_dfe : Bool
+  enable_merge_similar_functions : Bool
 }
 
 ///|
@@ -51,8 +55,12 @@ pub fn OptimizeConfig::default() -> Self {
     enable_peephole: true,
     peephole_remove_nop: true,
     peephole_remove_const_drop: true,
+    enable_vacuum: true,
+    enable_merge_blocks: true,
+    enable_remove_unused_brs: true,
     enable_dce: false,
     enable_dfe: false,
+    enable_merge_similar_functions: false,
   }
 }
 
@@ -66,8 +74,12 @@ pub fn OptimizeConfig::aggressive() -> Self {
     enable_peephole: true,
     peephole_remove_nop: true,
     peephole_remove_const_drop: true,
+    enable_vacuum: true,
+    enable_merge_blocks: true,
+    enable_remove_unused_brs: true,
     enable_dce: false,
     enable_dfe: false,
+    enable_merge_similar_functions: false,
   }
 }
 
@@ -80,8 +92,12 @@ pub fn make_optimize_config(
   enable_peephole? : Bool = true,
   peephole_remove_nop? : Bool = true,
   peephole_remove_const_drop? : Bool = true,
+  enable_vacuum? : Bool = true,
+  enable_merge_blocks? : Bool = true,
+  enable_remove_unused_brs? : Bool = true,
   enable_dce? : Bool = false,
   enable_dfe? : Bool = false,
+  enable_merge_similar_functions? : Bool = false,
 ) -> OptimizeConfig {
   {
     strip_all_custom,
@@ -91,8 +107,12 @@ pub fn make_optimize_config(
     enable_peephole,
     peephole_remove_nop,
     peephole_remove_const_drop,
+    enable_vacuum,
+    enable_merge_blocks,
+    enable_remove_unused_brs,
     enable_dce,
     enable_dfe,
+    enable_merge_similar_functions,
   }
 }
 
@@ -633,6 +653,41 @@ fn parse_import_function_count(payload : Bytes) -> UInt raise WalyzeError {
     }
   }
   function_import_count
+}
+
+///|
+fn parse_import_function_type_indices(
+  payload : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[UInt] = []
+  for _ in 0U..<count {
+    ignore(read_name_string(parser))
+    ignore(read_name_string(parser))
+    let kind = parser.read_byte().to_uint()
+    match kind {
+      0x00U => out.push(parser.read_u32_leb128())
+      0x01U => {
+        skip_heap_type(parser)
+        parse_limits(parser)
+      }
+      0x02U => parse_limits(parser)
+      0x03U => {
+        ignore(parser.read_byte())
+        ignore(parser.read_byte())
+      }
+      0x04U => {
+        ignore(parser.read_byte())
+        ignore(parser.read_u32_leb128())
+      }
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported import descriptor kind: " + kind.to_string(),
+        )
+    }
+  }
+  out
 }
 
 ///|
@@ -1184,12 +1239,39 @@ fn is_const_opcode(opcode : UInt) -> Bool {
 }
 
 ///|
-fn optimize_instruction_bytes(
-  instr_bytes : Bytes,
+fn is_block_start_opcode(opcode : UInt) -> Bool {
+  opcode == 0x02U || opcode == 0x03U || opcode == 0x04U
+}
+
+///|
+fn is_branch_opcode(opcode : UInt) -> Bool {
+  opcode == 0x0cU || opcode == 0x0dU || opcode == 0x0eU
+}
+
+///|
+fn decode_span_u32_immediate(instr_bytes : Bytes, span : InstrSpan) -> UInt? {
+  if span.end_ <= span.start + 1 {
+    return None
+  }
+  let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+  decode_u32_leb128_bytes(imm)
+}
+
+///|
+fn instr_spans_to_bytes(instr_bytes : Bytes, spans : Array[InstrSpan]) -> Bytes {
+  let out : Array[Byte] = []
+  for span in spans {
+    out.append(instr_bytes[span.start:span.end_].to_array())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn apply_basic_peephole_to_spans(
   spans : Array[InstrSpan],
   config : OptimizeConfig,
-) -> Bytes {
-  let out : Array[Byte] = []
+) -> Array[InstrSpan] {
+  let out : Array[InstrSpan] = []
   let mut i = 0
   while i < spans.length() {
     let span = spans[i]
@@ -1204,10 +1286,166 @@ fn optimize_instruction_bytes(
       i += 2
       continue
     }
-    out.append(instr_bytes[span.start:span.end_].to_array())
+    out.push(span)
     i += 1
   }
-  Bytes::from_array(out[:])
+  out
+}
+
+///|
+fn apply_vacuum_to_spans(spans : Array[InstrSpan]) -> Array[InstrSpan] {
+  let out : Array[InstrSpan] = []
+  let mut dead = false
+  let mut dead_depth = 0
+  for span in spans {
+    if dead {
+      match span.opcode {
+        0x02U | 0x03U | 0x04U => dead_depth += 1
+        0x05U =>
+          if dead_depth == 0 {
+            out.push(span)
+            dead = false
+          }
+        0x0bU =>
+          if dead_depth == 0 {
+            out.push(span)
+            dead = false
+          } else {
+            dead_depth -= 1
+          }
+        _ => ()
+      }
+      continue
+    }
+    out.push(span)
+    if span.opcode == 0x00U || span.opcode == 0x0fU || span.opcode == 0x0cU {
+      dead = true
+      dead_depth = 0
+    }
+  }
+  out
+}
+
+///|
+fn compute_matching_end_indices(spans : Array[InstrSpan]) -> Map[Int, Int] {
+  let out : Map[Int, Int] = {}
+  let stack : Array[Int] = []
+  for i in 0..<spans.length() {
+    let opcode = spans[i].opcode
+    if is_block_start_opcode(opcode) {
+      stack.push(i)
+    } else if opcode == 0x0bU && stack.length() > 0 {
+      let start = stack[stack.length() - 1]
+      ignore(stack.pop())
+      out.set(start, i)
+    }
+  }
+  out
+}
+
+///|
+fn has_branch_between(
+  spans : Array[InstrSpan],
+  start : Int,
+  end_ : Int,
+) -> Bool {
+  for i in start..<end_ {
+    if is_branch_opcode(spans[i].opcode) {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn apply_merge_blocks_to_spans(spans : Array[InstrSpan]) -> Array[InstrSpan] {
+  let matching_end = compute_matching_end_indices(spans)
+  let remove : Array[Bool] = []
+  for _ in 0..<spans.length() {
+    remove.push(false)
+  }
+  for i in 0..<spans.length() {
+    let opcode = spans[i].opcode
+    if opcode == 0x02U || opcode == 0x03U {
+      match matching_end.get(i) {
+        Some(end_index) =>
+          if not(has_branch_between(spans, i + 1, end_index)) {
+            remove[i] = true
+            remove[end_index] = true
+          }
+        None => ()
+      }
+    }
+  }
+  let out : Array[InstrSpan] = []
+  for i in 0..<spans.length() {
+    if not(remove[i]) {
+      out.push(spans[i])
+    }
+  }
+  out
+}
+
+///|
+fn apply_remove_unused_brs_to_spans(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> Array[InstrSpan] {
+  let out : Array[InstrSpan] = []
+  let label_stack : Array[Int] = [1]
+  for i in 0..<spans.length() {
+    let span = spans[i]
+    let top_label = if label_stack.length() > 0 {
+      label_stack[label_stack.length() - 1]
+    } else {
+      1
+    }
+    let mut remove_current = false
+    if span.opcode == 0x0cU &&
+      i + 1 < spans.length() &&
+      spans[i + 1].opcode == 0x0bU &&
+      top_label != 2 {
+      if decode_span_u32_immediate(instr_bytes, span) is Some(0U) {
+        remove_current = true
+      }
+    }
+    if not(remove_current) {
+      out.push(span)
+    }
+    match span.opcode {
+      0x02U => label_stack.push(1)
+      0x03U => label_stack.push(2)
+      0x04U => label_stack.push(1)
+      0x0bU => if label_stack.length() > 0 { ignore(label_stack.pop()) }
+      _ => ()
+    }
+  }
+  out
+}
+
+///|
+fn optimize_instruction_bytes(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  config : OptimizeConfig,
+) -> Bytes {
+  let mut current = spans.copy()
+  if config.enable_vacuum {
+    current = apply_vacuum_to_spans(current)
+  }
+  if config.peephole_remove_nop || config.peephole_remove_const_drop {
+    current = apply_basic_peephole_to_spans(current, config)
+  }
+  if config.enable_remove_unused_brs {
+    current = apply_remove_unused_brs_to_spans(instr_bytes, current)
+  }
+  if config.enable_merge_blocks {
+    current = apply_merge_blocks_to_spans(current)
+  }
+  if config.enable_vacuum {
+    current = apply_vacuum_to_spans(current)
+  }
+  instr_spans_to_bytes(instr_bytes, current)
 }
 
 ///|
@@ -1378,6 +1616,21 @@ pub fn optimize_for_size(
       }
       if dfe.dropped_name_section {
         removed_sections.push("custom:name(dfe)")
+      }
+    }
+    if config.enable_merge_similar_functions {
+      let msf = apply_merge_similar_functions_raise(optimized_bytes)
+      optimized_bytes = msf.bytes
+      if msf.removed_function_count > 0U {
+        removed_sections.push(
+          "msf:functions:" +
+          msf.removed_function_count.to_string() +
+          " bodies:" +
+          msf.removed_body_bytes.to_string(),
+        )
+      }
+      if msf.dropped_name_section {
+        removed_sections.push("custom:name(msf)")
       }
     }
     {
@@ -1698,6 +1951,14 @@ priv struct DfeApplyResult {
 }
 
 ///|
+priv struct MsfApplyResult {
+  bytes : Bytes
+  removed_function_count : UInt
+  removed_body_bytes : UInt
+  dropped_name_section : Bool
+}
+
+///|
 fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
   if a.length() != b.length() {
     return false
@@ -1708,6 +1969,27 @@ fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
     }
   }
   true
+}
+
+///|
+fn parse_forward_call_target(body_bytes : Bytes) -> UInt? {
+  let prefix_end_result = try? parse_local_decl_prefix_end(body_bytes)
+  let prefix_end = match prefix_end_result {
+    Ok(v) => v
+    Err(_) => return None
+  }
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return None
+  }
+  if spans.length() != 2 {
+    return None
+  }
+  if spans[0].opcode != 0x10U || spans[1].opcode != 0x0bU {
+    return None
+  }
+  decode_span_u32_immediate(instr_bytes, spans[0])
 }
 
 ///|
@@ -1943,6 +2225,210 @@ fn apply_dfe_raise(bytes : Bytes) -> DfeApplyResult raise WalyzeError {
       6U | 9U =>
         raise WalyzeError::InvalidFormat(
           "dfe apply does not yet support global/element sections",
+        )
+      _ =>
+        out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  {
+    bytes: Bytes::from_array(out[:]),
+    removed_function_count,
+    removed_body_bytes,
+    dropped_name_section,
+  }
+}
+
+///|
+fn apply_merge_similar_functions_raise(
+  bytes : Bytes,
+) -> MsfApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut imported_function_type_indices : Array[UInt] = []
+  let mut local_function_type_indices : Array[UInt] = []
+  let mut code_bodies : Array[Bytes] = []
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U =>
+        imported_function_type_indices = parse_import_function_type_indices(
+          payload,
+        )
+      3U => local_function_type_indices = parse_function_type_indices(payload)
+      10U => code_bodies = parse_code_bodies(payload)
+      _ => ()
+    }
+  }
+  if local_function_type_indices.length() != code_bodies.length() {
+    raise WalyzeError::InvalidFormat(
+      "function/code section count mismatch for msf: function=" +
+      local_function_type_indices.length().to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let imported_function_count = imported_function_type_indices
+    .length()
+    .reinterpret_as_uint()
+  let function_type_index_map : Map[UInt, UInt] = {}
+  for i in 0..<imported_function_type_indices.length() {
+    function_type_index_map.set(
+      i.reinterpret_as_uint(),
+      imported_function_type_indices[i],
+    )
+  }
+  for i in 0..<local_function_type_indices.length() {
+    function_type_index_map.set(
+      imported_function_count + i.reinterpret_as_uint(),
+      local_function_type_indices[i],
+    )
+  }
+  let alias_candidate : Map[UInt, UInt] = {}
+  for i in 0..<code_bodies.length() {
+    let old_index = imported_function_count + i.reinterpret_as_uint()
+    match parse_forward_call_target(code_bodies[i]) {
+      Some(target) =>
+        if target != old_index {
+          match
+            (
+              function_type_index_map.get(old_index),
+              function_type_index_map.get(target),
+            ) {
+            (Some(lhs), Some(rhs)) =>
+              if lhs == rhs {
+                alias_candidate.set(old_index, target)
+              }
+            _ => ()
+          }
+        }
+      None => ()
+    }
+  }
+  let keep_local : Array[Bool] = []
+  let resolved_target_for_local : Array[UInt?] = []
+  for i in 0..<local_function_type_indices.length() {
+    let old_index = imported_function_count + i.reinterpret_as_uint()
+    match alias_candidate.get(old_index) {
+      Some(initial_target) => {
+        let seen : Map[UInt, Bool] = {}
+        let mut current = initial_target
+        let mut valid = true
+        while true {
+          if current == old_index {
+            valid = false
+            break
+          }
+          if seen.get(current) is Some(_) {
+            valid = false
+            break
+          }
+          seen.set(current, true)
+          match alias_candidate.get(current) {
+            Some(next) => current = next
+            None => break
+          }
+        }
+        if valid {
+          keep_local.push(false)
+          resolved_target_for_local.push(Some(current))
+        } else {
+          keep_local.push(true)
+          resolved_target_for_local.push(None)
+        }
+      }
+      None => {
+        keep_local.push(true)
+        resolved_target_for_local.push(None)
+      }
+    }
+  }
+  let index_map : Map[UInt, UInt] = {}
+  for i in 0U..<imported_function_count {
+    index_map.set(i, i)
+  }
+  let mut kept_local_count = 0U
+  for i in 0..<keep_local.length() {
+    if keep_local[i] {
+      index_map.set(
+        imported_function_count + i.reinterpret_as_uint(),
+        imported_function_count + kept_local_count,
+      )
+      kept_local_count += 1U
+    }
+  }
+  let mut removed_function_count = 0U
+  let mut removed_body_bytes = 0U
+  for i in 0..<resolved_target_for_local.length() {
+    match resolved_target_for_local[i] {
+      Some(target_old_index) => {
+        let old_index = imported_function_count + i.reinterpret_as_uint()
+        let target_new_index = remap_function_index_raise(
+          target_old_index, index_map,
+        )
+        index_map.set(old_index, target_new_index)
+        removed_function_count += 1U
+        removed_body_bytes += code_bodies[i].length().reinterpret_as_uint()
+      }
+      None => ()
+    }
+  }
+  if removed_function_count == 0U {
+    return {
+      bytes,
+      removed_function_count,
+      removed_body_bytes,
+      dropped_name_section: false,
+    }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  let mut dropped_name_section = false
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      3U =>
+        append_encoded_section(
+          out,
+          3U,
+          rewrite_function_section_payload_for_dce_raise(payload, keep_local),
+        )
+      7U =>
+        append_encoded_section(
+          out,
+          7U,
+          rewrite_export_section_payload_for_dce_raise(payload, index_map),
+        )
+      8U =>
+        append_encoded_section(
+          out,
+          8U,
+          rewrite_start_section_payload_for_dce_raise(payload, index_map),
+        )
+      10U =>
+        append_encoded_section(
+          out,
+          10U,
+          rewrite_code_section_payload_for_dce_raise(
+            payload, keep_local, index_map,
+          ),
+        )
+      0U =>
+        match section.custom_name {
+          Some(name) =>
+            if name == "name" {
+              dropped_name_section = true
+            } else {
+              out.append(
+                bytes[section.section_start:section.section_end].to_array(),
+              )
+            }
+          None =>
+            out.append(
+              bytes[section.section_start:section.section_end].to_array(),
+            )
+        }
+      // Global/Element may contain ref.func references and need extra remap handling.
+      6U | 9U =>
+        raise WalyzeError::InvalidFormat(
+          "merge-similar-functions does not yet support global/element sections",
         )
       _ =>
         out.append(bytes[section.section_start:section.section_end].to_array())

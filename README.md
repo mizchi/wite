@@ -9,7 +9,8 @@ It provides:
 - core wasm call graph + dead-body analysis (export/start roots)
 - core wasm DCE report + apply (callgraph-based function-level pruning)
 - core wasm duplicate function elimination apply (body+type based index remap)
-- size-oriented optimization pass (`wasm-opt`-style custom section stripping + peephole + DCE + DFE)
+- core wasm merge-similar-functions apply (forwarding thunk merge + index remap)
+- size-oriented optimization pass (`wasm-opt`-style custom section stripping + vacuum + merge-blocks + remove-unused-brs + peephole + DCE + DFE + MSF)
 - static module profiler (imports/exports/functions/code-body bytes)
 - runtime profiler for zero-arg exports (call count / total ns / avg ns)
 - component model profiling (`mizchi/mwac` integration)
@@ -26,7 +27,7 @@ just run -- top-functions path/to/module.wasm 20
 just run -- callgraph path/to/module.wasm 20
 just run -- dce-report path/to/module.wasm 20
 just run -- runtime-profile path/to/module.wasm 100
-just run -- optimize in.wasm out.wasm --strip-all-custom --dce-apply --dfe-apply
+just run -- optimize in.wasm out.wasm --strip-all-custom --dce-apply --dfe-apply --msf-apply
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
 just run -- component-callgraph path/to/component.wasm 20

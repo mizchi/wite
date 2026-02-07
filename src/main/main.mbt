@@ -8,7 +8,7 @@ fn print_usage() -> Unit {
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
   println(
-    "  optimize <input.wasm> <output.wasm> [--strip-all-custom] [--keep-custom=<name>] [--no-peephole] [--dce-apply] [--dfe-apply]",
+    "  optimize <input.wasm> <output.wasm> [--strip-all-custom] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--dce-apply] [--dfe-apply] [--msf-apply]",
   )
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
@@ -116,8 +116,12 @@ fn run_optimize(args : Array[String]) -> Unit {
   let output_path = args[3]
   let mut strip_all_custom = false
   let mut enable_peephole = true
+  let mut enable_vacuum = true
+  let mut enable_merge_blocks = true
+  let mut enable_remove_unused_brs = true
   let mut enable_dce = false
   let mut enable_dfe = false
+  let mut enable_merge_similar_functions = false
   for i in 4..<args.length() {
     if args[i] == "--strip-all-custom" {
       strip_all_custom = true
@@ -125,11 +129,23 @@ fn run_optimize(args : Array[String]) -> Unit {
     if args[i] == "--no-peephole" {
       enable_peephole = false
     }
+    if args[i] == "--no-vacuum" {
+      enable_vacuum = false
+    }
+    if args[i] == "--no-merge-blocks" {
+      enable_merge_blocks = false
+    }
+    if args[i] == "--no-remove-unused-brs" {
+      enable_remove_unused_brs = false
+    }
     if args[i] == "--dce-apply" {
       enable_dce = true
     }
     if args[i] == "--dfe-apply" {
       enable_dfe = true
+    }
+    if args[i] == "--msf-apply" {
+      enable_merge_similar_functions = true
     }
   }
   let keep_custom_sections = parse_keep_custom(args, 4)
@@ -137,8 +153,12 @@ fn run_optimize(args : Array[String]) -> Unit {
     strip_all_custom~,
     keep_custom_sections~,
     enable_peephole~,
+    enable_vacuum~,
+    enable_merge_blocks~,
+    enable_remove_unused_brs~,
     enable_dce~,
     enable_dfe~,
+    enable_merge_similar_functions~,
   )
   let bytes = read_bytes_or_exit(input_path)
   match @walyze.optimize_for_size(bytes, config~) {
