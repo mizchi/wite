@@ -34,7 +34,7 @@ component-model DCE の強みを活かすため、`wasm-opt` 互換よりも **c
 
 ## P4: wasm-opt 互換パスの段階移植
 
-- [ ] `optimize-instructions` / `precompute` / `local-cse` を優先移植する
+- [ ] `optimize-instructions` / `precompute` / `local-cse` を優先移植する（precompute: `i32.const+i32.const+i32.add` は実装済み）
 - [ ] `simplify-locals*` / `coalesce-locals` / `rse` を移植する
 - [ ] `inlining-optimizing` / `dae-optimizing` / `duplicate-import-elimination` を検討する
 - [ ] `simplify-globals*` / `reorder-globals` / `memory-packing` を検討する

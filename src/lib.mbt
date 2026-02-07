@@ -3793,10 +3793,70 @@ fn decode_span_u32_immediate(instr_bytes : Bytes, span : InstrSpan) -> UInt? {
 }
 
 ///|
+fn decode_i32_const_small_nonnegative_from_span(
+  instr_bytes : Bytes,
+  span : InstrSpan,
+) -> UInt? {
+  if span.opcode != 0x41U {
+    return None
+  }
+  if span.end_ != span.start + 2 {
+    return None
+  }
+  let value = instr_bytes[span.start + 1].to_uint()
+  if value <= 63U {
+    Some(value)
+  } else {
+    None
+  }
+}
+
+///|
 fn instr_spans_to_bytes(instr_bytes : Bytes, spans : Array[InstrSpan]) -> Bytes {
   let out : Array[Byte] = []
   for span in spans {
     out.append(instr_bytes[span.start:span.end_].to_array())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 2 < spans.length() &&
+      spans[i].opcode == 0x41U &&
+      spans[i + 1].opcode == 0x41U &&
+      spans[i + 2].opcode == 0x6aU {
+      match
+        decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
+        Some(lhs) =>
+          match
+            decode_i32_const_small_nonnegative_from_span(
+              instr_bytes,
+              spans[i + 1],
+            ) {
+            Some(rhs) => {
+              let sum = lhs + rhs
+              if sum <= 63U {
+                out.push(0x41U.to_byte())
+                out.push(sum.to_byte())
+                i += 3
+                continue
+              }
+            }
+            None => ()
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
   }
   Bytes::from_array(out[:])
 }
@@ -3961,9 +4021,16 @@ fn apply_remove_unused_brs_to_spans(
 ///|
 fn optimize_instruction_bytes(
   instr_bytes : Bytes,
-  spans : Array[InstrSpan],
   config : OptimizeConfig,
 ) -> Bytes {
+  let mut current_bytes = instr_bytes
+  if config.peephole_remove_nop || config.peephole_remove_const_drop {
+    current_bytes = apply_precompute_i32_add(current_bytes)
+  }
+  let spans = match parse_instruction_spans(current_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
   let mut current = spans.copy()
   if config.enable_vacuum {
     current = apply_vacuum_to_spans(current)
@@ -3972,7 +4039,7 @@ fn optimize_instruction_bytes(
     current = apply_basic_peephole_to_spans(current, config)
   }
   if config.enable_remove_unused_brs {
-    current = apply_remove_unused_brs_to_spans(instr_bytes, current)
+    current = apply_remove_unused_brs_to_spans(current_bytes, current)
   }
   if config.enable_merge_blocks {
     current = apply_merge_blocks_to_spans(current)
@@ -3980,7 +4047,7 @@ fn optimize_instruction_bytes(
   if config.enable_vacuum {
     current = apply_vacuum_to_spans(current)
   }
-  instr_spans_to_bytes(instr_bytes, current)
+  instr_spans_to_bytes(current_bytes, current)
 }
 
 ///|
@@ -4005,11 +4072,7 @@ fn optimize_code_body_bytes(
     Err(_) => return body_bytes
   }
   let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
-  let spans = match parse_instruction_spans(instr_bytes) {
-    Some(v) => v
-    None => return body_bytes
-  }
-  let optimized_instr = optimize_instruction_bytes(instr_bytes, spans, config)
+  let optimized_instr = optimize_instruction_bytes(instr_bytes, config)
   if optimized_instr.length() >= instr_bytes.length() {
     return body_bytes
   }
