@@ -3774,6 +3774,15 @@ fn is_const_opcode(opcode : UInt) -> Bool {
 }
 
 ///|
+fn is_drop_elidable_producer_opcode(opcode : UInt) -> Bool {
+  is_const_opcode(opcode) ||
+  opcode == 0x20U ||
+  opcode == 0x23U ||
+  opcode == 0xd0U ||
+  opcode == 0xd2U
+}
+
+///|
 fn is_block_start_opcode(opcode : UInt) -> Bool {
   opcode == 0x02U || opcode == 0x03U || opcode == 0x04U
 }
@@ -3809,6 +3818,17 @@ fn decode_i32_const_small_nonnegative_from_span(
   } else {
     None
   }
+}
+
+///|
+fn decode_local_index_immediate_from_span(
+  instr_bytes : Bytes,
+  span : InstrSpan,
+) -> UInt? {
+  if span.opcode != 0x20U && span.opcode != 0x21U && span.opcode != 0x22U {
+    return None
+  }
+  decode_span_u32_immediate(instr_bytes, span)
 }
 
 ///|
@@ -3862,6 +3882,42 @@ fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
 }
 
 ///|
+fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() &&
+      spans[i].opcode == 0x21U &&
+      spans[i + 1].opcode == 0x20U {
+      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
+        Some(set_index) =>
+          match
+            decode_local_index_immediate_from_span(instr_bytes, spans[i + 1]) {
+            Some(get_index) =>
+              if set_index == get_index && spans[i].end_ > spans[i].start + 1 {
+                out.push(0x22U.to_byte())
+                out.append(
+                  instr_bytes[spans[i].start + 1:spans[i].end_].to_array(),
+                )
+                i += 2
+                continue
+              }
+            None => ()
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn apply_basic_peephole_to_spans(
   spans : Array[InstrSpan],
   config : OptimizeConfig,
@@ -3876,7 +3932,7 @@ fn apply_basic_peephole_to_spans(
     }
     if config.peephole_remove_const_drop &&
       i + 1 < spans.length() &&
-      is_const_opcode(span.opcode) &&
+      is_drop_elidable_producer_opcode(span.opcode) &&
       spans[i + 1].opcode == 0x1aU {
       i += 2
       continue
@@ -4026,10 +4082,11 @@ fn optimize_instruction_bytes(
   let mut current_bytes = instr_bytes
   if config.peephole_remove_nop || config.peephole_remove_const_drop {
     current_bytes = apply_precompute_i32_add(current_bytes)
+    current_bytes = apply_simplify_local_set_get_to_tee(current_bytes)
   }
   let spans = match parse_instruction_spans(current_bytes) {
     Some(v) => v
-    None => return instr_bytes
+    None => return current_bytes
   }
   let mut current = spans.copy()
   if config.enable_vacuum {
