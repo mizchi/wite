@@ -200,6 +200,34 @@ fn sample_module_with_fd_memarg_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_dce_reindex_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 3 local functions (indices 0,1,2)
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x00]))
+  // export section: export index 0 as "main"
+  append_section(
+    out,
+    7U,
+    bytes_of([0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00]),
+  )
+  // code section:
+  // #0: call 2, end (size=4)
+  // #1: end (size=2) dead
+  // #2: end (size=2)
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x04, 0x00, 0x10, 0x02, 0x0b, 0x02, 0x00, 0x0b, 0x02, 0x00, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn find_section_size(sections : Array[SectionSize], key : String) -> UInt? {
   for section in sections {
     if section.key == key {
@@ -327,6 +355,58 @@ test "analyze call graph supports fd memarg opcodes" {
   assert_eq(report.reachable_body_bytes, 9U)
   assert_eq(report.dead_body_bytes, 0U)
   assert_eq(report.nodes.length(), 1)
+}
+
+///|
+test "analyze dce report extracts removable functions" {
+  let bytes = sample_module_with_dead_function_bytes()
+  guard analyze_dce_report(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_true(not(report.partial))
+  assert_eq(report.removable_function_count, 1U)
+  assert_eq(report.removable_body_bytes, 5U)
+  assert_eq(report.removable_functions.length(), 1)
+  assert_eq(report.removable_functions[0].function_index, 3U)
+}
+
+///|
+test "optimize with dce apply removes dead and rewrites calls" {
+  let bytes = sample_module_with_dce_reindex_bytes()
+  guard analyze_call_graph(bytes) is Ok(before_graph) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_graph.dead_body_bytes, 2U)
+  assert_eq(before_graph.nodes[0].direct_callees, [2U])
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_dce=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_eq(after_profile.code_body_count, 2U)
+  guard analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_graph.dead_body_bytes, 0U)
+  assert_eq(after_graph.nodes.length(), 2)
+  assert_eq(after_graph.nodes[0].direct_callees, [1U])
 }
 
 ///|

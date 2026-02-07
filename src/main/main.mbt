@@ -5,9 +5,10 @@ fn print_usage() -> Unit {
   println("  profile <core.wasm>")
   println("  top-functions <core.wasm> [limit]")
   println("  callgraph <core.wasm> [limit]")
+  println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
   println(
-    "  optimize <input.wasm> <output.wasm> [--strip-all-custom] [--keep-custom=<name>] [--no-peephole]",
+    "  optimize <input.wasm> <output.wasm> [--strip-all-custom] [--keep-custom=<name>] [--no-peephole] [--dce-apply]",
   )
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
@@ -115,6 +116,7 @@ fn run_optimize(args : Array[String]) -> Unit {
   let output_path = args[3]
   let mut strip_all_custom = false
   let mut enable_peephole = true
+  let mut enable_dce = false
   for i in 4..<args.length() {
     if args[i] == "--strip-all-custom" {
       strip_all_custom = true
@@ -122,12 +124,16 @@ fn run_optimize(args : Array[String]) -> Unit {
     if args[i] == "--no-peephole" {
       enable_peephole = false
     }
+    if args[i] == "--dce-apply" {
+      enable_dce = true
+    }
   }
   let keep_custom_sections = parse_keep_custom(args, 4)
   let config = @walyze.make_optimize_config(
     strip_all_custom~,
     keep_custom_sections~,
     enable_peephole~,
+    enable_dce~,
   )
   let bytes = read_bytes_or_exit(input_path)
   match @walyze.optimize_for_size(bytes, config~) {
@@ -153,6 +159,33 @@ fn run_optimize(args : Array[String]) -> Unit {
     }
     Err(e) => {
       println("optimize failed: " + @walyze.error_to_string(e))
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
+fn run_dce_report(path : String, limit : UInt) -> Unit {
+  let bytes = read_bytes_or_exit(path)
+  match @walyze.analyze_dce_report(bytes) {
+    Ok(report) => {
+      println("dce report:")
+      println("  roots: " + report.roots.map(i => i.to_string()).join(", "))
+      println("  partial: " + report.partial.to_string())
+      println(
+        "  removable_function_count: " +
+        report.removable_function_count.to_string(),
+      )
+      println(
+        "  removable_body_bytes: " + report.removable_body_bytes.to_string(),
+      )
+      if report.removable_functions.length() > 0 {
+        println("  removable_functions:")
+        print_function_sizes(report.removable_functions, limit)
+      }
+    }
+    Err(e) => {
+      println("dce-report failed: " + @walyze.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -485,6 +518,18 @@ fn main {
         20U
       }
       run_callgraph(args[2], limit)
+    }
+    "dce-report" => {
+      if args.length() < 3 {
+        print_usage()
+        @sys.exit(1)
+      }
+      let limit = if args.length() >= 4 {
+        parse_uint_or_exit(args[3], "limit")
+      } else {
+        20U
+      }
+      run_dce_report(args[2], limit)
     }
     "runtime-profile" => {
       if args.length() < 3 {

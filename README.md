@@ -7,6 +7,7 @@ It provides:
 - core wasm section-size analysis (`twiggy`-style breakdown by section)
 - core wasm top-function size analysis (`twiggy top`-style by code body size)
 - core wasm call graph + dead-body analysis (export/start roots)
+- core wasm DCE report + apply (callgraph-based function-level pruning)
 - size-oriented optimization pass (`wasm-opt`-style custom section stripping + peephole)
 - static module profiler (imports/exports/functions/code-body bytes)
 - runtime profiler for zero-arg exports (call count / total ns / avg ns)
@@ -22,8 +23,9 @@ just run -- analyze path/to/module.wasm
 just run -- profile path/to/module.wasm
 just run -- top-functions path/to/module.wasm 20
 just run -- callgraph path/to/module.wasm 20
+just run -- dce-report path/to/module.wasm 20
 just run -- runtime-profile path/to/module.wasm 100
-just run -- optimize in.wasm out.wasm --strip-all-custom
+just run -- optimize in.wasm out.wasm --strip-all-custom --dce-apply
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
 just run -- component-callgraph path/to/component.wasm 20
@@ -37,6 +39,7 @@ Main APIs are in `src/lib.mbt`:
 - `analyze_section_sizes(bytes)`
 - `analyze_function_sizes(bytes)`
 - `analyze_call_graph(bytes)`
+- `analyze_dce_report(bytes)`
 - `optimize_for_size(bytes, config=...)`
 - `profile_module(bytes)`
 - `profile_runtime_zero_arg_exports(bytes, iterations=...)`

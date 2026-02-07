@@ -37,6 +37,7 @@ pub struct OptimizeConfig {
   enable_peephole : Bool
   peephole_remove_nop : Bool
   peephole_remove_const_drop : Bool
+  enable_dce : Bool
 }
 
 ///|
@@ -49,6 +50,7 @@ pub fn OptimizeConfig::default() -> Self {
     enable_peephole: true,
     peephole_remove_nop: true,
     peephole_remove_const_drop: true,
+    enable_dce: false,
   }
 }
 
@@ -62,6 +64,7 @@ pub fn OptimizeConfig::aggressive() -> Self {
     enable_peephole: true,
     peephole_remove_nop: true,
     peephole_remove_const_drop: true,
+    enable_dce: false,
   }
 }
 
@@ -74,6 +77,7 @@ pub fn make_optimize_config(
   enable_peephole? : Bool = true,
   peephole_remove_nop? : Bool = true,
   peephole_remove_const_drop? : Bool = true,
+  enable_dce? : Bool = false,
 ) -> OptimizeConfig {
   {
     strip_all_custom,
@@ -83,6 +87,7 @@ pub fn make_optimize_config(
     enable_peephole,
     peephole_remove_nop,
     peephole_remove_const_drop,
+    enable_dce,
   }
 }
 
@@ -133,6 +138,15 @@ pub struct CallGraphReport {
   reachable_body_bytes : UInt
   dead_body_bytes : UInt
   nodes : Array[CallGraphNode]
+}
+
+///|
+pub struct DceReport {
+  roots : Array[UInt]
+  partial : Bool
+  removable_function_count : UInt
+  removable_body_bytes : UInt
+  removable_functions : Array[FunctionSize]
 }
 
 ///|
@@ -968,6 +982,198 @@ fn collect_direct_callees(
 }
 
 ///|
+fn read_name_bytes(parser : Cursor) -> Bytes raise WalyzeError {
+  let name_len_u = parser.read_u32_leb128()
+  let name_len = UInt::reinterpret_as_int(name_len_u)
+  if name_len < 0 {
+    raise WalyzeError::InvalidFormat("name length overflow")
+  }
+  let start = parser.get_pos()
+  let end_ = start + name_len
+  if end_ > parser.bytes.length() {
+    raise WalyzeError::UnexpectedEof
+  }
+  parser.set_pos(end_)
+  parser.bytes[start:end_].to_bytes()
+}
+
+///|
+fn append_name_bytes(out : Array[Byte], name : Bytes) -> Unit {
+  out.append(encode_u32_leb128(name.length().reinterpret_as_uint())[:])
+  out.append(name[:].to_array())
+}
+
+///|
+fn remap_function_index_raise(
+  index : UInt,
+  index_map : Map[UInt, UInt],
+) -> UInt raise WalyzeError {
+  match index_map.get(index) {
+    Some(v) => v
+    None =>
+      raise WalyzeError::InvalidFormat(
+        "dce remap missing function index: " + index.to_string(),
+      )
+  }
+}
+
+///|
+fn rewrite_export_section_payload_for_dce_raise(
+  payload : Bytes,
+  index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let export_count = parser.read_u32_leb128()
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(export_count)[:])
+  for _ in 0U..<export_count {
+    let name = read_name_bytes(parser)
+    let kind = parser.read_byte().to_uint()
+    let index = parser.read_u32_leb128()
+    append_name_bytes(out, name)
+    out.push(kind.to_byte())
+    let remapped = if kind == 0U {
+      remap_function_index_raise(index, index_map)
+    } else {
+      index
+    }
+    out.append(encode_u32_leb128(remapped)[:])
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_start_section_payload_for_dce_raise(
+  payload : Bytes,
+  index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let start_index = parser.read_u32_leb128()
+  let remapped = remap_function_index_raise(start_index, index_map)
+  Bytes::from_array(encode_u32_leb128(remapped))
+}
+
+///|
+fn parse_function_type_indices(
+  payload : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[UInt] = []
+  for _ in 0U..<count {
+    out.push(parser.read_u32_leb128())
+  }
+  out
+}
+
+///|
+fn rewrite_function_section_payload_for_dce_raise(
+  payload : Bytes,
+  keep_local : Array[Bool],
+) -> Bytes raise WalyzeError {
+  let types = parse_function_type_indices(payload)
+  if types.length() != keep_local.length() {
+    raise WalyzeError::InvalidFormat(
+      "dce function section length mismatch: function=" +
+      types.length().to_string() +
+      " keep=" +
+      keep_local.length().to_string(),
+    )
+  }
+  let kept_types : Array[UInt] = []
+  for i in 0..<types.length() {
+    if keep_local[i] {
+      kept_types.push(types[i])
+    }
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_types.length().reinterpret_as_uint())[:])
+  for type_index in kept_types {
+    out.append(encode_u32_leb128(type_index)[:])
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_instruction_function_indices_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let out : Array[Byte] = []
+  for span in spans {
+    if span.opcode == 0x10U || span.opcode == 0xd2U {
+      if span.end_ <= span.start + 1 {
+        raise WalyzeError::InvalidFormat("invalid call/ref.func immediate")
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let old_index = match decode_u32_leb128_bytes(imm) {
+        Some(v) => v
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode function index immediate",
+          )
+      }
+      let new_index = remap_function_index_raise(old_index, index_map)
+      out.push(span.opcode.to_byte())
+      out.append(encode_u32_leb128(new_index)[:])
+    } else {
+      out.append(instr_bytes[span.start:span.end_].to_array())
+    }
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_code_body_for_dce_raise(
+  body_bytes : Bytes,
+  index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let prefix_end = parse_local_decl_prefix_end(body_bytes)
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => raise WalyzeError::InvalidFormat("unsupported opcode in dce apply")
+  }
+  let rewritten_instr = rewrite_instruction_function_indices_raise(
+    instr_bytes, spans, index_map,
+  )
+  let out : Array[Byte] = body_bytes[0:prefix_end].to_array()
+  out.append(rewritten_instr[:].to_array())
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_code_section_payload_for_dce_raise(
+  payload : Bytes,
+  keep_local : Array[Bool],
+  index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let bodies = parse_code_bodies(payload)
+  if bodies.length() != keep_local.length() {
+    raise WalyzeError::InvalidFormat(
+      "dce code section length mismatch: code=" +
+      bodies.length().to_string() +
+      " keep=" +
+      keep_local.length().to_string(),
+    )
+  }
+  let kept_bodies : Array[Bytes] = []
+  for i in 0..<bodies.length() {
+    if keep_local[i] {
+      kept_bodies.push(rewrite_code_body_for_dce_raise(bodies[i], index_map))
+    }
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_bodies.length().reinterpret_as_uint())[:])
+  for body in kept_bodies {
+    out.append(encode_u32_leb128(body.length().reinterpret_as_uint())[:])
+    out.append(body[:].to_array())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn is_const_opcode(opcode : UInt) -> Bool {
   opcode == 0x41U || opcode == 0x42U || opcode == 0x43U || opcode == 0x44U
 }
@@ -1119,7 +1325,7 @@ pub fn optimize_for_size(
 ) -> Result[OptimizeResult, WalyzeError] {
   try? {
     let sections = parse_core_sections_raise(bytes)
-    let out : Array[Byte] = bytes[0:8].to_array()
+    let stage1_out : Array[Byte] = bytes[0:8].to_array()
     let removed_sections : Array[String] = []
     for section in sections {
       if section.section_id == 0U && not(keep_custom_section(section, config)) {
@@ -1127,15 +1333,37 @@ pub fn optimize_for_size(
       } else if section.section_id == 10U && config.enable_peephole {
         let payload = bytes[section.payload_start:section.section_end].to_bytes()
         let optimized_payload = optimize_code_section_payload(payload, config)
-        append_encoded_section(out, section.section_id, optimized_payload)
+        append_encoded_section(
+          stage1_out,
+          section.section_id,
+          optimized_payload,
+        )
       } else {
-        out.append(bytes[section.section_start:section.section_end].to_array())
+        stage1_out.append(
+          bytes[section.section_start:section.section_end].to_array(),
+        )
+      }
+    }
+    let mut optimized_bytes = Bytes::from_array(stage1_out[:])
+    if config.enable_dce {
+      let dce = apply_dce_raise(optimized_bytes)
+      optimized_bytes = dce.bytes
+      if dce.removed_function_count > 0U {
+        removed_sections.push(
+          "dce:functions:" +
+          dce.removed_function_count.to_string() +
+          " bodies:" +
+          dce.removed_body_bytes.to_string(),
+        )
+      }
+      if dce.dropped_name_section {
+        removed_sections.push("custom:name(dce)")
       }
     }
     {
-      bytes: Bytes::from_array(out[:]),
+      bytes: optimized_bytes,
       before_size: bytes.length().reinterpret_as_uint(),
-      after_size: out.length().reinterpret_as_uint(),
+      after_size: optimized_bytes.length().reinterpret_as_uint(),
       removed_sections,
     }
   }
@@ -1390,6 +1618,168 @@ pub fn analyze_call_graph(
       dead_body_bytes,
       nodes,
     }
+  }
+}
+
+///|
+pub fn analyze_dce_report(bytes : Bytes) -> Result[DceReport, WalyzeError] {
+  match analyze_call_graph(bytes) {
+    Ok(graph) => {
+      let removable_functions : Array[FunctionSize] = []
+      for node in graph.nodes {
+        if not(node.reachable_from_roots) {
+          removable_functions.push({
+            function_index: node.function_index,
+            body_bytes: node.body_bytes,
+            name: node.name,
+            export_names: node.export_names,
+          })
+        }
+      }
+      removable_functions.sort_by((a, b) => if a.body_bytes > b.body_bytes {
+        -1
+      } else if a.body_bytes < b.body_bytes {
+        1
+      } else if a.function_index < b.function_index {
+        -1
+      } else if a.function_index > b.function_index {
+        1
+      } else {
+        0
+      })
+      Ok({
+        roots: graph.roots,
+        partial: graph.partial,
+        removable_function_count: removable_functions
+        .length()
+        .reinterpret_as_uint(),
+        removable_body_bytes: graph.dead_body_bytes,
+        removable_functions,
+      })
+    }
+    Err(e) => Err(e)
+  }
+}
+
+///|
+priv struct DceApplyResult {
+  bytes : Bytes
+  removed_function_count : UInt
+  removed_body_bytes : UInt
+  dropped_name_section : Bool
+}
+
+///|
+fn apply_dce_raise(bytes : Bytes) -> DceApplyResult raise WalyzeError {
+  let call_graph = match analyze_call_graph(bytes) {
+    Ok(v) => v
+    Err(e) => raise e
+  }
+  if call_graph.partial {
+    raise WalyzeError::InvalidFormat(
+      "dce apply requires complete call graph (partial=false)",
+    )
+  }
+  let local_count = UInt::reinterpret_as_int(call_graph.local_function_count)
+  if local_count < 0 {
+    raise WalyzeError::InvalidFormat("local function count overflow")
+  }
+  if local_count != call_graph.nodes.length() {
+    raise WalyzeError::InvalidFormat(
+      "call graph node length mismatch: expected=" +
+      local_count.to_string() +
+      " actual=" +
+      call_graph.nodes.length().to_string(),
+    )
+  }
+  let keep_local : Array[Bool] = []
+  let index_map : Map[UInt, UInt] = {}
+  for i in 0U..<call_graph.imported_function_count {
+    index_map.set(i, i)
+  }
+  let mut kept_local_count = 0U
+  let mut removed_function_count = 0U
+  for node in call_graph.nodes {
+    keep_local.push(node.reachable_from_roots)
+    if node.reachable_from_roots {
+      index_map.set(
+        node.function_index,
+        call_graph.imported_function_count + kept_local_count,
+      )
+      kept_local_count += 1U
+    } else {
+      removed_function_count += 1U
+    }
+  }
+  if removed_function_count == 0U {
+    return {
+      bytes,
+      removed_function_count,
+      removed_body_bytes: 0U,
+      dropped_name_section: false,
+    }
+  }
+  let sections = parse_core_sections_raise(bytes)
+  let out : Array[Byte] = bytes[0:8].to_array()
+  let mut dropped_name_section = false
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      3U =>
+        append_encoded_section(
+          out,
+          3U,
+          rewrite_function_section_payload_for_dce_raise(payload, keep_local),
+        )
+      7U =>
+        append_encoded_section(
+          out,
+          7U,
+          rewrite_export_section_payload_for_dce_raise(payload, index_map),
+        )
+      8U =>
+        append_encoded_section(
+          out,
+          8U,
+          rewrite_start_section_payload_for_dce_raise(payload, index_map),
+        )
+      10U =>
+        append_encoded_section(
+          out,
+          10U,
+          rewrite_code_section_payload_for_dce_raise(
+            payload, keep_local, index_map,
+          ),
+        )
+      0U =>
+        match section.custom_name {
+          Some(name) =>
+            if name == "name" {
+              dropped_name_section = true
+            } else {
+              out.append(
+                bytes[section.section_start:section.section_end].to_array(),
+              )
+            }
+          None =>
+            out.append(
+              bytes[section.section_start:section.section_end].to_array(),
+            )
+        }
+      // Global/Element may contain ref.func references and need extra remap handling.
+      6U | 9U =>
+        raise WalyzeError::InvalidFormat(
+          "dce apply does not yet support global/element sections",
+        )
+      _ =>
+        out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  {
+    bytes: Bytes::from_array(out[:]),
+    removed_function_count,
+    removed_body_bytes: call_graph.dead_body_bytes,
+    dropped_name_section,
   }
 }
 
