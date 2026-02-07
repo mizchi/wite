@@ -39,6 +39,24 @@
   - 値が大きいほど良い
   - 既存値からの悪化を回帰とみなす
 
+### directize→DCE→RUME 連鎖可視化（第一KPI診断）
+
+- 指標: `directize_dce_rume_chain_gain`
+- 定義:
+  - 対象: `bench/corpus/core/binaryen/*.wasm`
+  - 実行:
+    - pre-DCE: `optimize --strip-debug --strip-dwarf --strip-target-features --rounds=2`
+    - post-DCE: 上記 + `--dce-apply --dfe-apply --msf-apply`
+    - post-RUME: 上記 + `--rume-apply`
+  - 算出:
+    - `dce_gain_bytes = pre_dce_after_bytes - post_dce_after_bytes`
+    - `rume_gain_bytes = post_dce_after_bytes - post_rume_after_bytes`
+    - `total_gain_bytes = pre_dce_after_bytes - post_rume_after_bytes`
+    - 併せて `directize_calls` を記録
+- 備考:
+  - `directize` 自体の書換件数と、その後段（DCE/RUME）で実サイズがどれだけ追加で落ちたかを追跡する
+  - 主要KPI（`-O1` サイズ）とは別に、最適化連鎖の効き方を診断するための補助指標
+
 ## 第二KPI: 実行速度
 
 - 指標: `moon_bench_mean`
@@ -60,6 +78,7 @@ just kpi
 
 - `bench/kpi/latest.md`: 人間向けサマリ
 - `bench/kpi/size.tsv`: サイズKPIの明細（walyze + wasm-opt 参考値 + 差分）
+- `bench/kpi/directize_chain.tsv`: directize→DCE→RUME 連鎖の段階差分
 - `bench/kpi/component_dce.tsv`: component-model DCE サイズKPIの明細
 - `bench/kpi/runtime.tsv`: 速度KPIの明細
 - `bench/kpi/bench.raw.log`: `moon bench` の生ログ

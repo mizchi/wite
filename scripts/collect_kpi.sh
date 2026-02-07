@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT_DIR/bench/kpi"
 SIZE_TSV="$OUT_DIR/size.tsv"
 COMPONENT_DCE_TSV="$OUT_DIR/component_dce.tsv"
+DIRECTIZE_CHAIN_TSV="$OUT_DIR/directize_chain.tsv"
 RUNTIME_TSV="$OUT_DIR/runtime.tsv"
 BENCH_RAW_LOG="$OUT_DIR/bench.raw.log"
 LATEST_MD="$OUT_DIR/latest.md"
@@ -38,6 +39,7 @@ cleanup() {
 trap cleanup EXIT
 
 echo -e "file\tbefore_bytes\twalyze_after_bytes\twalyze_reduction_ratio_pct\twasm_opt_after_bytes\twasm_opt_reduction_ratio_pct\tgap_to_wasm_opt_bytes\tgap_to_wasm_opt_ratio_pct\twasm_opt_status" > "$SIZE_TSV"
+echo -e "file\tbefore_bytes\tpre_dce_after_bytes\tpost_dce_after_bytes\tpost_rume_after_bytes\tdce_gain_bytes\trume_gain_bytes\ttotal_gain_bytes\tdirectize_calls\tstatus" > "$DIRECTIZE_CHAIN_TSV"
 
 total_before=0
 total_after=0
@@ -47,6 +49,16 @@ wasm_opt_total_before=0
 wasm_opt_total_walyze_after=0
 wasm_opt_total_after=0
 wasm_opt_success_files=0
+
+directize_total_before=0
+directize_total_pre_dce_after=0
+directize_total_post_dce_after=0
+directize_total_post_rume_after=0
+directize_total_dce_gain=0
+directize_total_rume_gain=0
+directize_total_gain=0
+directize_total_calls=0
+directize_success_files=0
 
 while IFS= read -r file; do
   core_file_count=$((core_file_count + 1))
@@ -68,6 +80,65 @@ while IFS= read -r file; do
   fi
 
   ratio_pct="$(awk -v b="$before" -v a="$after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+
+  pre_dce_before="NA"
+  pre_dce_after="NA"
+  post_dce_after="NA"
+  post_rume_after="NA"
+  dce_gain_bytes="NA"
+  rume_gain_bytes="NA"
+  total_gain_bytes="NA"
+  directize_calls="NA"
+  directize_status="ok"
+
+  if pre_dce_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 2>&1)"; then
+    pre_dce_line="$(printf '%s\n' "$pre_dce_output" | awk '/^optimized: / { print; exit }')"
+    pre_dce_before="$(echo "$pre_dce_line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\1/')"
+    pre_dce_after="$(echo "$pre_dce_line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\2/')"
+    if [[ ! "$pre_dce_before" =~ ^[0-9]+$ || ! "$pre_dce_after" =~ ^[0-9]+$ ]]; then
+      directize_status="pre-dce-parse-error"
+      pre_dce_before="NA"
+      pre_dce_after="NA"
+    fi
+  else
+    directize_status="pre-dce-error"
+  fi
+
+  if [[ "$directize_status" == "ok" ]]; then
+    if post_dce_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --dce-apply --dfe-apply --msf-apply 2>&1)"; then
+      post_dce_line="$(printf '%s\n' "$post_dce_output" | awk '/^optimized: / { print; exit }')"
+      post_dce_after="$(echo "$post_dce_line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\2/')"
+      if [[ ! "$post_dce_after" =~ ^[0-9]+$ ]]; then
+        directize_status="post-dce-parse-error"
+        post_dce_after="NA"
+      fi
+    else
+      directize_status="post-dce-error"
+    fi
+  fi
+
+  if [[ "$directize_status" == "ok" ]]; then
+    if post_rume_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --dce-apply --dfe-apply --msf-apply --rume-apply 2>&1)"; then
+      post_rume_line="$(printf '%s\n' "$post_rume_output" | awk '/^optimized: / { print; exit }')"
+      post_rume_after="$(echo "$post_rume_line" | sed -E 's/^optimized: ([0-9]+) -> ([0-9]+) bytes$/\2/')"
+      if [[ ! "$post_rume_after" =~ ^[0-9]+$ ]]; then
+        directize_status="post-rume-parse-error"
+        post_rume_after="NA"
+      fi
+    else
+      directize_status="post-rume-error"
+    fi
+  fi
+
+  if [[ "$directize_status" == "ok" ]]; then
+    directize_calls="$(printf '%s\n' "$post_dce_output" | sed -nE 's/.*directize:calls:([0-9]+).*/\1/p' | head -n 1)"
+    if [[ -z "${directize_calls:-}" ]]; then
+      directize_calls=0
+    fi
+    dce_gain_bytes=$((pre_dce_after - post_dce_after))
+    rume_gain_bytes=$((post_dce_after - post_rume_after))
+    total_gain_bytes=$((pre_dce_after - post_rume_after))
+  fi
 
   wasm_opt_after="NA"
   wasm_opt_ratio_pct="NA"
@@ -98,9 +169,21 @@ while IFS= read -r file; do
   fi
 
   echo -e "$rel\t$before\t$after\t$ratio_pct\t$wasm_opt_after\t$wasm_opt_ratio_pct\t$gap_to_wasm_opt_bytes\t$gap_to_wasm_opt_ratio_pct\t$wasm_opt_status" >> "$SIZE_TSV"
+  echo -e "$rel\t$pre_dce_before\t$pre_dce_after\t$post_dce_after\t$post_rume_after\t$dce_gain_bytes\t$rume_gain_bytes\t$total_gain_bytes\t$directize_calls\t$directize_status" >> "$DIRECTIZE_CHAIN_TSV"
 
   total_before=$((total_before + before))
   total_after=$((total_after + after))
+  if [[ "$directize_status" == "ok" ]]; then
+    directize_total_before=$((directize_total_before + pre_dce_before))
+    directize_total_pre_dce_after=$((directize_total_pre_dce_after + pre_dce_after))
+    directize_total_post_dce_after=$((directize_total_post_dce_after + post_dce_after))
+    directize_total_post_rume_after=$((directize_total_post_rume_after + post_rume_after))
+    directize_total_dce_gain=$((directize_total_dce_gain + dce_gain_bytes))
+    directize_total_rume_gain=$((directize_total_rume_gain + rume_gain_bytes))
+    directize_total_gain=$((directize_total_gain + total_gain_bytes))
+    directize_total_calls=$((directize_total_calls + directize_calls))
+    directize_success_files=$((directize_success_files + 1))
+  fi
 done < <(find "$ROOT_DIR/bench/corpus/core/binaryen" -type f -name '*.wasm' | sort)
 
 total_ratio_pct="$(awk -v b="$total_before" -v a="$total_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
@@ -114,6 +197,11 @@ if [[ "$wasm_opt_success_files" -gt 0 ]]; then
   wasm_opt_total_gap_bytes=$((wasm_opt_total_walyze_after - wasm_opt_total_after))
   wasm_opt_total_gap_ratio_pct="$(awk -v w="$wasm_opt_total_walyze_ratio_pct" -v o="$wasm_opt_total_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
 fi
+
+directize_total_post_rume_reduction_ratio_pct="$(awk -v b="$directize_total_before" -v a="$directize_total_post_rume_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+directize_total_dce_gain_ratio_pct="$(awk -v b="$directize_total_pre_dce_after" -v g="$directize_total_dce_gain" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", (g * 100.0) / b } }')"
+directize_total_rume_gain_ratio_pct="$(awk -v b="$directize_total_post_dce_after" -v g="$directize_total_rume_gain" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", (g * 100.0) / b } }')"
+directize_total_gain_ratio_pct="$(awk -v b="$directize_total_pre_dce_after" -v g="$directize_total_gain" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", (g * 100.0) / b } }')"
 
 echo -e "file\tcomponent_bytes\tcore_before_bytes\tcore_after_bytes\treduction_ratio_pct\tcore_module_count\troot_count" > "$COMPONENT_DCE_TSV"
 
@@ -219,6 +307,27 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
   awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9 }' "$SIZE_TSV"
   echo
+  echo "## Directize -> DCE -> RUME Delta (priority 1 diagnostics)"
+  echo
+  echo "- stage_config: \`--strip-debug --strip-dwarf --strip-target-features --rounds=2\` + \`--dce-apply --dfe-apply --msf-apply\` (+ optional \`--rume-apply\`)"
+  echo "- success_files: $directize_success_files/$core_file_count"
+  echo "- total_before_bytes: $directize_total_before"
+  echo "- total_pre_dce_after_bytes: $directize_total_pre_dce_after"
+  echo "- total_post_dce_after_bytes: $directize_total_post_dce_after"
+  echo "- total_post_rume_after_bytes: $directize_total_post_rume_after"
+  echo "- total_post_rume_reduction_ratio_pct: $directize_total_post_rume_reduction_ratio_pct"
+  echo "- dce_gain_bytes: $directize_total_dce_gain"
+  echo "- dce_gain_ratio_pct: $directize_total_dce_gain_ratio_pct"
+  echo "- rume_gain_bytes: $directize_total_rume_gain"
+  echo "- rume_gain_ratio_pct: $directize_total_rume_gain_ratio_pct"
+  echo "- total_gain_bytes: $directize_total_gain"
+  echo "- total_gain_ratio_pct: $directize_total_gain_ratio_pct"
+  echo "- directize_calls_total: $directize_total_calls"
+  echo
+  echo "| file | before_bytes | pre_dce_after_bytes | post_dce_after_bytes | post_rume_after_bytes | dce_gain_bytes | rume_gain_bytes | total_gain_bytes | directize_calls | status |"
+  echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
+  awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10 }' "$DIRECTIZE_CHAIN_TSV"
+  echo
   echo "## Component-model DCE Size KPI (priority 1)"
   echo
   echo "- total_component_bytes: $component_total_component_bytes"
@@ -240,6 +349,7 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
 echo "kpi report written:"
 echo "  $LATEST_MD"
 echo "  $SIZE_TSV"
+echo "  $DIRECTIZE_CHAIN_TSV"
 echo "  $COMPONENT_DCE_TSV"
 echo "  $RUNTIME_TSV"
 echo "  $BENCH_RAW_LOG"

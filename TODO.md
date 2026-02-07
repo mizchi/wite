@@ -9,6 +9,14 @@
 
 上記より、当面は **core size の wasm-opt ギャップ解消** を最優先にしつつ、差別化軸である **closed-world + GC 最適化** を次優先で進める。
 
+## Next Up (2026-02-08)
+
+- [x] N1 (P0): `zlib.wasm` 向け `optimize-instructions` を拡張する（bitwise/cmp 簡約を追加し、`wasm-opt` gap を直接詰める）
+- [ ] N2 (P0): `gc_target_feature.wasm` を主要 gap 判定に含める方針を確定し、KPI 集計ルールを固定する
+- [x] N3 (P6): 「削ってはいけないものを削っていない」実行同値テストを corpus 横断で増やす（`zlib.wasm` 含む）
+- [x] N4 (P3): directize 後に DCE / RUME がどれだけ追加で効くかを KPI で可視化する
+- [ ] N5 (P2): GC hierarchy を考慮した `type-refining` に着手し、closed-world と組み合わせた差分を測る
+
 ## Architecture Guardrails（mwac / walyze）
 
 - [x] 役割を bundler (`mwac`) / minifier (`walyze`) として整理する
@@ -22,7 +30,7 @@
 - [ ] core corpus 合計 gap (`gap_to_wasm_opt_ratio_pct`) を段階的に縮小する
 - [x] `zlib.wasm` 向けに `precompute` / `local-cse` の優先実装を進める（基盤実装まで完了）
 - [x] `zlib.wasm` 向け `optimize-instructions` を優先実装する（基盤実装まで完了）
-- [ ] `zlib.wasm` 向け `optimize-instructions` を拡張する（bitwise/cmp の追加簡約）
+- [x] `zlib.wasm` 向け `optimize-instructions` を拡張する（bitwise/cmp の追加簡約）
 - [x] 小型 fixture（`br_to_exit`, `elided-br`, `complexBinaryNames`）での pass 適用漏れを潰す
 - [x] `gc_target_feature.wasm` の `wasm-opt` 比較注記を KPI に反映する
 - [ ] `gc_target_feature.wasm` を主要 gap 判定に含めるか（参考値扱いにするか）方針を確定する
@@ -48,7 +56,7 @@
 ## P3: 呼び出し経路の削減
 
 - [x] `directize` 相当を導入する（`i32.const + call_indirect` の安全な直接化）
-- [ ] directize 後に DCE / RUME が追加で効くことを検証する
+- [x] directize 後に DCE / RUME が追加で効くことを検証する（KPI 可視化を追加）
 - [ ] `remove-unused-module-elements` と index rewrite の境界テストを拡充する
 
 ## P4: 固定点最適化（component + core 連携）

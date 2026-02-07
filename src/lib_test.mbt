@@ -208,6 +208,123 @@ extern "js" fn js_compare_zlib_runtime_behaviors(
   #| }
 
 ///|
+extern "js" fn js_compare_zero_arg_export_behaviors(
+  before_bytes : Bytes,
+  after_bytes : Bytes,
+) -> String =
+  #| (beforeBytes, afterBytes) => {
+  #|   try {
+  #|     const toRaw = (value) => value instanceof Uint8Array
+  #|       ? value
+  #|       : (Array.isArray(value) ? Uint8Array.from(value) : new Uint8Array(value));
+  #|     const normalize = (value) =>
+  #|       typeof value === 'bigint' ? value.toString() + 'n' : String(value);
+  #|     const instantiate = (raw) => {
+  #|       const module = new WebAssembly.Module(toRaw(raw));
+  #|       const importDescs = WebAssembly.Module.imports(module);
+  #|       const imports = {};
+  #|       const ensureBucket = (name) => {
+  #|         if (!imports[name]) imports[name] = {};
+  #|         return imports[name];
+  #|       };
+  #|       let envMemory = null;
+  #|       let sbrkPtr = 1024;
+  #|       const ensureSbrk = () => {
+  #|         if (!envMemory) return;
+  #|         if (envMemory.buffer.byteLength < sbrkPtr + 4) return;
+  #|         new DataView(envMemory.buffer).setInt32(sbrkPtr, 8192, true);
+  #|       };
+  #|       for (const imp of importDescs) {
+  #|         const bucket = ensureBucket(imp.module);
+  #|         if (imp.kind === 'memory') {
+  #|           const minimum = Math.max(1, Number(imp.minimum ?? 1));
+  #|           const maximum = imp.maximum == null ? minimum : Math.max(minimum, Number(imp.maximum));
+  #|           const memory = new WebAssembly.Memory({ initial: minimum, maximum });
+  #|           bucket[imp.name] = memory;
+  #|           if (imp.module === 'env' && imp.name === 'memory') {
+  #|             envMemory = memory;
+  #|           }
+  #|         } else if (imp.kind === 'table') {
+  #|           const minimum = Math.max(1, Number(imp.minimum ?? 1));
+  #|           const tableInit = {
+  #|             element: imp.element ?? 'anyfunc',
+  #|             initial: minimum,
+  #|           };
+  #|           if (imp.maximum != null) {
+  #|             tableInit.maximum = Math.max(minimum, Number(imp.maximum));
+  #|           }
+  #|           bucket[imp.name] = new WebAssembly.Table(tableInit);
+  #|         } else if (imp.kind === 'global') {
+  #|           const value = imp.value ?? 'i32';
+  #|           const mutable = !!imp.mutable;
+  #|           const init = value === 'i64' ? 0n : 0;
+  #|           bucket[imp.name] = new WebAssembly.Global({ value, mutable }, init);
+  #|         }
+  #|       }
+  #|       if (!envMemory) {
+  #|         envMemory = new WebAssembly.Memory({ initial: 256, maximum: 256 });
+  #|         ensureBucket('env').memory = envMemory;
+  #|       }
+  #|       ensureSbrk();
+  #|       for (const imp of importDescs) {
+  #|         if (imp.kind !== 'function') continue;
+  #|         const bucket = ensureBucket(imp.module);
+  #|         if (typeof bucket[imp.name] === 'function') continue;
+  #|         const key = imp.module + '.' + imp.name;
+  #|         if (key === 'env.abort') {
+  #|           bucket[imp.name] = () => { throw new Error('abort'); };
+  #|         } else if (key === 'env.exit') {
+  #|           bucket[imp.name] = (code) => code | 0;
+  #|         } else if (key === 'env.emscripten_get_sbrk_ptr') {
+  #|           bucket[imp.name] = () => sbrkPtr;
+  #|         } else if (key === 'env.emscripten_resize_heap') {
+  #|           bucket[imp.name] = () => 0;
+  #|         } else if (key === 'env.emscripten_memcpy_big') {
+  #|           bucket[imp.name] = (dst, src, num) => {
+  #|             if (envMemory) {
+  #|               const view = new Uint8Array(envMemory.buffer);
+  #|               view.copyWithin(dst >>> 0, src >>> 0, (src + num) >>> 0);
+  #|             }
+  #|             return dst | 0;
+  #|           };
+  #|         } else if (imp.module === 'wasi_snapshot_preview1') {
+  #|           bucket[imp.name] = () => 0;
+  #|         } else {
+  #|           bucket[imp.name] = () => 0;
+  #|         }
+  #|       }
+  #|       return new WebAssembly.Instance(module, imports);
+  #|     };
+  #|     const run = (raw) => {
+  #|       const instance = instantiate(raw);
+  #|       const out = [];
+  #|       const names = Object.keys(instance.exports).sort();
+  #|       for (const name of names) {
+  #|         const value = instance.exports[name];
+  #|         if (typeof value !== 'function') continue;
+  #|         if (value.length !== 0) continue;
+  #|         try {
+  #|           out.push(name + '=ok:' + normalize(value()));
+  #|         } catch (e) {
+  #|           const msg = e && e.message ? e.message : String(e);
+  #|           out.push(name + '=err:' + msg);
+  #|         }
+  #|       }
+  #|       if (out.length === 0) {
+  #|         out.push('no-zero-arg-export');
+  #|       }
+  #|       return out.join(';');
+  #|     };
+  #|     const before = run(beforeBytes);
+  #|     const after = run(afterBytes);
+  #|     return 'ok|' + (before === after ? '1' : '0') + '|' + before + '|' + after;
+  #|   } catch (e) {
+  #|     const msg = e && e.message ? e.message : String(e);
+  #|     return 'err|' + msg;
+  #|   }
+  #| }
+
+///|
 fn runtime_export_outputs_equal(
   before_bytes : Bytes,
   after_bytes : Bytes,
@@ -247,11 +364,36 @@ fn runtime_zlib_behaviors_equal(
 }
 
 ///|
+fn runtime_zero_arg_export_behaviors_equal(
+  before_bytes : Bytes,
+  after_bytes : Bytes,
+) -> Bool {
+  let raw = js_compare_zero_arg_export_behaviors(before_bytes, after_bytes)
+  let parts = split_string(raw, "|")
+  if parts.length() < 2 {
+    return false
+  }
+  if parts[0] != "ok" {
+    return false
+  }
+  parts[1] == "1"
+}
+
+///|
 fn bench_core_corpus_paths() -> Array[String] {
   [
     "bench/corpus/core/binaryen/br_to_exit.wasm", "bench/corpus/core/binaryen/elided-br.wasm",
     "bench/corpus/core/binaryen/complexBinaryNames.wasm", "bench/corpus/core/binaryen/empty.wasm",
     "bench/corpus/core/binaryen/gc_target_feature.wasm", "bench/corpus/core/binaryen/zlib.wasm",
+  ]
+}
+
+///|
+fn bench_core_runtime_corpus_paths() -> Array[String] {
+  [
+    "bench/corpus/core/binaryen/br_to_exit.wasm", "bench/corpus/core/binaryen/elided-br.wasm",
+    "bench/corpus/core/binaryen/complexBinaryNames.wasm", "bench/corpus/core/binaryen/empty.wasm",
+    "bench/corpus/core/binaryen/zlib.wasm",
   ]
 }
 
@@ -931,6 +1073,35 @@ fn sample_module_with_optimize_instructions_bytes() -> Bytes {
     bytes_of([
       0x01, 0x10, 0x00, 0x20, 0x00, 0x41, 0x00, 0x72, 0x41, 0x00, 0x74, 0x20, 0x00,
       0x20, 0x00, 0x73, 0x72, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_optimize_instructions_bitwise_cmp_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // local.get 0; i32.const 0; i32.lt_u; drop
+  // local.get 0; i32.const 0; i32.ge_u; drop
+  // local.get 0; i32.const 0; i32.and; drop
+  // local.get 0; i32.const 0; i32.eq; i32.eqz
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x1a, 0x00, 0x20, 0x00, 0x41, 0x00, 0x49, 0x1a, 0x20, 0x00, 0x41, 0x00,
+      0x4f, 0x1a, 0x20, 0x00, 0x41, 0x00, 0x71, 0x1a, 0x20, 0x00, 0x41, 0x00, 0x46,
+      0x45, 0x0b,
     ]),
   )
   Bytes::from_array(out[:])
@@ -2905,6 +3076,47 @@ test "optimize-instructions simplifies i32 identity and same-local patterns" {
 }
 
 ///|
+test "optimize-instructions simplifies bitwise and cmp with i32.const 0" {
+  let bytes = sample_module_with_optimize_instructions_bitwise_cmp_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 26U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(after.code_body_bytes < before.code_body_bytes)
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x49])))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x4f])))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x71])))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x46])))
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
 test "optimize local-cse rewrites local.get+local.set+local.get" {
   let bytes = sample_module_with_local_cse_get_set_get_bytes()
   guard profile_module(bytes) is Ok(before) else {
@@ -3543,6 +3755,35 @@ test "kpi core corpus -O1 does not increase size" {
       return
     }
     assert_true(result.after_size <= result.before_size)
+  }
+}
+
+///|
+test "kpi core runtime corpus -O1 preserves runtime behavior" {
+  let config = OptimizeConfig::o1()
+  for path in bench_core_runtime_corpus_paths() {
+    let bytes = @fs.read_file_to_bytes(path) catch {
+      _ => {
+        inspect(path, content="missing")
+        assert_true(false)
+        return
+      }
+    }
+    guard optimize_for_size(bytes, config~) is Ok(result) else {
+      inspect(path, content="optimize failed")
+      assert_true(false)
+      return
+    }
+    let ok = if path.contains("zlib.wasm") {
+      runtime_zlib_behaviors_equal(bytes, result.bytes)
+    } else {
+      runtime_zero_arg_export_behaviors_equal(bytes, result.bytes)
+    }
+    if not(ok) {
+      inspect(path, content="runtime mismatch")
+      assert_true(false)
+      return
+    }
   }
 }
 

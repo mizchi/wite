@@ -4392,6 +4392,25 @@ fn decode_i32_const_small_nonnegative_from_span(
 }
 
 ///|
+fn decode_i32_const_small_signed_from_span(
+  instr_bytes : Bytes,
+  span : InstrSpan,
+) -> Int? {
+  if span.opcode != 0x41U || span.end_ != span.start + 2 {
+    return None
+  }
+  let raw = instr_bytes[span.start + 1].to_uint()
+  if (raw & 0x80U) != 0U {
+    return None
+  }
+  if (raw & 0x40U) == 0U {
+    Some(raw.reinterpret_as_int())
+  } else {
+    Some(raw.reinterpret_as_int() - 128)
+  }
+}
+
+///|
 fn decode_local_index_immediate_from_span(
   instr_bytes : Bytes,
   span : InstrSpan,
@@ -4418,21 +4437,29 @@ fn append_i32_const_small(out : Array[Byte], value : UInt) -> Unit {
 }
 
 ///|
+fn is_i32_shift_rotate_opcode(opcode : UInt) -> Bool {
+  opcode == 0x74U || // i32.shl
+  opcode == 0x75U || // i32.shr_s
+  opcode == 0x76U || // i32.shr_u
+  opcode == 0x77U || // i32.rotl
+  opcode == 0x78U // i32.rotr
+}
+
+///|
 fn is_optimize_instructions_i32_identity_opcode(
   rhs_const : UInt,
   opcode : UInt,
 ) -> Bool {
+  if is_i32_shift_rotate_opcode(opcode) && rhs_const % 32U == 0U {
+    return true
+  }
   match rhs_const {
     0U =>
       opcode == 0x6aU || // i32.add
       opcode == 0x6bU || // i32.sub
       opcode == 0x72U || // i32.or
       opcode == 0x73U || // i32.xor
-      opcode == 0x74U || // i32.shl
-      opcode == 0x75U || // i32.shr_s
-      opcode == 0x76U || // i32.shr_u
-      opcode == 0x77U || // i32.rotl
-      opcode == 0x78U // i32.rotr
+      is_i32_shift_rotate_opcode(opcode)
     1U => opcode == 0x6cU // i32.mul
     _ => false
   }
@@ -4448,6 +4475,16 @@ fn apply_optimize_instructions_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() && spans[i].opcode == 0x41U {
+      match decode_i32_const_small_signed_from_span(instr_bytes, spans[i]) {
+        Some(-1) =>
+          if spans[i + 1].opcode == 0x71U {
+            i += 2
+            continue
+          }
+        _ => ()
+      }
+    }
+    if i + 1 < spans.length() && spans[i].opcode == 0x41U {
       match
         decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
         Some(rhs_const) =>
@@ -4459,6 +4496,76 @@ fn apply_optimize_instructions_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
             continue
           }
         None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn is_optimize_instructions_i32_get_opcode(opcode : UInt) -> Bool {
+  opcode == 0x20U || opcode == 0x23U
+}
+
+///|
+fn apply_optimize_instructions_i32_const_cmp_bitwise(
+  instr_bytes : Bytes,
+) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 2 < spans.length() &&
+      is_optimize_instructions_i32_get_opcode(spans[i].opcode) &&
+      spans[i + 1].opcode == 0x41U {
+      let lhs = instr_bytes[spans[i].start:spans[i].end_]
+      match
+        decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i + 1]) {
+        Some(0U) =>
+          match spans[i + 2].opcode {
+            0x71U
+             // i32.and
+            | 0x49U => { // i32.lt_u
+              append_i32_const_small(out, 0U)
+              i += 3
+              continue
+            }
+            0x4fU => { // i32.ge_u
+              append_i32_const_small(out, 1U)
+              i += 3
+              continue
+            }
+            0x46U | 0x4dU => { // i32.eq / i32.le_u => i32.eqz
+              out.append(lhs.to_array())
+              out.push(0x45U.to_byte())
+              i += 3
+              continue
+            }
+            0x47U | 0x4bU => { // i32.ne / i32.gt_u => i32.eqz; i32.eqz
+              out.append(lhs.to_array())
+              out.push(0x45U.to_byte())
+              out.push(0x45U.to_byte())
+              i += 3
+              continue
+            }
+            _ => ()
+          }
+        _ => ()
+      }
+      match decode_i32_const_small_signed_from_span(instr_bytes, spans[i + 1]) {
+        Some(-1) =>
+          if spans[i + 2].opcode == 0x71U {
+            // x & -1 => x
+            out.append(lhs.to_array())
+            i += 3
+            continue
+          }
+        _ => ()
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -5093,6 +5200,9 @@ fn optimize_instruction_bytes(
       current_bytes = apply_precompute_i32_add(current_bytes)
       current_bytes = apply_precompute_br_if_const(current_bytes)
       current_bytes = apply_optimize_instructions_i32_identity_ops(
+        current_bytes,
+      )
+      current_bytes = apply_optimize_instructions_i32_const_cmp_bitwise(
         current_bytes,
       )
       current_bytes = apply_optimize_instructions_same_local_get_pair(
