@@ -54,6 +54,199 @@ fn find_keep_reason_entry(
 }
 
 ///|
+fn split_string(text : String, delim : String) -> Array[String] {
+  let out : Array[String] = []
+  for part in text.split(delim) {
+    out.push(part.to_string())
+  }
+  out
+}
+
+///|
+fn join_int_csv(values : Array[Int]) -> String {
+  let mut out = ""
+  for i in 0..<values.length() {
+    if i > 0 {
+      out = out + ","
+    }
+    out = out + values[i].to_string()
+  }
+  out
+}
+
+///|
+extern "js" fn js_compare_export_runtime_outputs(
+  before_bytes : Bytes,
+  after_bytes : Bytes,
+  export_name : String,
+  args_csv : String,
+) -> String =
+  #| (beforeBytes, afterBytes, exportName, argsCsv) => {
+  #|   try {
+  #|     const toRaw = (value) => value instanceof Uint8Array
+  #|       ? value
+  #|       : (Array.isArray(value) ? Uint8Array.from(value) : new Uint8Array(value));
+  #|     const args = argsCsv.length === 0
+  #|       ? []
+  #|       : argsCsv.split(',')
+  #|           .filter((item) => item.length > 0)
+  #|           .map((item) => Number.parseInt(item, 10));
+  #|     const run = (raw) => {
+  #|       const mod = new WebAssembly.Module(toRaw(raw));
+  #|       const instance = new WebAssembly.Instance(mod, {});
+  #|       const fn = instance.exports[exportName];
+  #|       if (typeof fn !== 'function') {
+  #|         return { ok: false, error: 'missing export: ' + exportName };
+  #|       }
+  #|       const values = [];
+  #|       if (args.length === 0) {
+  #|         const result = fn();
+  #|         values.push(typeof result === 'bigint' ? result.toString() + 'n' : String(result));
+  #|       } else {
+  #|         for (const arg of args) {
+  #|           const result = fn(arg);
+  #|           values.push(typeof result === 'bigint' ? result.toString() + 'n' : String(result));
+  #|         }
+  #|       }
+  #|       return { ok: true, values: values.join(',') };
+  #|     };
+  #|     const before = run(beforeBytes);
+  #|     if (!before.ok) return 'err|' + before.error;
+  #|     const after = run(afterBytes);
+  #|     if (!after.ok) return 'err|' + after.error;
+  #|     return 'ok|' + (before.values === after.values ? '1' : '0') + '|' + before.values + '|' + after.values;
+  #|   } catch (e) {
+  #|     const msg = e && e.message ? e.message : String(e);
+  #|     return 'err|' + msg;
+  #|   }
+  #| }
+
+///|
+extern "js" fn js_compare_zlib_runtime_behaviors(
+  before_bytes : Bytes,
+  after_bytes : Bytes,
+) -> String =
+  #| (beforeBytes, afterBytes) => {
+  #|   try {
+  #|     const toRaw = (value) => value instanceof Uint8Array
+  #|       ? value
+  #|       : (Array.isArray(value) ? Uint8Array.from(value) : new Uint8Array(value));
+  #|     const normalize = (value) =>
+  #|       typeof value === 'bigint' ? value.toString() + 'n' : String(value);
+  #|     const buildImports = () => {
+  #|       const memory = new WebAssembly.Memory({ initial: 256, maximum: 256 });
+  #|       const table = new WebAssembly.Table({ element: 'anyfunc', initial: 32 });
+  #|       const sbrkPtr = 1024;
+  #|       new DataView(memory.buffer).setInt32(sbrkPtr, 8192, true);
+  #|       return {
+  #|         env: {
+  #|           memory,
+  #|           __indirect_function_table: table,
+  #|           exit: (code) => code | 0,
+  #|           abort: () => {
+  #|             throw new Error('abort');
+  #|           },
+  #|           emscripten_get_sbrk_ptr: () => sbrkPtr,
+  #|           emscripten_resize_heap: () => 0,
+  #|           emscripten_memcpy_big: (dst, src, num) => {
+  #|             const view = new Uint8Array(memory.buffer);
+  #|             view.copyWithin(dst >>> 0, src >>> 0, (src + num) >>> 0);
+  #|             return dst | 0;
+  #|           },
+  #|         },
+  #|         wasi_snapshot_preview1: {
+  #|           fd_seek: () => 0,
+  #|           fd_close: () => 0,
+  #|           fd_write: () => 0,
+  #|         },
+  #|       };
+  #|     };
+  #|     const invokeWithStubs = (raw) => {
+  #|       const module = new WebAssembly.Module(toRaw(raw));
+  #|       const instance = new WebAssembly.Instance(module, buildImports());
+  #|       const ex = instance.exports;
+  #|       const out = [];
+  #|       const invoke = (name, args) => {
+  #|         const fn = ex[name];
+  #|         if (typeof fn !== 'function') {
+  #|           out.push(name + '=missing');
+  #|           return undefined;
+  #|         }
+  #|         try {
+  #|           const value = fn(...args);
+  #|           out.push(name + '=ok:' + normalize(value));
+  #|           return value;
+  #|         } catch (e) {
+  #|           const msg = e && e.message ? e.message : String(e);
+  #|           out.push(name + '=err:' + msg);
+  #|           return undefined;
+  #|         }
+  #|       };
+  #|       if (ex.__data_end && typeof ex.__data_end.value !== 'undefined') {
+  #|         out.push('__data_end=' + normalize(ex.__data_end.value));
+  #|       } else {
+  #|         out.push('__data_end=missing');
+  #|       }
+  #|       invoke('__wasm_call_ctors', []);
+  #|       invoke('__errno_location', []);
+  #|       const mallocResult = invoke('malloc', [64]);
+  #|       let freePtr = 0;
+  #|       if (typeof mallocResult === 'number' && Number.isFinite(mallocResult)) {
+  #|         freePtr = mallocResult | 0;
+  #|       }
+  #|       invoke('free', [freePtr]);
+  #|       invoke('setThrew', [1, 2]);
+  #|       return out.join(';');
+  #|     };
+  #|     const before = invokeWithStubs(beforeBytes);
+  #|     const after = invokeWithStubs(afterBytes);
+  #|     return 'ok|' + (before === after ? '1' : '0') + '|' + before + '|' + after;
+  #|   } catch (e) {
+  #|     const msg = e && e.message ? e.message : String(e);
+  #|     return 'err|' + msg;
+  #|   }
+  #| }
+
+///|
+fn runtime_export_outputs_equal(
+  before_bytes : Bytes,
+  after_bytes : Bytes,
+  export_name : String,
+  args : Array[Int],
+) -> Bool {
+  let raw = js_compare_export_runtime_outputs(
+    before_bytes,
+    after_bytes,
+    export_name,
+    join_int_csv(args),
+  )
+  let parts = split_string(raw, "|")
+  if parts.length() < 2 {
+    return false
+  }
+  if parts[0] != "ok" {
+    return false
+  }
+  parts[1] == "1"
+}
+
+///|
+fn runtime_zlib_behaviors_equal(
+  before_bytes : Bytes,
+  after_bytes : Bytes,
+) -> Bool {
+  let raw = js_compare_zlib_runtime_behaviors(before_bytes, after_bytes)
+  let parts = split_string(raw, "|")
+  if parts.length() < 2 {
+    return false
+  }
+  if parts[0] != "ok" {
+    return false
+  }
+  parts[1] == "1"
+}
+
+///|
 fn bench_core_corpus_paths() -> Array[String] {
   [
     "bench/corpus/core/binaryen/br_to_exit.wasm", "bench/corpus/core/binaryen/elided-br.wasm",
@@ -351,6 +544,35 @@ fn sample_module_with_dce_reindex_bytes() -> Bytes {
     10U,
     bytes_of([
       0x03, 0x04, 0x00, 0x10, 0x02, 0x0b, 0x02, 0x00, 0x0b, 0x02, 0x00, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_dce_reindex_result_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 3 local functions (indices 0,1,2)
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x00]))
+  // export section: export index 0 as "main"
+  append_section(
+    out,
+    7U,
+    bytes_of([0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00]),
+  )
+  // code section:
+  // #0: call 2, end (size=4)
+  // #1: i32.const 99, end (size=4) dead
+  // #2: i32.const 7, end (size=4)
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x04, 0x00, 0x10, 0x02, 0x0b, 0x04, 0x00, 0x41, 0x63, 0x0b, 0x04, 0x00,
+      0x41, 0x07, 0x0b,
     ]),
   )
   Bytes::from_array(out[:])
@@ -1441,6 +1663,32 @@ test "optimize with dce apply removes dead and rewrites calls" {
 }
 
 ///|
+test "optimize with dce apply preserves runtime output" {
+  let bytes = sample_module_with_dce_reindex_result_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "main", []))
+}
+
+///|
 test "optimize with closed-world dce filters export roots by name" {
   let bytes = sample_module_with_two_exported_functions_bytes()
   guard profile_module(bytes) is Ok(before) else {
@@ -2473,6 +2721,74 @@ test "optimize precompute rewrites i32.const nonzero + br_if to br" {
 }
 
 ///|
+test "optimize peephole preserves runtime outputs for zero-arg i32 exports" {
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+
+  let bytes0 = sample_module_with_peephole_bytes()
+  guard optimize_for_size(bytes0, config~) is Ok(optimized0) else {
+    assert_true(false)
+    return
+  }
+  assert_true(runtime_export_outputs_equal(bytes0, optimized0.bytes, "run", []))
+
+  let bytes1 = sample_module_with_i32_add_precompute_bytes()
+  guard optimize_for_size(bytes1, config~) is Ok(optimized1) else {
+    assert_true(false)
+    return
+  }
+  assert_true(runtime_export_outputs_equal(bytes1, optimized1.bytes, "run", []))
+
+  let bytes2 = sample_module_with_local_set_get_pair_bytes()
+  guard optimize_for_size(bytes2, config~) is Ok(optimized2) else {
+    assert_true(false)
+    return
+  }
+  assert_true(runtime_export_outputs_equal(bytes2, optimized2.bytes, "run", []))
+}
+
+///|
+test "optimize peephole preserves runtime outputs for unary i32 export" {
+  let bytes = sample_module_with_i32_identity_ops_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    runtime_export_outputs_equal(
+      bytes,
+      optimized.bytes,
+      "run",
+      [-7, -1, 0, 1, 42, 123456],
+    ),
+  )
+}
+
+///|
 test "optimize with dce apply skips partial call graph modules" {
   let bytes = @fs.read_file_to_bytes(
     "bench/corpus/core/binaryen/gc_target_feature.wasm",
@@ -2540,6 +2856,23 @@ test "runtime profiler profiles zero-arg exports" {
   assert_true(profile.instantiate_ns > 0UL)
   assert_true(profile.functions.length() > 0)
   assert_true(profile.functions.any(f => f.calls == 5U))
+}
+
+///|
+test "optimize -O1 preserves zlib runtime behavior with stub imports" {
+  let bytes = @fs.read_file_to_bytes("bench/corpus/core/binaryen/zlib.wasm") catch {
+    _ => {
+      assert_true(false)
+      return
+    }
+  }
+  let config = OptimizeConfig::o1()
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.after_size <= optimized.before_size)
+  assert_true(runtime_zlib_behaviors_equal(bytes, optimized.bytes))
 }
 
 ///|
