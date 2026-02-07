@@ -386,6 +386,60 @@ fn sample_module_with_redundant_block_branch_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_unused_function_types_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 3 func types, only #0 should remain after DCE
+  append_section(
+    out,
+    1U,
+    bytes_of([0x03, 0x60, 0x00, 0x00, 0x60, 0x00, 0x00, 0x60, 0x00, 0x00]),
+  )
+  // function section: 3 local functions -> type idx [0,1,2]
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x01, 0x02]))
+  // export section: export func 0 as "main"
+  append_section(
+    out,
+    7U,
+    bytes_of([0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00]),
+  )
+  // code section: 3 bodies, all (locals=0, end)
+  append_section(
+    out,
+    10U,
+    bytes_of([0x03, 0x02, 0x00, 0x0b, 0x02, 0x00, 0x0b, 0x02, 0x00, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_call_indirect_type_gap_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 2 func types, only #1 is used
+  append_section(out, 1U, bytes_of([0x02, 0x60, 0x00, 0x00, 0x60, 0x00, 0x00]))
+  // function section: 1 local function -> type idx 1
+  append_section(out, 3U, bytes_of([0x01, 0x01]))
+  // table section: 1 funcref table min=1
+  append_section(out, 4U, bytes_of([0x01, 0x70, 0x00, 0x01]))
+  // export section: export function 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // element section: active table 0, offset 0, initialize with function index 0
+  append_section(out, 9U, bytes_of([0x01, 0x00, 0x41, 0x00, 0x0b, 0x01, 0x00]))
+  // code section:
+  //   local decl count=0
+  //   i32.const 0
+  //   call_indirect type=1 table=0
+  //   end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x01, 0x07, 0x00, 0x41, 0x00, 0x11, 0x01, 0x00, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_similar_thunks_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1044,6 +1098,58 @@ test "optimize with safe-mode disables closed-world dce filtering" {
     return
   }
   assert_eq(after.function_count, 2U)
+}
+
+///|
+test "optimize with dce prunes now-unused function types" {
+  let bytes = sample_module_with_unused_function_types_bytes()
+  let config = make_optimize_config(
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    closed_world=true,
+    closed_world_root_exports=["main"],
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:2")),
+  )
+  assert_true(optimized.removed_sections.any(s => s.contains("types:2")))
+  guard analyze_section_sizes(optimized.bytes) is Ok(sections_after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(find_section_size(sections_after, "type"), Some(6U))
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 1U)
+}
+
+///|
+test "optimize rewrites call_indirect type indices after type pruning" {
+  let bytes = sample_module_with_call_indirect_type_gap_bytes()
+  let config = make_optimize_config(
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_remove_unused_module_elements=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.removed_sections.any(s => s.contains("types:1")))
+  assert_true(bytes_contains_seq(optimized.bytes, [0x03, 0x02, 0x01, 0x00]))
+  assert_true(bytes_contains_seq(optimized.bytes, [0x11, 0x00, 0x00]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x11, 0x01, 0x00])))
 }
 
 ///|

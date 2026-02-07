@@ -1472,6 +1472,20 @@ fn remap_function_index_raise(
 }
 
 ///|
+fn remap_type_index_raise(
+  index : UInt,
+  type_index_map : Map[UInt, UInt],
+) -> UInt raise WalyzeError {
+  match type_index_map.get(index) {
+    Some(v) => v
+    None =>
+      raise WalyzeError::InvalidFormat(
+        "type remap missing index: " + index.to_string(),
+      )
+  }
+}
+
+///|
 fn read_val_type_bytes_raise(parser : Cursor) -> Bytes raise WalyzeError {
   let start = parser.get_pos()
   let code = parser.read_byte().to_uint()
@@ -3037,6 +3051,63 @@ fn parse_function_type_indices(
 }
 
 ///|
+fn parse_type_section_entries_raise(
+  payload : Bytes,
+) -> Array[Bytes] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[Bytes] = []
+  for _ in 0U..<count {
+    let start = parser.get_pos()
+    let form = parser.read_byte().to_uint()
+    if form != 0x60U {
+      raise WalyzeError::InvalidFormat(
+        "unsupported type form in remove-unused-types: " + form.to_string(),
+      )
+    }
+    let param_count = parser.read_u32_leb128()
+    for _ in 0U..<param_count {
+      ignore(read_val_type_bytes_raise(parser))
+    }
+    let result_count = parser.read_u32_leb128()
+    for _ in 0U..<result_count {
+      ignore(read_val_type_bytes_raise(parser))
+    }
+    let end_ = parser.get_pos()
+    out.push(payload[start:end_].to_bytes())
+  }
+  out
+}
+
+///|
+fn rewrite_type_section_payload_for_keep_raise(
+  payload : Bytes,
+  keep_types : Array[Bool],
+) -> Bytes raise WalyzeError {
+  let entries = parse_type_section_entries_raise(payload)
+  if entries.length() != keep_types.length() {
+    raise WalyzeError::InvalidFormat(
+      "type section length mismatch: type=" +
+      entries.length().to_string() +
+      " keep=" +
+      keep_types.length().to_string(),
+    )
+  }
+  let kept_entries : Array[Bytes] = []
+  for i in 0..<entries.length() {
+    if keep_types[i] {
+      kept_entries.push(entries[i])
+    }
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_entries.length().reinterpret_as_uint())[:])
+  for entry in kept_entries {
+    out.append(entry[:].to_array())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn rewrite_function_section_payload_for_dce_raise(
   payload : Bytes,
   keep_local : Array[Bool],
@@ -3060,6 +3131,114 @@ fn rewrite_function_section_payload_for_dce_raise(
   out.append(encode_u32_leb128(kept_types.length().reinterpret_as_uint())[:])
   for type_index in kept_types {
     out.append(encode_u32_leb128(type_index)[:])
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_function_section_payload_for_type_index_map_raise(
+  payload : Bytes,
+  type_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(count)[:])
+  for _ in 0U..<count {
+    let old_type = parser.read_u32_leb128()
+    out.append(
+      encode_u32_leb128(remap_type_index_raise(old_type, type_index_map))[:],
+    )
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn collect_used_type_indices_from_import_section_raise(
+  payload : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[UInt] = []
+  for _ in 0U..<count {
+    ignore(read_name_bytes(parser))
+    ignore(read_name_bytes(parser))
+    let kind = parser.read_byte().to_uint()
+    match kind {
+      0U => push_unique_u32(out, parser.read_u32_leb128())
+      1U => {
+        skip_heap_type(parser)
+        parse_limits(parser)
+      }
+      2U => parse_limits(parser)
+      3U => {
+        ignore(read_val_type_bytes_raise(parser))
+        ignore(parser.read_byte())
+      }
+      4U =>
+        raise WalyzeError::InvalidFormat(
+          "tag import is not supported in remove-unused-types",
+        )
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported import descriptor kind in remove-unused-types: " +
+          kind.to_string(),
+        )
+    }
+  }
+  out
+}
+
+///|
+fn rewrite_import_section_payload_for_type_index_map_raise(
+  payload : Bytes,
+  type_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(count)[:])
+  for _ in 0U..<count {
+    let module_name = read_name_bytes(parser)
+    let field_name = read_name_bytes(parser)
+    let kind = parser.read_byte().to_uint()
+    append_name_bytes(out, module_name)
+    append_name_bytes(out, field_name)
+    out.push(kind.to_byte())
+    match kind {
+      0U => {
+        let old_type = parser.read_u32_leb128()
+        out.append(
+          encode_u32_leb128(remap_type_index_raise(old_type, type_index_map))[:],
+        )
+      }
+      1U => {
+        let start = parser.get_pos()
+        skip_heap_type(parser)
+        parse_limits(parser)
+        let end_ = parser.get_pos()
+        out.append(payload[start:end_].to_array())
+      }
+      2U => {
+        let start = parser.get_pos()
+        parse_limits(parser)
+        let end_ = parser.get_pos()
+        out.append(payload[start:end_].to_array())
+      }
+      3U => {
+        out.append(read_val_type_bytes_raise(parser)[:].to_array())
+        out.push(parser.read_byte())
+      }
+      4U =>
+        raise WalyzeError::InvalidFormat(
+          "tag import is not supported in remove-unused-types",
+        )
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported import descriptor kind in remove-unused-types: " +
+          kind.to_string(),
+        )
+    }
   }
   Bytes::from_array(out[:])
 }
@@ -3139,6 +3318,138 @@ fn rewrite_code_section_payload_for_dce_raise(
   for body in kept_bodies {
     out.append(encode_u32_leb128(body.length().reinterpret_as_uint())[:])
     out.append(body[:].to_array())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn decode_call_indirect_immediate(imm : Bytes) -> (UInt, UInt)? {
+  let parser = Cursor::new(imm)
+  let result = try? {
+    let type_index = parser.read_u32_leb128()
+    let table_index = parser.read_u32_leb128()
+    if not(parser.eof()) {
+      raise WalyzeError::InvalidFormat(
+        "call_indirect immediate has trailing bytes",
+      )
+    }
+    (type_index, table_index)
+  }
+  match result {
+    Ok(v) => Some(v)
+    Err(_) => None
+  }
+}
+
+///|
+fn collect_used_type_indices_from_instruction_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> Array[UInt] raise WalyzeError {
+  let out : Array[UInt] = []
+  for span in spans {
+    if span.opcode == 0x11U {
+      if span.end_ <= span.start + 1 {
+        raise WalyzeError::InvalidFormat("invalid call_indirect immediate")
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      match decode_call_indirect_immediate(imm) {
+        Some((type_index, _table_index)) => push_unique_u32(out, type_index)
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode call_indirect immediate",
+          )
+      }
+    }
+  }
+  out
+}
+
+///|
+fn collect_used_type_indices_from_code_section_raise(
+  payload : Bytes,
+) -> Array[UInt] raise WalyzeError {
+  let out : Array[UInt] = []
+  let bodies = parse_code_bodies(payload)
+  for body in bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    for
+      type_index in collect_used_type_indices_from_instruction_raise(
+        instr_bytes, spans,
+      ) {
+      push_unique_u32(out, type_index)
+    }
+  }
+  out
+}
+
+///|
+fn rewrite_instruction_type_indices_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  type_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let out : Array[Byte] = []
+  for span in spans {
+    if span.opcode == 0x11U {
+      if span.end_ <= span.start + 1 {
+        raise WalyzeError::InvalidFormat("invalid call_indirect immediate")
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let (old_type_index, table_index) = match
+        decode_call_indirect_immediate(imm) {
+        Some(v) => v
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode call_indirect immediate",
+          )
+      }
+      out.push(0x11U.to_byte())
+      out.append(
+        encode_u32_leb128(
+          remap_type_index_raise(old_type_index, type_index_map),
+        )[:],
+      )
+      out.append(encode_u32_leb128(table_index)[:])
+    } else {
+      out.append(instr_bytes[span.start:span.end_].to_array())
+    }
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_code_body_for_type_index_map_raise(
+  body_bytes : Bytes,
+  type_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let prefix_end = parse_local_decl_prefix_end(body_bytes)
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let spans = parse_instruction_spans_raise(instr_bytes)
+  let rewritten_instr = rewrite_instruction_type_indices_raise(
+    instr_bytes, spans, type_index_map,
+  )
+  let out : Array[Byte] = body_bytes[0:prefix_end].to_array()
+  out.append(rewritten_instr[:].to_array())
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_code_section_payload_for_type_index_map_raise(
+  payload : Bytes,
+  type_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let bodies = parse_code_bodies(payload)
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(bodies.length().reinterpret_as_uint())[:])
+  for body in bodies {
+    let rewritten = rewrite_code_body_for_type_index_map_raise(
+      body, type_index_map,
+    )
+    out.append(encode_u32_leb128(rewritten.length().reinterpret_as_uint())[:])
+    out.append(rewritten[:].to_array())
   }
   Bytes::from_array(out[:])
 }
@@ -3491,6 +3802,14 @@ fn should_optimize_code_section(config : OptimizeConfig) -> Bool {
 }
 
 ///|
+fn should_remove_unused_types(config : OptimizeConfig) -> Bool {
+  config.enable_dce ||
+  config.enable_dfe ||
+  config.enable_merge_similar_functions ||
+  config.enable_remove_unused_module_elements
+}
+
+///|
 priv struct OptimizeRoundResult {
   bytes : Bytes
   removed_sections : Array[String]
@@ -3590,6 +3909,15 @@ fn optimize_for_size_round_raise(
         rume.removed_data_count.to_string() +
         " exports:" +
         rume.removed_export_count.to_string(),
+      )
+    }
+  }
+  if should_remove_unused_types(config) {
+    let remove_unused_types = apply_remove_unused_types(optimized_bytes)
+    optimized_bytes = remove_unused_types.bytes
+    if remove_unused_types.removed_type_count > 0U {
+      removed_sections.push(
+        "types:" + remove_unused_types.removed_type_count.to_string(),
       )
     }
   }
@@ -4131,6 +4459,12 @@ priv struct RumeApplyResult {
 }
 
 ///|
+priv struct RemoveUnusedTypesApplyResult {
+  bytes : Bytes
+  removed_type_count : UInt
+}
+
+///|
 fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
   if a.length() != b.length() {
     return false
@@ -4584,6 +4918,140 @@ fn apply_remove_unused_module_elements_raise(
     removed_data_count,
     removed_export_count,
   }
+}
+
+///|
+fn apply_remove_unused_types(bytes : Bytes) -> RemoveUnusedTypesApplyResult {
+  let result = try? apply_remove_unused_types_raise(bytes)
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, removed_type_count: 0U }
+  }
+}
+
+///|
+fn apply_remove_unused_types_raise(
+  bytes : Bytes,
+) -> RemoveUnusedTypesApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut type_section_payload : Bytes? = None
+  let mut import_section_payload : Bytes? = None
+  let mut function_section_payload : Bytes? = None
+  let mut code_section_payload : Bytes? = None
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      1U => type_section_payload = Some(payload)
+      2U => import_section_payload = Some(payload)
+      3U => function_section_payload = Some(payload)
+      10U => code_section_payload = Some(payload)
+      13U =>
+        raise WalyzeError::InvalidFormat(
+          "tag section is not supported in remove-unused-types",
+        )
+      _ => ()
+    }
+  }
+  let type_payload = match type_section_payload {
+    Some(v) => v
+    None => return { bytes, removed_type_count: 0U }
+  }
+  let type_entries = parse_type_section_entries_raise(type_payload)
+  if type_entries.length() == 0 {
+    return { bytes, removed_type_count: 0U }
+  }
+  let used_type_indices : Array[UInt] = []
+  match import_section_payload {
+    Some(payload) =>
+      for
+        type_index in collect_used_type_indices_from_import_section_raise(
+          payload,
+        ) {
+        push_unique_u32(used_type_indices, type_index)
+      }
+    None => ()
+  }
+  match function_section_payload {
+    Some(payload) =>
+      for type_index in parse_function_type_indices(payload) {
+        push_unique_u32(used_type_indices, type_index)
+      }
+    None => ()
+  }
+  match code_section_payload {
+    Some(payload) =>
+      for
+        type_index in collect_used_type_indices_from_code_section_raise(payload) {
+        push_unique_u32(used_type_indices, type_index)
+      }
+    None => ()
+  }
+  let type_count_u = type_entries.length().reinterpret_as_uint()
+  for type_index in used_type_indices {
+    if type_index >= type_count_u {
+      raise WalyzeError::InvalidFormat(
+        "type index out of range in remove-unused-types: " +
+        type_index.to_string(),
+      )
+    }
+  }
+  let keep_types : Array[Bool] = []
+  let type_index_map : Map[UInt, UInt] = {}
+  let mut kept_type_count = 0U
+  for i in 0..<type_entries.length() {
+    let old_type_index = i.reinterpret_as_uint()
+    let keep = used_type_indices.contains(old_type_index)
+    keep_types.push(keep)
+    if keep {
+      type_index_map.set(old_type_index, kept_type_count)
+      kept_type_count += 1U
+    }
+  }
+  let removed_type_count = type_count_u - kept_type_count
+  if removed_type_count == 0U {
+    return { bytes, removed_type_count: 0U }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      1U => {
+        let rewritten = rewrite_type_section_payload_for_keep_raise(
+          payload, keep_types,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 1U, rewritten)
+        }
+      }
+      2U =>
+        append_encoded_section(
+          out,
+          2U,
+          rewrite_import_section_payload_for_type_index_map_raise(
+            payload, type_index_map,
+          ),
+        )
+      3U =>
+        append_encoded_section(
+          out,
+          3U,
+          rewrite_function_section_payload_for_type_index_map_raise(
+            payload, type_index_map,
+          ),
+        )
+      10U =>
+        append_encoded_section(
+          out,
+          10U,
+          rewrite_code_section_payload_for_type_index_map_raise(
+            payload, type_index_map,
+          ),
+        )
+      _ =>
+        out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), removed_type_count }
 }
 
 ///|

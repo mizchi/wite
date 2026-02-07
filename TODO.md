@@ -14,7 +14,8 @@ component-model DCE の強みを活かすため、`wasm-opt` 互換よりも **c
 
 - [ ] `type-refining` 相当を実装する（より具体的な型へ収束）
 - [ ] `signature-pruning` 相当を実装する（不要 param/result の削減）
-- [ ] `remove-unused-types` 相当を実装する（private GC type の削除）
+- [x] `remove-unused-types` の基盤を実装する（core func type pruning）
+- [ ] private GC type まで `remove-unused-types` を拡張する
 - [ ] 可能なら `signature-refining` / `cfp` 系を段階導入する
 - [ ] component root policy と GC 最適化の整合テストを追加する
 
