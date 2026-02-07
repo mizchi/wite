@@ -33,6 +33,9 @@ pub struct OptimizeConfig {
   strip_all_custom : Bool
   strip_name_section : Bool
   strip_producers_section : Bool
+  strip_debug_sections : Bool
+  strip_dwarf_sections : Bool
+  strip_target_features_section : Bool
   keep_custom_sections : Array[String]
   pass_rounds : UInt
   enable_peephole : Bool
@@ -52,6 +55,9 @@ pub fn OptimizeConfig::default() -> Self {
     strip_all_custom: false,
     strip_name_section: true,
     strip_producers_section: true,
+    strip_debug_sections: false,
+    strip_dwarf_sections: false,
+    strip_target_features_section: false,
     keep_custom_sections: [],
     pass_rounds: 1U,
     enable_peephole: true,
@@ -72,6 +78,9 @@ pub fn OptimizeConfig::aggressive() -> Self {
     strip_all_custom: true,
     strip_name_section: true,
     strip_producers_section: true,
+    strip_debug_sections: true,
+    strip_dwarf_sections: true,
+    strip_target_features_section: true,
     keep_custom_sections: [],
     pass_rounds: 1U,
     enable_peephole: true,
@@ -91,6 +100,9 @@ pub fn make_optimize_config(
   strip_all_custom? : Bool = false,
   strip_name_section? : Bool = true,
   strip_producers_section? : Bool = true,
+  strip_debug_sections? : Bool = false,
+  strip_dwarf_sections? : Bool = false,
+  strip_target_features_section? : Bool = false,
   keep_custom_sections? : Array[String] = [],
   pass_rounds? : UInt = 1U,
   enable_peephole? : Bool = true,
@@ -107,6 +119,9 @@ pub fn make_optimize_config(
     strip_all_custom,
     strip_name_section,
     strip_producers_section,
+    strip_debug_sections,
+    strip_dwarf_sections,
+    strip_target_features_section,
     keep_custom_sections,
     pass_rounds,
     enable_peephole,
@@ -1533,6 +1548,18 @@ fn optimize_code_section_payload(
 }
 
 ///|
+fn is_dwarf_custom_section_name(name : String) -> Bool {
+  name.has_prefix(".debug_") || name.has_prefix("reloc..debug_")
+}
+
+///|
+fn is_debug_custom_section_name(name : String) -> Bool {
+  name == "sourceMappingURL" ||
+  name == "external_debug_info" ||
+  is_dwarf_custom_section_name(name)
+}
+
+///|
 fn keep_custom_section(section : RawSection, config : OptimizeConfig) -> Bool {
   if section.section_id != 0U {
     return true
@@ -1551,6 +1578,15 @@ fn keep_custom_section(section : RawSection, config : OptimizeConfig) -> Bool {
     return false
   }
   if config.strip_producers_section && name == "producers" {
+    return false
+  }
+  if config.strip_target_features_section && name == "target_features" {
+    return false
+  }
+  if config.strip_dwarf_sections && is_dwarf_custom_section_name(name) {
+    return false
+  }
+  if config.strip_debug_sections && is_debug_custom_section_name(name) {
     return false
   }
   true

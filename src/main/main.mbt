@@ -8,7 +8,7 @@ fn print_usage() -> Unit {
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
   println(
-    "  optimize <input.wasm> <output.wasm> [--strip-all-custom] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply]",
+    "  optimize <input.wasm> <output.wasm> [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply]",
   )
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
@@ -115,6 +115,9 @@ fn run_optimize(args : Array[String]) -> Unit {
   let input_path = args[2]
   let output_path = args[3]
   let mut strip_all_custom = false
+  let mut strip_debug_sections = false
+  let mut strip_dwarf_sections = false
+  let mut strip_target_features_section = false
   let mut enable_peephole = true
   let mut enable_vacuum = true
   let mut enable_merge_blocks = true
@@ -126,6 +129,15 @@ fn run_optimize(args : Array[String]) -> Unit {
   for i in 4..<args.length() {
     if args[i] == "--strip-all-custom" {
       strip_all_custom = true
+    }
+    if args[i] == "--strip-debug" {
+      strip_debug_sections = true
+    }
+    if args[i] == "--strip-dwarf" {
+      strip_dwarf_sections = true
+    }
+    if args[i] == "--strip-target-features" {
+      strip_target_features_section = true
     }
     if args[i] == "--no-peephole" {
       enable_peephole = false
@@ -160,6 +172,9 @@ fn run_optimize(args : Array[String]) -> Unit {
   let keep_custom_sections = parse_keep_custom(args, 4)
   let config = @walyze.make_optimize_config(
     strip_all_custom~,
+    strip_debug_sections~,
+    strip_dwarf_sections~,
+    strip_target_features_section~,
     keep_custom_sections~,
     pass_rounds~,
     enable_peephole~,

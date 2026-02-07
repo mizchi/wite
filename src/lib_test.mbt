@@ -16,6 +16,31 @@ fn append_section(out : Array[Byte], id : UInt, payload : Array[Byte]) -> Unit {
 }
 
 ///|
+fn ascii_bytes(text : String) -> Array[Byte] {
+  let out : Array[Byte] = []
+  for ch in text {
+    out.push(ch.to_int().to_byte())
+  }
+  out
+}
+
+///|
+fn append_named_custom_section(
+  out : Array[Byte],
+  name : String,
+  body : Array[Int],
+) -> Unit {
+  let name_bytes = ascii_bytes(name)
+  let payload : Array[Byte] = []
+  payload.append(
+    encode_u32_leb128(name_bytes.length().reinterpret_as_uint())[:],
+  )
+  payload.append(name_bytes[:])
+  payload.append(bytes_of(body)[:])
+  append_section(out, 0U, payload)
+}
+
+///|
 fn sample_module_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -54,6 +79,25 @@ fn sample_module_with_peephole_bytes() -> Bytes {
     10U,
     bytes_of([0x01, 0x08, 0x00, 0x01, 0x41, 0x00, 0x1a, 0x41, 0x2a, 0x0b]),
   )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_misc_custom_sections_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 1 function -> type idx 0
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section: 1 body, size=2, local decl count=0, end
+  append_section(out, 10U, bytes_of([0x01, 0x02, 0x00, 0x0b]))
+  append_named_custom_section(out, "sourceMappingURL", [0x00])
+  append_named_custom_section(out, ".debug_info", [0x00])
+  append_named_custom_section(out, "target_features", [0x00])
+  append_named_custom_section(out, "keepme", [0x00])
   Bytes::from_array(out[:])
 }
 
@@ -383,6 +427,35 @@ test "optimize for size strips custom sections" {
   assert_eq(find_section_size(sections_after, "export"), Some(9U))
   assert_eq(find_section_size(sections_after, "code"), Some(6U))
   assert_true(not(sections_after.any(s => s.key.contains("custom:"))))
+}
+
+///|
+test "optimize can strip debug/dwarf/target-features sections" {
+  let bytes = sample_module_with_misc_custom_sections_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=true,
+    strip_dwarf_sections=true,
+    strip_target_features_section=true,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard analyze_section_sizes(optimized.bytes) is Ok(sections_after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(not(sections_after.any(s => s.key == "custom:sourceMappingURL")))
+  assert_true(not(sections_after.any(s => s.key == "custom:.debug_info")))
+  assert_true(not(sections_after.any(s => s.key == "custom:target_features")))
+  assert_true(sections_after.any(s => s.key == "custom:keepme"))
 }
 
 ///|
