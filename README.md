@@ -11,6 +11,7 @@ It provides:
 - core wasm DCE report + apply (callgraph-based function-level pruning)
 - core wasm duplicate function elimination apply (body+type based index remap)
 - core wasm merge-similar-functions apply (forwarding thunk merge + index remap)
+- core wasm remove-unused-module-elements apply (unused local table/element pruning)
 - custom section strip passes (`strip-debug` / `strip-dwarf` / `strip-target-features`)
 - optimization level presets (`-O0/-O1/-O2/-O3/-Os/-Oz`, plus `--converge`)
 - size-oriented optimization pass (`wasm-opt`-style custom section stripping + vacuum + merge-blocks + remove-unused-brs + peephole + DCE + DFE + MSF)
@@ -30,7 +31,7 @@ just run -- top-functions path/to/module.wasm 20
 just run -- callgraph path/to/module.wasm 20
 just run -- dce-report path/to/module.wasm 20
 just run -- runtime-profile path/to/module.wasm 100
-just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features --converge
+just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features --converge --rume-apply
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
 just run -- component-callgraph path/to/component.wasm 20

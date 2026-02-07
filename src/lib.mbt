@@ -47,6 +47,7 @@ pub struct OptimizeConfig {
   enable_dce : Bool
   enable_dfe : Bool
   enable_merge_similar_functions : Bool
+  enable_remove_unused_module_elements : Bool
 }
 
 ///|
@@ -69,6 +70,7 @@ pub fn OptimizeConfig::default() -> Self {
     enable_dce: false,
     enable_dfe: false,
     enable_merge_similar_functions: false,
+    enable_remove_unused_module_elements: false,
   }
 }
 
@@ -92,6 +94,7 @@ pub fn OptimizeConfig::aggressive() -> Self {
     enable_dce: false,
     enable_dfe: false,
     enable_merge_similar_functions: false,
+    enable_remove_unused_module_elements: false,
   }
 }
 
@@ -184,6 +187,7 @@ pub fn OptimizeConfig::o3() -> Self {
     enable_dce=true,
     enable_dfe=true,
     enable_merge_similar_functions=true,
+    enable_remove_unused_module_elements=true,
   )
 }
 
@@ -207,6 +211,7 @@ pub fn OptimizeConfig::os() -> Self {
     enable_dce=true,
     enable_dfe=true,
     enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=true,
   )
 }
 
@@ -230,6 +235,7 @@ pub fn OptimizeConfig::oz() -> Self {
     enable_dce=true,
     enable_dfe=true,
     enable_merge_similar_functions=true,
+    enable_remove_unused_module_elements=true,
   )
 }
 
@@ -265,6 +271,7 @@ pub fn make_optimize_config(
   enable_dce? : Bool = false,
   enable_dfe? : Bool = false,
   enable_merge_similar_functions? : Bool = false,
+  enable_remove_unused_module_elements? : Bool = false,
 ) -> OptimizeConfig {
   {
     strip_all_custom,
@@ -284,6 +291,7 @@ pub fn make_optimize_config(
     enable_dce,
     enable_dfe,
     enable_merge_similar_functions,
+    enable_remove_unused_module_elements,
   }
 }
 
@@ -827,6 +835,40 @@ fn parse_import_function_count(payload : Bytes) -> UInt raise WalyzeError {
 }
 
 ///|
+fn parse_import_table_count(payload : Bytes) -> UInt raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let mut table_import_count = 0U
+  for _ in 0U..<count {
+    ignore(read_name_string(parser))
+    ignore(read_name_string(parser))
+    let kind = parser.read_byte().to_uint()
+    match kind {
+      0x00U => ignore(parser.read_u32_leb128())
+      0x01U => {
+        table_import_count += 1U
+        skip_heap_type(parser)
+        parse_limits(parser)
+      }
+      0x02U => parse_limits(parser)
+      0x03U => {
+        ignore(parser.read_byte())
+        ignore(parser.read_byte())
+      }
+      0x04U => {
+        ignore(parser.read_byte())
+        ignore(parser.read_u32_leb128())
+      }
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported import descriptor kind: " + kind.to_string(),
+        )
+    }
+  }
+  table_import_count
+}
+
+///|
 fn parse_import_function_type_indices(
   payload : Bytes,
 ) -> Array[UInt] raise WalyzeError {
@@ -890,6 +932,22 @@ fn parse_export_function_names(
     let index = parser.read_u32_leb128()
     if kind == 0U {
       map_push_string_array(out, index, name)
+    }
+  }
+  out
+}
+
+///|
+fn parse_export_table_indices(payload : Bytes) -> Array[UInt] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[UInt] = []
+  for _ in 0U..<count {
+    ignore(read_name_string(parser))
+    let kind = parser.read_byte().to_uint()
+    let index = parser.read_u32_leb128()
+    if kind == 1U {
+      push_unique_u32(out, index)
     }
   }
   out
@@ -1614,6 +1672,431 @@ fn rewrite_element_section_payload_for_index_map_raise(
 }
 
 ///|
+fn parse_table_section_entries_raise(
+  payload : Bytes,
+) -> Array[Bytes] raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let count = parser.read_u32_leb128()
+  let out : Array[Bytes] = []
+  for _ in 0U..<count {
+    let start = parser.get_pos()
+    ignore(read_ref_type_bytes_raise(parser))
+    parse_limits(parser)
+    let end_ = parser.get_pos()
+    out.push(payload[start:end_].to_bytes())
+  }
+  out
+}
+
+///|
+fn rewrite_table_section_payload_for_keep_local_raise(
+  payload : Bytes,
+  keep_local : Array[Bool],
+) -> Bytes raise WalyzeError {
+  let entries = parse_table_section_entries_raise(payload)
+  if entries.length() != keep_local.length() {
+    raise WalyzeError::InvalidFormat(
+      "table section length mismatch: table=" +
+      entries.length().to_string() +
+      " keep=" +
+      keep_local.length().to_string(),
+    )
+  }
+  let out : Array[Byte] = []
+  let mut kept_count = 0U
+  let kept_entries : Array[Bytes] = []
+  for i in 0..<entries.length() {
+    if keep_local[i] {
+      kept_entries.push(entries[i])
+      kept_count += 1U
+    }
+  }
+  out.append(encode_u32_leb128(kept_count)[:])
+  for entry in kept_entries {
+    out.append(entry[:].to_array())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn remap_table_index_raise(
+  index : UInt,
+  table_index_map : Map[UInt, UInt],
+) -> UInt raise WalyzeError {
+  match table_index_map.get(index) {
+    Some(v) => v
+    None =>
+      raise WalyzeError::InvalidFormat(
+        "table remap missing index: " + index.to_string(),
+      )
+  }
+}
+
+///|
+fn collect_used_table_indices_from_instruction_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> Array[UInt] raise WalyzeError {
+  let out : Array[UInt] = []
+  for span in spans {
+    match span.opcode {
+      0x11U => {
+        if span.end_ <= span.start + 1 {
+          raise WalyzeError::InvalidFormat("invalid call_indirect immediate")
+        }
+        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let parser = Cursor::new(imm)
+        ignore(parser.read_u32_leb128())
+        push_unique_u32(out, parser.read_u32_leb128())
+      }
+      0x25U | 0x26U =>
+        match decode_span_u32_immediate(instr_bytes, span) {
+          Some(index) => push_unique_u32(out, index)
+          None =>
+            raise WalyzeError::InvalidFormat(
+              "failed to decode table index immediate",
+            )
+        }
+      0xfcU => {
+        if span.end_ <= span.start + 1 {
+          raise WalyzeError::InvalidFormat("invalid 0xfc immediate")
+        }
+        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let parser = Cursor::new(imm)
+        let subopcode = parser.read_u32_leb128()
+        match subopcode {
+          12U => {
+            ignore(parser.read_u32_leb128())
+            push_unique_u32(out, parser.read_u32_leb128())
+          }
+          14U => {
+            push_unique_u32(out, parser.read_u32_leb128())
+            push_unique_u32(out, parser.read_u32_leb128())
+          }
+          15U | 16U | 17U => push_unique_u32(out, parser.read_u32_leb128())
+          _ => ()
+        }
+      }
+      _ => ()
+    }
+  }
+  out
+}
+
+///|
+fn collect_used_table_indices_from_code_section(
+  payload : Bytes,
+) -> Array[UInt]? {
+  let result = try? {
+    let out : Array[UInt] = []
+    let bodies = parse_code_bodies(payload)
+    for body in bodies {
+      let prefix_end = parse_local_decl_prefix_end(body)
+      let instr_bytes = body[prefix_end:body.length()].to_bytes()
+      let spans = parse_instruction_spans_raise(instr_bytes)
+      for
+        index in collect_used_table_indices_from_instruction_raise(
+          instr_bytes, spans,
+        ) {
+        push_unique_u32(out, index)
+      }
+    }
+    out
+  }
+  match result {
+    Ok(v) => Some(v)
+    Err(_) => None
+  }
+}
+
+///|
+fn rewrite_instruction_table_indices_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  table_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let out : Array[Byte] = []
+  for span in spans {
+    match span.opcode {
+      0x11U => {
+        if span.end_ <= span.start + 1 {
+          raise WalyzeError::InvalidFormat("invalid call_indirect immediate")
+        }
+        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let parser = Cursor::new(imm)
+        let type_index = parser.read_u32_leb128()
+        let table_index = parser.read_u32_leb128()
+        out.push(0x11U.to_byte())
+        out.append(encode_u32_leb128(type_index)[:])
+        out.append(
+          encode_u32_leb128(
+            remap_table_index_raise(table_index, table_index_map),
+          )[:],
+        )
+      }
+      0x25U | 0x26U =>
+        match decode_span_u32_immediate(instr_bytes, span) {
+          Some(index) => {
+            out.push(span.opcode.to_byte())
+            out.append(
+              encode_u32_leb128(remap_table_index_raise(index, table_index_map))[:],
+            )
+          }
+          None =>
+            raise WalyzeError::InvalidFormat(
+              "failed to decode table index immediate",
+            )
+        }
+      0xfcU => {
+        if span.end_ <= span.start + 1 {
+          raise WalyzeError::InvalidFormat("invalid 0xfc immediate")
+        }
+        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let parser = Cursor::new(imm)
+        let subopcode = parser.read_u32_leb128()
+        out.push(0xfcU.to_byte())
+        out.append(encode_u32_leb128(subopcode)[:])
+        match subopcode {
+          12U => {
+            let elem_index = parser.read_u32_leb128()
+            let table_index = parser.read_u32_leb128()
+            out.append(encode_u32_leb128(elem_index)[:])
+            out.append(
+              encode_u32_leb128(
+                remap_table_index_raise(table_index, table_index_map),
+              )[:],
+            )
+          }
+          14U => {
+            let dst = parser.read_u32_leb128()
+            let src = parser.read_u32_leb128()
+            out.append(
+              encode_u32_leb128(remap_table_index_raise(dst, table_index_map))[:],
+            )
+            out.append(
+              encode_u32_leb128(remap_table_index_raise(src, table_index_map))[:],
+            )
+          }
+          15U | 16U | 17U => {
+            let table_index = parser.read_u32_leb128()
+            out.append(
+              encode_u32_leb128(
+                remap_table_index_raise(table_index, table_index_map),
+              )[:],
+            )
+          }
+          _ => out.append(imm[:].to_array())
+        }
+      }
+      _ => out.append(instr_bytes[span.start:span.end_].to_array())
+    }
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_code_body_for_table_index_map_raise(
+  body : Bytes,
+  table_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let prefix_end = parse_local_decl_prefix_end(body)
+  let instr_bytes = body[prefix_end:body.length()].to_bytes()
+  let spans = parse_instruction_spans_raise(instr_bytes)
+  let rewritten_instr = rewrite_instruction_table_indices_raise(
+    instr_bytes, spans, table_index_map,
+  )
+  let out : Array[Byte] = body[0:prefix_end].to_array()
+  out.append(rewritten_instr[:].to_array())
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_code_section_payload_for_table_index_map_raise(
+  payload : Bytes,
+  table_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let bodies = parse_code_bodies(payload)
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(bodies.length().reinterpret_as_uint())[:])
+  for body in bodies {
+    let rewritten = rewrite_code_body_for_table_index_map_raise(
+      body, table_index_map,
+    )
+    out.append(encode_u32_leb128(rewritten.length().reinterpret_as_uint())[:])
+    out.append(rewritten[:].to_array())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_export_section_payload_for_table_index_map_raise(
+  payload : Bytes,
+  table_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let export_count = parser.read_u32_leb128()
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(export_count)[:])
+  for _ in 0U..<export_count {
+    let name = read_name_bytes(parser)
+    let kind = parser.read_byte().to_uint()
+    let index = parser.read_u32_leb128()
+    append_name_bytes(out, name)
+    out.push(kind.to_byte())
+    let remapped = if kind == 1U {
+      remap_table_index_raise(index, table_index_map)
+    } else {
+      index
+    }
+    out.append(encode_u32_leb128(remapped)[:])
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn read_function_index_vector_bytes_raise(
+  parser : Cursor,
+) -> Bytes raise WalyzeError {
+  let start = parser.get_pos()
+  let count = parser.read_u32_leb128()
+  for _ in 0U..<count {
+    ignore(parser.read_u32_leb128())
+  }
+  let end_ = parser.get_pos()
+  parser.bytes[start:end_].to_bytes()
+}
+
+///|
+fn read_const_expr_vector_bytes_raise(
+  parser : Cursor,
+  payload : Bytes,
+) -> Bytes raise WalyzeError {
+  let start = parser.get_pos()
+  let count = parser.read_u32_leb128()
+  for _ in 0U..<count {
+    ignore(read_const_expr_bytes_raise(parser, payload))
+  }
+  let end_ = parser.get_pos()
+  payload[start:end_].to_bytes()
+}
+
+///|
+fn rewrite_element_section_payload_for_table_index_map_raise(
+  payload : Bytes,
+  table_index_map : Map[UInt, UInt],
+) -> (Bytes, UInt) raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let segment_count = parser.read_u32_leb128()
+  let kept_segments : Array[Bytes] = []
+  let mut removed_segment_count = 0U
+  for _ in 0U..<segment_count {
+    let flags = parser.read_u32_leb128()
+    let segment_out : Array[Byte] = []
+    let mut keep_segment = true
+    match flags {
+      0U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        let function_indices = read_function_index_vector_bytes_raise(parser)
+        if table_index_map.get(0U) is None {
+          keep_segment = false
+        } else {
+          segment_out.append(encode_u32_leb128(0U)[:])
+          segment_out.append(offset_expr[:].to_array())
+          segment_out.append(function_indices[:].to_array())
+        }
+      }
+      1U => {
+        let elem_kind = parser.read_byte()
+        let function_indices = read_function_index_vector_bytes_raise(parser)
+        segment_out.append(encode_u32_leb128(1U)[:])
+        segment_out.push(elem_kind)
+        segment_out.append(function_indices[:].to_array())
+      }
+      2U => {
+        let table_index = parser.read_u32_leb128()
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        let elem_kind = parser.read_byte()
+        let function_indices = read_function_index_vector_bytes_raise(parser)
+        match table_index_map.get(table_index) {
+          Some(remapped) => {
+            segment_out.append(encode_u32_leb128(2U)[:])
+            segment_out.append(encode_u32_leb128(remapped)[:])
+            segment_out.append(offset_expr[:].to_array())
+            segment_out.push(elem_kind)
+            segment_out.append(function_indices[:].to_array())
+          }
+          None => keep_segment = false
+        }
+      }
+      3U => {
+        let elem_kind = parser.read_byte()
+        let function_indices = read_function_index_vector_bytes_raise(parser)
+        segment_out.append(encode_u32_leb128(3U)[:])
+        segment_out.push(elem_kind)
+        segment_out.append(function_indices[:].to_array())
+      }
+      4U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        let exprs = read_const_expr_vector_bytes_raise(parser, payload)
+        if table_index_map.get(0U) is None {
+          keep_segment = false
+        } else {
+          segment_out.append(encode_u32_leb128(4U)[:])
+          segment_out.append(offset_expr[:].to_array())
+          segment_out.append(exprs[:].to_array())
+        }
+      }
+      5U => {
+        let ref_type = read_ref_type_bytes_raise(parser)
+        let exprs = read_const_expr_vector_bytes_raise(parser, payload)
+        segment_out.append(encode_u32_leb128(5U)[:])
+        segment_out.append(ref_type[:].to_array())
+        segment_out.append(exprs[:].to_array())
+      }
+      6U => {
+        let table_index = parser.read_u32_leb128()
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        let ref_type = read_ref_type_bytes_raise(parser)
+        let exprs = read_const_expr_vector_bytes_raise(parser, payload)
+        match table_index_map.get(table_index) {
+          Some(remapped) => {
+            segment_out.append(encode_u32_leb128(6U)[:])
+            segment_out.append(encode_u32_leb128(remapped)[:])
+            segment_out.append(offset_expr[:].to_array())
+            segment_out.append(ref_type[:].to_array())
+            segment_out.append(exprs[:].to_array())
+          }
+          None => keep_segment = false
+        }
+      }
+      7U => {
+        let ref_type = read_ref_type_bytes_raise(parser)
+        let exprs = read_const_expr_vector_bytes_raise(parser, payload)
+        segment_out.append(encode_u32_leb128(7U)[:])
+        segment_out.append(ref_type[:].to_array())
+        segment_out.append(exprs[:].to_array())
+      }
+      _ =>
+        raise WalyzeError::InvalidFormat(
+          "unsupported element segment flags in table rewrite: " +
+          flags.to_string(),
+        )
+    }
+    if keep_segment {
+      kept_segments.push(Bytes::from_array(segment_out[:]))
+    } else {
+      removed_segment_count += 1U
+    }
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_segments.length().reinterpret_as_uint())[:])
+  for segment in kept_segments {
+    out.append(segment[:].to_array())
+  }
+  (Bytes::from_array(out[:]), removed_segment_count)
+}
+
+///|
 fn rewrite_export_section_payload_for_dce_raise(
   payload : Bytes,
   index_map : Map[UInt, UInt],
@@ -2189,6 +2672,18 @@ fn optimize_for_size_round_raise(
       removed_sections.push("custom:name(msf)")
     }
   }
+  if config.enable_remove_unused_module_elements {
+    let rume = apply_remove_unused_module_elements_raise(optimized_bytes)
+    optimized_bytes = rume.bytes
+    if rume.removed_table_count > 0U || rume.removed_element_count > 0U {
+      removed_sections.push(
+        "rume:tables:" +
+        rume.removed_table_count.to_string() +
+        " elements:" +
+        rume.removed_element_count.to_string(),
+      )
+    }
+  }
   { bytes: optimized_bytes, removed_sections }
 }
 
@@ -2574,6 +3069,13 @@ priv struct MsfApplyResult {
 }
 
 ///|
+priv struct RumeApplyResult {
+  bytes : Bytes
+  removed_table_count : UInt
+  removed_element_count : UInt
+}
+
+///|
 fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
   if a.length() != b.length() {
     return false
@@ -2605,6 +3107,134 @@ fn parse_forward_call_target(body_bytes : Bytes) -> UInt? {
     return None
   }
   decode_span_u32_immediate(instr_bytes, spans[0])
+}
+
+///|
+fn apply_remove_unused_module_elements_raise(
+  bytes : Bytes,
+) -> RumeApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut imported_table_count = 0U
+  let mut table_section_payload : Bytes? = None
+  let mut element_section_payload : Bytes? = None
+  let used_table_indices : Array[UInt] = []
+  let mut code_analysis_complete = true
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U => imported_table_count += parse_import_table_count(payload)
+      4U => table_section_payload = Some(payload)
+      7U =>
+        for index in parse_export_table_indices(payload) {
+          push_unique_u32(used_table_indices, index)
+        }
+      9U => element_section_payload = Some(payload)
+      10U =>
+        match collect_used_table_indices_from_code_section(payload) {
+          Some(indices) =>
+            for index in indices {
+              push_unique_u32(used_table_indices, index)
+            }
+          None => code_analysis_complete = false
+        }
+      _ => ()
+    }
+  }
+  if not(code_analysis_complete) {
+    return { bytes, removed_table_count: 0U, removed_element_count: 0U }
+  }
+  let table_payload = match table_section_payload {
+    Some(v) => v
+    None => return { bytes, removed_table_count: 0U, removed_element_count: 0U }
+  }
+  let local_table_entries = parse_table_section_entries_raise(table_payload)
+  if local_table_entries.length() == 0 {
+    return { bytes, removed_table_count: 0U, removed_element_count: 0U }
+  }
+  let keep_local_tables : Array[Bool] = []
+  let table_index_map : Map[UInt, UInt] = {}
+  for i in 0U..<imported_table_count {
+    table_index_map.set(i, i)
+  }
+  let mut kept_local_table_count = 0U
+  let mut removed_table_count = 0U
+  for i in 0..<local_table_entries.length() {
+    let old_index = imported_table_count + i.reinterpret_as_uint()
+    if used_table_indices.contains(old_index) {
+      keep_local_tables.push(true)
+      table_index_map.set(
+        old_index,
+        imported_table_count + kept_local_table_count,
+      )
+      kept_local_table_count += 1U
+    } else {
+      keep_local_tables.push(false)
+      removed_table_count += 1U
+    }
+  }
+  let mut removed_element_count = 0U
+  let mut rewritten_element_payload : Bytes? = None
+  match element_section_payload {
+    Some(payload) => {
+      let (rewritten, removed_segments) = rewrite_element_section_payload_for_table_index_map_raise(
+        payload, table_index_map,
+      )
+      rewritten_element_payload = Some(rewritten)
+      removed_element_count = removed_segments
+    }
+    None => ()
+  }
+  if removed_table_count == 0U && removed_element_count == 0U {
+    return { bytes, removed_table_count, removed_element_count }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      4U => {
+        let rewritten = rewrite_table_section_payload_for_keep_local_raise(
+          payload, keep_local_tables,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 4U, rewritten)
+        }
+      }
+      7U =>
+        append_encoded_section(
+          out,
+          7U,
+          rewrite_export_section_payload_for_table_index_map_raise(
+            payload, table_index_map,
+          ),
+        )
+      9U =>
+        match rewritten_element_payload {
+          Some(rewritten) =>
+            if parse_vec_count(rewritten) > 0U {
+              append_encoded_section(out, 9U, rewritten)
+            }
+          None =>
+            out.append(
+              bytes[section.section_start:section.section_end].to_array(),
+            )
+        }
+      10U =>
+        append_encoded_section(
+          out,
+          10U,
+          rewrite_code_section_payload_for_table_index_map_raise(
+            payload, table_index_map,
+          ),
+        )
+      _ =>
+        out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  {
+    bytes: Bytes::from_array(out[:]),
+    removed_table_count,
+    removed_element_count,
+  }
 }
 
 ///|

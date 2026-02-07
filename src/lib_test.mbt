@@ -448,6 +448,39 @@ fn sample_module_with_global_and_element_root_only_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_unused_table_and_element_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // table section: 2 local funcref tables
+  append_section(out, 4U, bytes_of([0x02, 0x70, 0x00, 0x01, 0x70, 0x00, 0x01]))
+  // export section: export function index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // element section:
+  // seg0: active table 0 (will be removed)
+  // seg1: active table 1 (will be kept and remapped to 0)
+  append_section(
+    out,
+    9U,
+    bytes_of([
+      0x02, 0x02, 0x00, 0x41, 0x00, 0x0b, 0x00, 0x01, 0x00, 0x02, 0x01, 0x41, 0x00,
+      0x0b, 0x00, 0x01, 0x00,
+    ]),
+  )
+  // code section:
+  // #0: table.size 1, drop, end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x01, 0x06, 0x00, 0xfc, 0x10, 0x01, 0x1a, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn bytes_contains_seq(bytes : Bytes, seq : Array[Int]) -> Bool {
   if seq.length() == 0 {
     return true
@@ -828,6 +861,31 @@ test "optimize with dce keeps functions referenced by global/element roots" {
   assert_true(
     not(optimized.removed_sections.any(s => s.contains("dce:functions:"))),
   )
+}
+
+///|
+test "optimize with rume apply removes unused table and element segment" {
+  let bytes = sample_module_with_unused_table_and_element_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_remove_unused_module_elements=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.removed_sections.any(s => s.contains("rume:tables:1")))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x04, 0x04, 0x01, 0x70, 0x00, 0x01]),
+  )
+  assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x00]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x01])))
 }
 
 ///|

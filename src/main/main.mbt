@@ -8,7 +8,7 @@ fn print_usage() -> Unit {
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
   println(
-    "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply]",
+    "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply]",
   )
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
@@ -128,6 +128,7 @@ fn run_optimize(args : Array[String]) -> Unit {
   let mut enable_dce = false
   let mut enable_dfe = false
   let mut enable_merge_similar_functions = false
+  let mut enable_remove_unused_module_elements = false
   for i in 4..<args.length() {
     match @walyze.optimize_config_from_opt_level(args[i]) {
       Some(preset) => {
@@ -145,6 +146,7 @@ fn run_optimize(args : Array[String]) -> Unit {
         enable_dce = preset.enable_dce
         enable_dfe = preset.enable_dfe
         enable_merge_similar_functions = preset.enable_merge_similar_functions
+        enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
       }
       None => ()
     }
@@ -189,6 +191,9 @@ fn run_optimize(args : Array[String]) -> Unit {
     if args[i] == "--msf-apply" {
       enable_merge_similar_functions = true
     }
+    if args[i] == "--rume-apply" {
+      enable_remove_unused_module_elements = true
+    }
   }
   let keep_custom_sections = parse_keep_custom(args, 4)
   let config = @walyze.make_optimize_config(
@@ -207,6 +212,7 @@ fn run_optimize(args : Array[String]) -> Unit {
     enable_dce~,
     enable_dfe~,
     enable_merge_similar_functions~,
+    enable_remove_unused_module_elements~,
   )
   let bytes = read_bytes_or_exit(input_path)
   match @walyze.optimize_for_size(bytes, config~) {
