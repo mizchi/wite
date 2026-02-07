@@ -979,6 +979,63 @@ fn sample_module_with_br_if_const_nonzero_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_local_const_propagation_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=1, local group(count=1, i32)
+  // i32.const 42
+  // local.set 0
+  // nop
+  // local.get 0
+  // i32.const 1
+  // i32.add
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0e, 0x01, 0x01, 0x7f, 0x41, 0x2a, 0x21, 0x00, 0x01, 0x20, 0x00, 0x41,
+      0x01, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_unused_locals_for_coalesce_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=2, both i32 (local #0 is unused, #1 is used)
+  // i32.const 7
+  // local.set 1
+  // local.get 1
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0c, 0x02, 0x01, 0x7f, 0x01, 0x7f, 0x41, 0x07, 0x21, 0x01, 0x20, 0x01,
+      0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_unreachable_tail_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -2625,8 +2682,12 @@ test "optimize rse rewrites local.tee+local.set(same) to local.set" {
     return
   }
   assert_eq(after.code_body_bytes, 8U)
-  assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x21, 0x00, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x22, 0x00, 0x21, 0x00])))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x21, 0x00, 0x0b]),
+  )
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x22, 0x00, 0x21, 0x00])),
+  )
 }
 
 ///|
@@ -2659,8 +2720,12 @@ test "optimize local simplify chain reaches fixed-point" {
     return
   }
   assert_eq(after.code_body_bytes, 2U)
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x22, 0x00])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x00])))
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x22, 0x00])),
+  )
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x00])),
+  )
 }
 
 ///|
@@ -2695,7 +2760,9 @@ test "optimize precompute removes i32.const 0 + br_if" {
     return
   }
   assert_eq(after.code_body_bytes, 5U)
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0d, 0x00])))
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0d, 0x00])),
+  )
 }
 
 ///|
@@ -2730,8 +2797,47 @@ test "optimize precompute rewrites i32.const nonzero + br_if to br" {
     return
   }
   assert_eq(after.code_body_bytes, 7U)
-  assert_true(bytes_contains_seq(optimized.bytes, [0x02, 0x40, 0x0c, 0x00, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x0d, 0x00])))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x02, 0x40, 0x0c, 0x00, 0x0b]),
+  )
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x0d, 0x00])),
+  )
+}
+
+///|
+test "optimize precompute propagates local const and folds arithmetic" {
+  let bytes = sample_module_with_local_const_propagation_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 14U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(after.code_body_bytes < before.code_body_bytes)
+  assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x2b, 0x0b]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00])))
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
 ///|
@@ -2749,21 +2855,18 @@ test "optimize peephole preserves runtime outputs for zero-arg i32 exports" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-
   let bytes0 = sample_module_with_peephole_bytes()
   guard optimize_for_size(bytes0, config~) is Ok(optimized0) else {
     assert_true(false)
     return
   }
   assert_true(runtime_export_outputs_equal(bytes0, optimized0.bytes, "run", []))
-
   let bytes1 = sample_module_with_i32_add_precompute_bytes()
   guard optimize_for_size(bytes1, config~) is Ok(optimized1) else {
     assert_true(false)
     return
   }
   assert_true(runtime_export_outputs_equal(bytes1, optimized1.bytes, "run", []))
-
   let bytes2 = sample_module_with_local_set_get_pair_bytes()
   guard optimize_for_size(bytes2, config~) is Ok(optimized2) else {
     assert_true(false)
@@ -2793,13 +2896,37 @@ test "optimize peephole preserves runtime outputs for unary i32 export" {
     return
   }
   assert_true(
-    runtime_export_outputs_equal(
-      bytes,
-      optimized.bytes,
-      "run",
-      [-7, -1, 0, 1, 42, 123456],
-    ),
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
   )
+}
+
+///|
+test "optimize with dce apply directizes const call_indirect to call" {
+  let bytes = sample_module_with_call_indirect_type_gap_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("directize:calls:1")),
+  )
+  assert_true(bytes_contains_seq(optimized.bytes, [0x10, 0x00]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x11, 0x01, 0x00])))
 }
 
 ///|
@@ -2834,12 +2961,85 @@ test "optimize with dce apply skips partial call graph modules" {
   }
   assert_eq(optimized.before_size, optimized.after_size)
   assert_eq(optimized.removed_sections.length(), 0)
+  assert_true(
+    optimized.no_change_reasons.any(r => r.contains("partial call graph")),
+  )
+}
+
+///|
+test "optimize coalesces unused locals and remaps local indices" {
+  let bytes = sample_module_with_unused_locals_for_coalesce_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_true(before.code_body_bytes > 0U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(after.code_body_bytes < before.code_body_bytes)
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("coalesce-locals:removed:1")),
+  )
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x21, 0x01])))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x01])))
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
+test "optimize reports no-change reasons when all passes are disabled" {
+  let bytes = sample_module_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(optimized.before_size, optimized.after_size)
+  assert_true(
+    optimized.no_change_reasons.contains(
+      "no optimization pass is enabled in config",
+    ),
+  )
 }
 
 ///|
 test "optimize -O1 runs dce and drops empty function/code sections" {
-  let bytes = @fs.read_file_to_bytes("bench/corpus/core/binaryen/br_to_exit.wasm")
-  catch {
+  let bytes = @fs.read_file_to_bytes(
+    "bench/corpus/core/binaryen/br_to_exit.wasm",
+  ) catch {
     _ => {
       assert_true(false)
       return
@@ -2974,8 +3174,7 @@ test "component root policy can include dce exclude roots" {
       return
     }
   }
-  guard analyze_component_root_policy(bytes, exclude=["hello"]) is Ok(policy)
-  else {
+  guard analyze_component_root_policy(bytes, exclude=["hello"]) is Ok(policy) else {
     assert_true(false)
     return
   }
@@ -3145,9 +3344,9 @@ test "component dce corpus applies dce and strictly shrinks core size" {
     }
     assert_true(report.total_core_after_bytes < report.total_core_before_bytes)
     assert_true(
-      report.entries.any(entry =>
-        entry.removed_sections.any(s => s.contains("dce:functions:"))
-      ),
+      report.entries.any(entry => entry.removed_sections.any(s => s.contains(
+        "dce:functions:",
+      ))),
     )
   }
 }
@@ -3179,8 +3378,7 @@ test "component optimize with exclude keeps socket pluggable after dce" {
     return
   }
   assert_true(optimized_socket.after_size <= optimized_socket.before_size)
-  guard @mwac_component.parse_component_info(socket_bytes) is Ok(socket_info)
-  else {
+  guard @mwac_component.parse_component_info(socket_bytes) is Ok(socket_info) else {
     assert_true(false)
     return
   }
@@ -3197,5 +3395,56 @@ test "component optimize with exclude keeps socket pluggable after dce" {
   assert_eq(composed_info.exports.length(), socket_info.exports.length())
   for e in socket_info.exports {
     assert_true(has_component_export(composed_info.exports, e.name, e.kind))
+  }
+}
+
+///|
+test "component optimize reports no-change reasons when all passes are disabled" {
+  let component_path = "bench/corpus/component-dce/mwac/wac_greeter.wasm"
+  let bytes = @fs.read_file_to_bytes(component_path) catch {
+    _ => {
+      inspect("skip", content="skip")
+      return
+    }
+  }
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+    closed_world=false,
+    safe_mode=false,
+  )
+  guard optimize_component_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(optimized.before_size, optimized.after_size)
+  assert_true(
+    optimized.no_change_reasons.any(r => r.contains(
+      "no optimization pass is enabled in config",
+    )),
+  )
+  guard analyze_component_core_optimize(bytes, config~) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_true(report.entries.length() > 0)
+  for entry in report.entries {
+    assert_true(
+      entry.no_change_reasons.contains(
+        "no optimization pass is enabled in config",
+      ),
+    )
   }
 }

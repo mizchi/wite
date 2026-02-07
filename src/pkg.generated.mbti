@@ -81,6 +81,7 @@ pub struct ComponentCoreOptimizeEntry {
   before_bytes : UInt
   after_bytes : UInt
   removed_sections : Array[String]
+  no_change_reasons : Array[String]
 }
 
 pub struct ComponentCoreOptimizeReport {
@@ -200,6 +201,7 @@ pub struct OptimizeResult {
   before_size : UInt
   after_size : UInt
   removed_sections : Array[String]
+  no_change_reasons : Array[String]
 }
 
 pub struct RuntimeFunctionProfile {

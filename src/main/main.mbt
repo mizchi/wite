@@ -11,13 +11,13 @@ fn print_usage() -> Unit {
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
   println(
-    "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
+    "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
   )
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
   println("  component-callgraph <component.wasm> [limit]")
   println(
-    "  component-dce-kpi <component.wasm> [wit-dir] [--exclude=<name>] [--closed-world-root=<export-name>] [--safe-mode]",
+    "  component-dce-kpi <component.wasm> [wit-dir] [--exclude=<name>] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
   )
   println("  contract <component.wasm> <wit-dir>")
   println("  root-policy <component.wasm> [wit-dir] [--exclude=<name>]")
@@ -162,6 +162,7 @@ fn run_optimize(args : Array[String]) -> Unit {
   let mut enable_remove_unused_module_elements = false
   let mut closed_world = false
   let mut safe_mode = false
+  let mut verbose = false
   for i in 4..<args.length() {
     match @walyze.optimize_config_from_opt_level(args[i]) {
       Some(preset) => {
@@ -235,6 +236,9 @@ fn run_optimize(args : Array[String]) -> Unit {
     if args[i] == "--safe-mode" {
       safe_mode = true
     }
+    if args[i] == "--verbose" {
+      verbose = true
+    }
   }
   let keep_custom_sections = parse_keep_custom(args, 4)
   let closed_world_root_exports = parse_closed_world_roots(args, 4)
@@ -279,6 +283,9 @@ fn run_optimize(args : Array[String]) -> Unit {
       )
       if result.removed_sections.length() > 0 {
         println("removed sections: " + result.removed_sections.join(", "))
+      }
+      if verbose && result.no_change_reasons.length() > 0 {
+        println("no-change reasons: " + result.no_change_reasons.join(", "))
       }
     }
     Err(e) => {
@@ -637,9 +644,12 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
   let excludes = parse_excluded_roots(args, 3)
   let mut wit_path : String? = None
   let mut safe_mode = false
+  let mut verbose = false
   for i in 3..<args.length() {
     if args[i] == "--safe-mode" {
       safe_mode = true
+    } else if args[i] == "--verbose" {
+      verbose = true
     } else if not(args[i].has_prefix("--")) && wit_path is None {
       wit_path = Some(args[i])
     }
@@ -658,7 +668,9 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
   }
   let policy = match
     @walyze.analyze_component_root_policy(
-      bytes, resolved_wit~, exclude=excludes,
+      bytes,
+      resolved_wit~,
+      exclude=excludes,
     ) {
     Ok(v) => v
     Err(msg) => {
@@ -719,6 +731,11 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
           entry.after_bytes.to_string() +
           " bytes",
         )
+        if verbose && entry.no_change_reasons.length() > 0 {
+          println(
+            "    no-change reasons: " + entry.no_change_reasons.join(", "),
+          )
+        }
       }
       println(
         "kpi-total-component-bytes=" + report.total_component_bytes.to_string(),
@@ -803,7 +820,9 @@ fn run_root_policy(args : Array[String]) -> Unit {
   }
   match
     @walyze.analyze_component_root_policy(
-      bytes, resolved_wit~, exclude=excludes,
+      bytes,
+      resolved_wit~,
+      exclude=excludes,
     ) {
     Ok(policy) => {
       println("component imports: " + policy.component_imports.join(", "))
@@ -932,9 +951,7 @@ fn main {
       }
       run_contract(args[2], args[3])
     }
-    "root-policy" => {
-      run_root_policy(args)
-    }
+    "root-policy" => run_root_policy(args)
     _ => {
       print_usage()
       @sys.exit(1)

@@ -316,6 +316,7 @@ pub struct OptimizeResult {
   before_size : UInt
   after_size : UInt
   removed_sections : Array[String]
+  no_change_reasons : Array[String]
 }
 
 ///|
@@ -399,6 +400,7 @@ pub struct ComponentCoreOptimizeEntry {
   before_bytes : UInt
   after_bytes : UInt
   removed_sections : Array[String]
+  no_change_reasons : Array[String]
 }
 
 ///|
@@ -3819,21 +3821,43 @@ fn decode_span_u32_immediate(instr_bytes : Bytes, span : InstrSpan) -> UInt? {
 }
 
 ///|
+fn decode_nonnegative_i32_leb128_bytes(bytes : Bytes) -> UInt? {
+  if bytes.length() == 0 || bytes.length() > 5 {
+    return None
+  }
+  let last = bytes[bytes.length() - 1].to_uint()
+  if (last & 0x80U) != 0U {
+    return None
+  }
+  if (last & 0x40U) != 0U {
+    return None
+  }
+  decode_u32_leb128_bytes(bytes)
+}
+
+///|
+fn decode_i32_const_nonnegative_from_span(
+  instr_bytes : Bytes,
+  span : InstrSpan,
+) -> UInt? {
+  if span.opcode != 0x41U || span.end_ <= span.start + 1 {
+    return None
+  }
+  let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+  decode_nonnegative_i32_leb128_bytes(imm)
+}
+
+///|
 fn decode_i32_const_small_nonnegative_from_span(
   instr_bytes : Bytes,
   span : InstrSpan,
 ) -> UInt? {
-  if span.opcode != 0x41U {
-    return None
-  }
   if span.end_ != span.start + 2 {
     return None
   }
-  let value = instr_bytes[span.start + 1].to_uint()
-  if value <= 63U {
-    Some(value)
-  } else {
-    None
+  match decode_i32_const_nonnegative_from_span(instr_bytes, span) {
+    Some(value) => if value <= 63U { Some(value) } else { None }
+    None => None
   }
 }
 
@@ -3855,6 +3879,12 @@ fn instr_spans_to_bytes(instr_bytes : Bytes, spans : Array[InstrSpan]) -> Bytes 
     out.append(instr_bytes[span.start:span.end_].to_array())
   }
   Bytes::from_array(out[:])
+}
+
+///|
+fn append_i32_const_small(out : Array[Byte], value : UInt) -> Unit {
+  out.push(0x41U.to_byte())
+  out.push(value.to_byte())
 }
 
 ///|
@@ -3925,6 +3955,121 @@ fn apply_precompute_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
     i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn apply_precompute_i32_eqz_const(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() &&
+      spans[i].opcode == 0x41U &&
+      spans[i + 1].opcode == 0x45U {
+      match
+        decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
+        Some(value) => {
+          append_i32_const_small(out, if value == 0U { 1U } else { 0U })
+          i += 2
+          continue
+        }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn is_local_const_propagation_barrier(opcode : UInt) -> Bool {
+  opcode == 0x00U || // unreachable
+  opcode == 0x02U || // block
+  opcode == 0x03U || // loop
+  opcode == 0x04U || // if
+  opcode == 0x05U || // else
+  opcode == 0x0bU || // end
+  opcode == 0x0cU || // br
+  opcode == 0x0dU || // br_if
+  opcode == 0x0eU || // br_table
+  opcode == 0x0fU
+}
+
+///|
+fn known_local_const_get(known : Map[UInt, UInt], local_index : UInt) -> UInt? {
+  match known.get(local_index) {
+    Some(value) => if value == 0xffffffffU { None } else { Some(value) }
+    None => None
+  }
+}
+
+///|
+fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut known_local_consts : Map[UInt, UInt] = {}
+  for i in 0..<spans.length() {
+    let span = spans[i]
+    if span.opcode == 0x20U {
+      match decode_local_index_immediate_from_span(instr_bytes, span) {
+        Some(local_index) => {
+          let mut adjacent_set_same_local = false
+          if i > 0 && spans[i - 1].opcode == 0x21U {
+            match
+              decode_local_index_immediate_from_span(instr_bytes, spans[i - 1]) {
+              Some(prev_set_index) =>
+                if prev_set_index == local_index {
+                  adjacent_set_same_local = true
+                }
+              None => ()
+            }
+          }
+          if not(adjacent_set_same_local) {
+            match known_local_const_get(known_local_consts, local_index) {
+              Some(value) => {
+                append_i32_const_small(out, value)
+                if is_local_const_propagation_barrier(span.opcode) {
+                  known_local_consts = {}
+                }
+                continue
+              }
+              None => ()
+            }
+          }
+        }
+        None => ()
+      }
+    } else if span.opcode == 0x21U || span.opcode == 0x22U {
+      match decode_local_index_immediate_from_span(instr_bytes, span) {
+        Some(local_index) => {
+          let mut assigned_const : UInt? = None
+          if i > 0 {
+            assigned_const = decode_i32_const_small_nonnegative_from_span(
+              instr_bytes,
+              spans[i - 1],
+            )
+          }
+          match assigned_const {
+            Some(value) => known_local_consts.set(local_index, value)
+            None => known_local_consts.set(local_index, 0xffffffffU)
+          }
+        }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[span.start:span.end_].to_array())
+    if is_local_const_propagation_barrier(span.opcode) {
+      known_local_consts = {}
+    }
   }
   Bytes::from_array(out[:])
 }
@@ -4329,12 +4474,15 @@ fn optimize_instruction_bytes(
 ) -> Bytes {
   let mut current_bytes = instr_bytes
   if config.enable_peephole {
-    current_bytes = apply_precompute_i32_add(current_bytes)
-    current_bytes = apply_precompute_i32_identity_ops(current_bytes)
-    current_bytes = apply_precompute_br_if_const(current_bytes)
     let mut local_simplify_round = 0
-    while local_simplify_round < 4 {
+    while local_simplify_round < 6 {
       let before_local_simplify = current_bytes
+      current_bytes = apply_precompute_i32_add(current_bytes)
+      current_bytes = apply_precompute_i32_identity_ops(current_bytes)
+      current_bytes = apply_precompute_i32_eqz_const(current_bytes)
+      current_bytes = apply_precompute_local_const_propagation(current_bytes)
+      current_bytes = apply_precompute_i32_add(current_bytes)
+      current_bytes = apply_precompute_br_if_const(current_bytes)
       current_bytes = apply_simplify_local_set_get_to_tee(current_bytes)
       current_bytes = apply_simplify_local_tee_drop_to_set(current_bytes)
       current_bytes = apply_rse_local_tee_set_same(current_bytes)
@@ -4373,14 +4521,65 @@ fn optimize_instruction_bytes(
 }
 
 ///|
-fn parse_local_decl_prefix_end(body_bytes : Bytes) -> Int raise WalyzeError {
+priv struct LocalDeclPrefixParseResult {
+  prefix_end : Int
+  local_types : Array[Byte]
+}
+
+///|
+fn parse_local_decl_prefix_raise(
+  body_bytes : Bytes,
+) -> LocalDeclPrefixParseResult raise WalyzeError {
   let parser = Cursor::new(body_bytes)
   let local_group_count = parser.read_u32_leb128()
+  let local_types : Array[Byte] = []
   for _ in 0U..<local_group_count {
-    ignore(parser.read_u32_leb128())
-    ignore(parser.read_byte())
+    let count = parser.read_u32_leb128()
+    let val_type = parser.read_byte()
+    for _ in 0U..<count {
+      local_types.push(val_type)
+    }
   }
-  parser.get_pos()
+  { prefix_end: parser.get_pos(), local_types }
+}
+
+///|
+fn parse_local_decl_prefix_end(body_bytes : Bytes) -> Int raise WalyzeError {
+  parse_local_decl_prefix_raise(body_bytes).prefix_end
+}
+
+///|
+fn encode_local_decl_prefix_from_local_types(
+  local_types : Array[Byte],
+) -> Bytes {
+  let out : Array[Byte] = []
+  if local_types.length() == 0 {
+    out.append(encode_u32_leb128(0U)[:])
+    return Bytes::from_array(out[:])
+  }
+  let counts : Array[UInt] = []
+  let values : Array[Byte] = []
+  let mut current = local_types[0]
+  let mut current_count = 1U
+  for i in 1..<local_types.length() {
+    let v = local_types[i]
+    if v == current {
+      current_count += 1U
+    } else {
+      counts.push(current_count)
+      values.push(current)
+      current = v
+      current_count = 1U
+    }
+  }
+  counts.push(current_count)
+  values.push(current)
+  out.append(encode_u32_leb128(counts.length().reinterpret_as_uint())[:])
+  for i in 0..<counts.length() {
+    out.append(encode_u32_leb128(counts[i])[:])
+    out.push(values[i])
+  }
+  Bytes::from_array(out[:])
 }
 
 ///|
@@ -4445,6 +4644,479 @@ fn optimize_code_section_payload(
     Ok(v) => v
     Err(_) => payload
   }
+}
+
+///|
+fn collect_used_local_indices_from_instruction_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> Array[UInt] raise WalyzeError {
+  let out : Array[UInt] = []
+  for span in spans {
+    if span.opcode == 0x20U || span.opcode == 0x21U || span.opcode == 0x22U {
+      match decode_span_u32_immediate(instr_bytes, span) {
+        Some(index) => push_unique_u32(out, index)
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode local immediate in coalesce-locals",
+          )
+      }
+    }
+  }
+  out
+}
+
+///|
+fn rewrite_instruction_local_indices_for_coalesce_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  param_count : UInt,
+  local_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let out : Array[Byte] = []
+  for span in spans {
+    if span.opcode == 0x20U || span.opcode == 0x21U || span.opcode == 0x22U {
+      if span.end_ <= span.start + 1 {
+        raise WalyzeError::InvalidFormat("invalid local immediate")
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let old_index = match decode_u32_leb128_bytes(imm) {
+        Some(v) => v
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode local index immediate in coalesce-locals",
+          )
+      }
+      let new_index = if old_index < param_count {
+        old_index
+      } else {
+        match local_index_map.get(old_index) {
+          Some(v) => v
+          None =>
+            raise WalyzeError::InvalidFormat(
+              "coalesce-locals remap missing local index: " +
+              old_index.to_string(),
+            )
+        }
+      }
+      out.push(span.opcode.to_byte())
+      out.append(encode_u32_leb128(new_index)[:])
+    } else {
+      out.append(instr_bytes[span.start:span.end_].to_array())
+    }
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+priv struct CoalesceLocalsApplyResult {
+  bytes : Bytes
+  removed_local_count : UInt
+}
+
+///|
+fn apply_coalesce_locals_raise(
+  bytes : Bytes,
+) -> CoalesceLocalsApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut type_section_payload : Bytes? = None
+  let mut function_section_payload : Bytes? = None
+  let mut code_section_payload : Bytes? = None
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      1U => type_section_payload = Some(payload)
+      3U => function_section_payload = Some(payload)
+      10U => code_section_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let type_payload = match type_section_payload {
+    Some(v) => v
+    None => return { bytes, removed_local_count: 0U }
+  }
+  let function_payload = match function_section_payload {
+    Some(v) => v
+    None => return { bytes, removed_local_count: 0U }
+  }
+  let code_payload = match code_section_payload {
+    Some(v) => v
+    None => return { bytes, removed_local_count: 0U }
+  }
+  let function_type_indices = parse_function_type_indices(function_payload)
+  let code_bodies = parse_code_bodies(code_payload)
+  if function_type_indices.length() != code_bodies.length() {
+    raise WalyzeError::InvalidFormat(
+      "function/code section count mismatch for coalesce-locals: function=" +
+      function_type_indices.length().to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let type_entries = parse_function_type_entries_raise(
+    type_payload, "coalesce-locals",
+  )
+  let rewritten_code_bodies = code_bodies.copy()
+  let mut removed_local_count = 0U
+  for i in 0..<code_bodies.length() {
+    let type_index = function_type_indices[i]
+    let type_pos = UInt::reinterpret_as_int(type_index)
+    if type_pos < 0 || type_pos >= type_entries.length() {
+      raise WalyzeError::InvalidFormat(
+        "type index out of range in coalesce-locals: " + type_index.to_string(),
+      )
+    }
+    let param_count = type_entries[type_pos].params
+      .length()
+      .reinterpret_as_uint()
+    let body = code_bodies[i]
+    let prefix = parse_local_decl_prefix_raise(body)
+    if prefix.local_types.length() == 0 {
+      continue
+    }
+    let instr_bytes = body[prefix.prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    let used_local_indices = collect_used_local_indices_from_instruction_raise(
+      instr_bytes, spans,
+    )
+    let kept_local_types : Array[Byte] = []
+    let local_index_map : Map[UInt, UInt] = {}
+    let mut next_local = 0U
+    for j in 0..<prefix.local_types.length() {
+      let old_local_index = param_count + j.reinterpret_as_uint()
+      if used_local_indices.contains(old_local_index) {
+        let new_local_index = param_count + next_local
+        local_index_map.set(old_local_index, new_local_index)
+        kept_local_types.push(prefix.local_types[j])
+        next_local += 1U
+      }
+    }
+    if kept_local_types.length() == prefix.local_types.length() {
+      continue
+    }
+    removed_local_count += (prefix.local_types.length() -
+    kept_local_types.length()).reinterpret_as_uint()
+    let rewritten_instr = rewrite_instruction_local_indices_for_coalesce_raise(
+      instr_bytes, spans, param_count, local_index_map,
+    )
+    let rewritten_prefix = encode_local_decl_prefix_from_local_types(
+      kept_local_types,
+    )
+    let rewritten_body : Array[Byte] = rewritten_prefix[:].to_array()
+    rewritten_body.append(rewritten_instr[:].to_array())
+    rewritten_code_bodies[i] = Bytes::from_array(rewritten_body[:])
+  }
+  if removed_local_count == 0U {
+    return { bytes, removed_local_count }
+  }
+  let rewritten_code_payload = encode_code_section_payload_from_bodies(
+    rewritten_code_bodies,
+  )
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    if section.section_id == 10U {
+      append_encoded_section(out, 10U, rewritten_code_payload)
+    } else {
+      out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), removed_local_count }
+}
+
+///|
+fn decode_const_expr_i32_const_nonnegative_offset_raise(
+  expr_bytes : Bytes,
+) -> UInt? raise WalyzeError {
+  let spans = parse_instruction_spans_raise(expr_bytes)
+  if spans.length() != 2 {
+    return None
+  }
+  if spans[1].opcode != 0x0bU {
+    return None
+  }
+  decode_i32_const_nonnegative_from_span(expr_bytes, spans[0])
+}
+
+///|
+fn collect_static_table_function_map_from_element_section_raise(
+  payload : Bytes,
+  target_table_index : UInt,
+) -> Map[UInt, UInt]? raise WalyzeError {
+  let parser = Cursor::new(payload)
+  let segment_count = parser.read_u32_leb128()
+  let table_map : Map[UInt, UInt] = {}
+  for _ in 0U..<segment_count {
+    let flags = parser.read_u32_leb128()
+    let (table_index, offset_expr, function_count) = match flags {
+      0U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        let function_count = parser.read_u32_leb128()
+        (0U, offset_expr, function_count)
+      }
+      2U => {
+        let table_index = parser.read_u32_leb128()
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        if parser.read_byte().to_uint() != 0U {
+          return None
+        }
+        let function_count = parser.read_u32_leb128()
+        (table_index, offset_expr, function_count)
+      }
+      _ => return None
+    }
+    let offset = match
+      decode_const_expr_i32_const_nonnegative_offset_raise(offset_expr) {
+      Some(v) => v
+      None => return None
+    }
+    for i in 0U..<function_count {
+      let function_index = parser.read_u32_leb128()
+      if table_index == target_table_index {
+        let slot = offset + i
+        if slot < offset {
+          return None
+        }
+        match table_map.get(slot) {
+          Some(prev) => if prev != function_index { return None }
+          None => table_map.set(slot, function_index)
+        }
+      }
+    }
+  }
+  Some(table_map)
+}
+
+///|
+fn has_disallowed_table_ops_in_instruction_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> Bool raise WalyzeError {
+  for span in spans {
+    match span.opcode {
+      0x25U | 0x26U => return true
+      0xfcU => {
+        if span.end_ <= span.start + 1 {
+          raise WalyzeError::InvalidFormat(
+            "invalid 0xfc immediate in directize",
+          )
+        }
+        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let parser = Cursor::new(imm)
+        let subopcode = parser.read_u32_leb128()
+        if subopcode >= 12U && subopcode <= 17U {
+          return true
+        }
+      }
+      _ => ()
+    }
+  }
+  false
+}
+
+///|
+fn rewrite_instruction_call_indirect_to_direct_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  table_map : Map[UInt, UInt],
+  function_type_by_index : Array[UInt],
+) -> (Bytes, UInt) raise WalyzeError {
+  let out : Array[Byte] = []
+  let mut rewritten_call_count = 0U
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() &&
+      spans[i].opcode == 0x41U &&
+      spans[i + 1].opcode == 0x11U {
+      match decode_i32_const_nonnegative_from_span(instr_bytes, spans[i]) {
+        Some(slot) =>
+          if spans[i + 1].end_ > spans[i + 1].start + 1 {
+            let imm = instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_bytes()
+            match decode_call_indirect_immediate(imm) {
+              Some((type_index, table_index)) =>
+                if table_index == 0U {
+                  match table_map.get(slot) {
+                    Some(target) => {
+                      let target_pos = UInt::reinterpret_as_int(target)
+                      if target_pos >= 0 &&
+                        target_pos < function_type_by_index.length() &&
+                        function_type_by_index[target_pos] == type_index {
+                        out.push(0x10U.to_byte())
+                        out.append(encode_u32_leb128(target)[:])
+                        rewritten_call_count += 1U
+                        i += 2
+                        continue
+                      }
+                    }
+                    None => ()
+                  }
+                }
+              None =>
+                raise WalyzeError::InvalidFormat(
+                  "failed to decode call_indirect immediate in directize",
+                )
+            }
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  (Bytes::from_array(out[:]), rewritten_call_count)
+}
+
+///|
+fn rewrite_code_section_payload_for_directize_raise(
+  payload : Bytes,
+  table_map : Map[UInt, UInt],
+  function_type_by_index : Array[UInt],
+) -> (Bytes, UInt) raise WalyzeError {
+  let bodies = parse_code_bodies(payload)
+  let rewritten_bodies : Array[Bytes] = []
+  let mut rewritten_call_count = 0U
+  for body in bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    let (rewritten_instr, rewritten_count) = rewrite_instruction_call_indirect_to_direct_raise(
+      instr_bytes, spans, table_map, function_type_by_index,
+    )
+    rewritten_call_count += rewritten_count
+    if rewritten_count > 0U {
+      let rewritten_body : Array[Byte] = body[0:prefix_end].to_array()
+      rewritten_body.append(rewritten_instr[:].to_array())
+      rewritten_bodies.push(Bytes::from_array(rewritten_body[:]))
+    } else {
+      rewritten_bodies.push(body)
+    }
+  }
+  (
+    encode_code_section_payload_from_bodies(rewritten_bodies),
+    rewritten_call_count,
+  )
+}
+
+///|
+priv struct DirectizeApplyResult {
+  bytes : Bytes
+  rewritten_call_count : UInt
+}
+
+///|
+fn apply_directize_raise(
+  bytes : Bytes,
+) -> DirectizeApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut import_payload : Bytes? = None
+  let mut function_payload : Bytes? = None
+  let mut table_payload : Bytes? = None
+  let mut element_payload : Bytes? = None
+  let mut export_payload : Bytes? = None
+  let mut code_payload : Bytes? = None
+  let mut imported_table_count = 0U
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U => {
+        import_payload = Some(payload)
+        let entries = parse_import_section_entries_raise(payload)
+        for entry in entries {
+          if entry.kind == 1U {
+            imported_table_count += 1U
+          }
+        }
+      }
+      3U => function_payload = Some(payload)
+      4U => table_payload = Some(payload)
+      7U => export_payload = Some(payload)
+      9U => element_payload = Some(payload)
+      10U => code_payload = Some(payload)
+      _ => ()
+    }
+  }
+  if imported_table_count > 0U {
+    return { bytes, rewritten_call_count: 0U }
+  }
+  let local_table_count = match table_payload {
+    Some(payload) =>
+      parse_table_section_entries_raise(payload).length().reinterpret_as_uint()
+    None => 0U
+  }
+  if local_table_count != 1U {
+    return { bytes, rewritten_call_count: 0U }
+  }
+  let exported_table_indices = match export_payload {
+    Some(payload) => parse_export_table_indices(payload)
+    None => []
+  }
+  if exported_table_indices.length() > 0 {
+    return { bytes, rewritten_call_count: 0U }
+  }
+  let element_payload = match element_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let table_map = match
+    collect_static_table_function_map_from_element_section_raise(
+      element_payload, 0U,
+    ) {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let mut has_table_entry = false
+  table_map.each((_, _value) => has_table_entry = true)
+  if not(has_table_entry) {
+    return { bytes, rewritten_call_count: 0U }
+  }
+  let function_payload = match function_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let code_payload = match code_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let code_bodies = parse_code_bodies(code_payload)
+  for body in code_bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    if has_disallowed_table_ops_in_instruction_raise(instr_bytes, spans) {
+      return { bytes, rewritten_call_count: 0U }
+    }
+  }
+  let imported_function_type_indices = match import_payload {
+    Some(payload) => parse_import_function_type_indices(payload)
+    None => []
+  }
+  let local_function_type_indices = parse_function_type_indices(
+    function_payload,
+  )
+  if local_function_type_indices.length() != code_bodies.length() {
+    raise WalyzeError::InvalidFormat(
+      "function/code section count mismatch for directize: function=" +
+      local_function_type_indices.length().to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let function_type_by_index = imported_function_type_indices.copy()
+  function_type_by_index.append(local_function_type_indices[:])
+  let (rewritten_code_payload, rewritten_call_count) = rewrite_code_section_payload_for_directize_raise(
+    code_payload, table_map, function_type_by_index,
+  )
+  if rewritten_call_count == 0U {
+    return { bytes, rewritten_call_count }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    if section.section_id == 10U {
+      append_encoded_section(out, 10U, rewritten_code_payload)
+    } else {
+      out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), rewritten_call_count }
 }
 
 ///|
@@ -4524,6 +5196,108 @@ fn should_signature_prune(config : OptimizeConfig) -> Bool {
 }
 
 ///|
+fn custom_strip_pass_requested(config : OptimizeConfig) -> Bool {
+  config.strip_all_custom ||
+  config.strip_name_section ||
+  config.strip_producers_section ||
+  config.strip_target_features_section ||
+  config.strip_dwarf_sections ||
+  config.strip_debug_sections
+}
+
+///|
+fn any_optimization_pass_requested(config : OptimizeConfig) -> Bool {
+  custom_strip_pass_requested(config) ||
+  should_optimize_code_section(config) ||
+  config.enable_dce ||
+  config.enable_dfe ||
+  config.enable_merge_similar_functions ||
+  config.enable_remove_unused_module_elements ||
+  should_refine_types(config) ||
+  should_signature_prune(config) ||
+  should_remove_unused_types(config)
+}
+
+///|
+fn push_reason(reasons : Array[String], reason : String) -> Unit {
+  if not(reasons.contains(reason)) {
+    reasons.push(reason)
+  }
+}
+
+///|
+fn collect_optimize_no_change_reasons(
+  before : Bytes,
+  after : Bytes,
+  config : OptimizeConfig,
+) -> Array[String] {
+  let reasons : Array[String] = []
+  if before.length() != after.length() {
+    return reasons
+  }
+  if not(bytes_equal(before, after)) {
+    reasons.push("size-neutral rewrite only (bytes changed but size unchanged)")
+    return reasons
+  }
+  if not(any_optimization_pass_requested(config)) {
+    reasons.push("no optimization pass is enabled in config")
+    return reasons
+  }
+  let sections_result = try? parse_core_sections_raise(before)
+  match sections_result {
+    Ok(sections) => {
+      if custom_strip_pass_requested(config) {
+        let mut has_custom_section = false
+        let mut has_removable_custom_section = false
+        for section in sections {
+          if section.section_id == 0U {
+            has_custom_section = true
+            if not(keep_custom_section(section, config)) {
+              has_removable_custom_section = true
+            }
+          }
+        }
+        if not(has_custom_section) {
+          push_reason(reasons, "no custom section exists for strip passes")
+        } else if not(has_removable_custom_section) {
+          push_reason(
+            reasons, "configured custom-section strip targets were not present",
+          )
+        }
+      }
+      if should_optimize_code_section(config) {
+        if not(sections.any(s => s.section_id == 10U)) {
+          push_reason(reasons, "no code section exists for code-level passes")
+        } else {
+          push_reason(
+            reasons, "code-level passes found no reducible instruction patterns",
+          )
+        }
+      }
+    }
+    Err(_) =>
+      push_reason(
+        reasons, "unable to inspect section layout for no-change diagnostics",
+      )
+  }
+  if config.enable_dce {
+    match analyze_dce_report(before) {
+      Ok(report) =>
+        if report.partial {
+          push_reason(reasons, "dce skipped: partial call graph")
+        } else if report.removable_function_count == 0U {
+          push_reason(reasons, "dce found no removable functions")
+        }
+      Err(_) => push_reason(reasons, "dce analysis failed")
+    }
+  }
+  if reasons.length() == 0 {
+    reasons.push("module is already optimized for active passes")
+  }
+  reasons
+}
+
+///|
 priv struct OptimizeRoundResult {
   bytes : Bytes
   removed_sections : Array[String]
@@ -4551,7 +5325,23 @@ fn optimize_for_size_round_raise(
     }
   }
   let mut optimized_bytes = Bytes::from_array(stage1_out[:])
+  if config.enable_peephole {
+    let coalesce = apply_coalesce_locals_raise(optimized_bytes)
+    optimized_bytes = coalesce.bytes
+    if coalesce.removed_local_count > 0U {
+      removed_sections.push(
+        "coalesce-locals:removed:" + coalesce.removed_local_count.to_string(),
+      )
+    }
+  }
   if config.enable_dce {
+    let directize = apply_directize_raise(optimized_bytes)
+    optimized_bytes = directize.bytes
+    if directize.rewritten_call_count > 0U {
+      removed_sections.push(
+        "directize:calls:" + directize.rewritten_call_count.to_string(),
+      )
+    }
     let dce = apply_dce_raise(optimized_bytes, config)
     optimized_bytes = dce.bytes
     if dce.removed_function_count > 0U {
@@ -4687,11 +5477,15 @@ pub fn optimize_for_size(
         break
       }
     }
+    let no_change_reasons = collect_optimize_no_change_reasons(
+      bytes, current, config,
+    )
     {
       bytes: current,
       before_size: bytes.length().reinterpret_as_uint(),
       after_size: current.length().reinterpret_as_uint(),
       removed_sections,
+      no_change_reasons,
     }
   }
 }
@@ -6202,8 +6996,7 @@ fn apply_dce_raise(
     match section.section_id {
       3U => {
         let rewritten = rewrite_function_section_payload_for_dce_raise(
-          payload,
-          keep_local,
+          payload, keep_local,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 3U, rewritten)
@@ -6223,9 +7016,7 @@ fn apply_dce_raise(
         )
       10U => {
         let rewritten = rewrite_code_section_payload_for_dce_raise(
-          payload,
-          keep_local,
-          index_map,
+          payload, keep_local, index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 10U, rewritten)
@@ -6635,7 +7426,10 @@ fn unique_sorted(xs : Array[String]) -> Array[String] {
 }
 
 ///|
-fn merge_root_names(base : Array[String], extra : Array[String]) -> Array[String] {
+fn merge_root_names(
+  base : Array[String],
+  extra : Array[String],
+) -> Array[String] {
   let merged = base.copy()
   merged.append(extra[:])
   unique_sorted(merged)
@@ -6650,7 +7444,8 @@ fn with_additional_closed_world_roots(
     return config
   }
   let closed_world_root_exports = merge_root_names(
-    config.closed_world_root_exports, extra_roots,
+    config.closed_world_root_exports,
+    extra_roots,
   )
   make_optimize_config(
     strip_all_custom=config.strip_all_custom,
@@ -6672,7 +7467,7 @@ fn with_additional_closed_world_roots(
     enable_merge_similar_functions=config.enable_merge_similar_functions,
     enable_remove_unused_module_elements=config.enable_remove_unused_module_elements,
     closed_world=config.closed_world,
-    closed_world_root_exports=closed_world_root_exports,
+    closed_world_root_exports~,
     safe_mode=config.safe_mode,
   )
 }
@@ -6812,7 +7607,8 @@ pub fn analyze_component_core_optimize(
   for i in 0..<detail.core_modules.length() {
     let core_bytes = detail.core_modules[i]
     let before_bytes = core_bytes.length().reinterpret_as_uint()
-    let optimized = match optimize_for_size(core_bytes, config=effective_config) {
+    let optimized = match
+      optimize_for_size(core_bytes, config=effective_config) {
       Ok(v) => v
       Err(e) =>
         return Err(
@@ -6829,6 +7625,7 @@ pub fn analyze_component_core_optimize(
       before_bytes,
       after_bytes: optimized.after_size,
       removed_sections: optimized.removed_sections,
+      no_change_reasons: optimized.no_change_reasons,
     })
   }
   Ok({
@@ -6855,11 +7652,13 @@ pub fn optimize_component_for_size(
   let effective_config = with_additional_closed_world_roots(config, exclude)
   let out : Array[Byte] = bytes[0:8].to_array()
   let removed_sections : Array[String] = []
+  let no_change_reasons : Array[String] = []
   let mut core_module_index = 0
   for section in sections {
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
     if section.section_id == 1U && is_core_module_payload(payload) {
-      let optimized = match optimize_for_size(payload, config=effective_config) {
+      let optimized = match
+        optimize_for_size(payload, config=effective_config) {
         Ok(v) => v
         Err(e) =>
           return Err(
@@ -6875,17 +7674,30 @@ pub fn optimize_component_for_size(
           "core#" + core_module_index.to_string() + ":" + removed,
         )
       }
+      for reason in optimized.no_change_reasons {
+        no_change_reasons.push(
+          "core#" + core_module_index.to_string() + ":" + reason,
+        )
+      }
       core_module_index += 1
     } else {
       out.append(bytes[section.section_start:section.section_end].to_array())
     }
   }
+  if core_module_index == 0 {
+    no_change_reasons.push("component has no embedded core module sections")
+  }
   let optimized_bytes = Bytes::from_array(out[:])
+  if optimized_bytes.length() == bytes.length() &&
+    no_change_reasons.length() == 0 {
+    no_change_reasons.push("component optimization produced no size change")
+  }
   Ok({
     bytes: optimized_bytes,
     before_size: bytes.length().reinterpret_as_uint(),
     after_size: optimized_bytes.length().reinterpret_as_uint(),
     removed_sections,
+    no_change_reasons,
   })
 }
 

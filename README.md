@@ -24,10 +24,11 @@ It provides:
 - core wasm duplicate function elimination apply (body+type based index remap)
 - core wasm merge-similar-functions apply (forwarding thunk merge + index remap)
 - core wasm remove-unused-module-elements apply (unused local table/element pruning)
+- core wasm directize base pass (safe `i32.const + call_indirect -> call` rewrite under static table constraints)
 - core wasm type-refining base pass (duplicate function-type canonicalization)
 - core wasm signature-pruning base pass (unused trailing param pruning + caller drop insertion)
 - core wasm remove-unused-types base pass (function-type pruning + call_indirect type remap)
-- core wasm precompute/simplify-locals/rse base pass (`i32.const+i32.const+i32.add` folding, `local.set+local.get -> local.tee`, `local.tee+drop -> local.set`, `local.tee+local.set(same) -> local.set`, `local.get/global.get/ref.func/ref.null + drop` elision, local simplification fixed-point rounds)
+- core wasm precompute/simplify-locals/rse/coalesce-locals base pass (`i32.const+i32.const+i32.add` folding, `i32.const+i32.eqz` folding, straight-line local const propagation, `local.set+local.get -> local.tee`, `local.tee+drop -> local.set`, `local.tee+local.set(same) -> local.set`, `local.get/global.get/ref.func/ref.null + drop` elision, local simplification fixed-point rounds, unused local elimination + local index compaction)
 - custom section strip passes (`strip-debug` / `strip-dwarf` / `strip-target-features`)
 - optimization level presets (`-O0/-O1/-O2/-O3/-Os/-Oz`, plus `--converge`)
 - size-oriented optimization pass (`wasm-opt`-style custom section stripping + vacuum + merge-blocks + remove-unused-brs + peephole + DCE + DFE + MSF)
@@ -50,11 +51,11 @@ just run -- callgraph path/to/module.wasm 20
 just run -- keep-reasons path/to/module.wasm --closed-world --closed-world-root=run
 just run -- dce-report path/to/module.wasm 20
 just run -- runtime-profile path/to/module.wasm 100
-just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features --converge --rume-apply
+just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features --converge --rume-apply --verbose
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
 just run -- component-callgraph path/to/component.wasm 20
-just run -- component-dce-kpi path/to/component.wasm path/to/wit-dir --exclude=hello
+just run -- component-dce-kpi path/to/component.wasm path/to/wit-dir --exclude=hello --verbose
 just run -- contract path/to/component.wasm path/to/wit-dir
 just run -- root-policy path/to/component.wasm path/to/wit-dir --exclude=hello
 ```
