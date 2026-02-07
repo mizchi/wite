@@ -594,6 +594,30 @@ test "optimize vacuum removes unreachable tail" {
 }
 
 ///|
+test "optimize vacuum works even when peephole is disabled" {
+  let bytes = sample_module_with_unreachable_tail_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=1U,
+    enable_peephole=false,
+    enable_vacuum=true,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 3U)
+}
+
+///|
 test "optimize remove-unused-brs and merge-blocks shrink block wrapper" {
   let bytes = sample_module_with_redundant_block_branch_bytes()
   guard profile_module(bytes) is Ok(before) else {
@@ -618,6 +642,30 @@ test "optimize remove-unused-brs and merge-blocks shrink block wrapper" {
     return
   }
   assert_eq(after.code_body_bytes, 2U)
+}
+
+///|
+test "optimize treats pass_rounds=0 as one round" {
+  let bytes = sample_module_with_peephole_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=0U,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 4U)
 }
 
 ///|

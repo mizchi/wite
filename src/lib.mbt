@@ -34,6 +34,7 @@ pub struct OptimizeConfig {
   strip_name_section : Bool
   strip_producers_section : Bool
   keep_custom_sections : Array[String]
+  pass_rounds : UInt
   enable_peephole : Bool
   peephole_remove_nop : Bool
   peephole_remove_const_drop : Bool
@@ -52,6 +53,7 @@ pub fn OptimizeConfig::default() -> Self {
     strip_name_section: true,
     strip_producers_section: true,
     keep_custom_sections: [],
+    pass_rounds: 1U,
     enable_peephole: true,
     peephole_remove_nop: true,
     peephole_remove_const_drop: true,
@@ -71,6 +73,7 @@ pub fn OptimizeConfig::aggressive() -> Self {
     strip_name_section: true,
     strip_producers_section: true,
     keep_custom_sections: [],
+    pass_rounds: 1U,
     enable_peephole: true,
     peephole_remove_nop: true,
     peephole_remove_const_drop: true,
@@ -89,6 +92,7 @@ pub fn make_optimize_config(
   strip_name_section? : Bool = true,
   strip_producers_section? : Bool = true,
   keep_custom_sections? : Array[String] = [],
+  pass_rounds? : UInt = 1U,
   enable_peephole? : Bool = true,
   peephole_remove_nop? : Bool = true,
   peephole_remove_const_drop? : Bool = true,
@@ -104,6 +108,7 @@ pub fn make_optimize_config(
     strip_name_section,
     strip_producers_section,
     keep_custom_sections,
+    pass_rounds,
     enable_peephole,
     peephole_remove_nop,
     peephole_remove_const_drop,
@@ -1552,6 +1557,90 @@ fn keep_custom_section(section : RawSection, config : OptimizeConfig) -> Bool {
 }
 
 ///|
+fn should_optimize_code_section(config : OptimizeConfig) -> Bool {
+  config.enable_peephole ||
+  config.enable_vacuum ||
+  config.enable_merge_blocks ||
+  config.enable_remove_unused_brs
+}
+
+///|
+priv struct OptimizeRoundResult {
+  bytes : Bytes
+  removed_sections : Array[String]
+}
+
+///|
+fn optimize_for_size_round_raise(
+  bytes : Bytes,
+  config : OptimizeConfig,
+) -> OptimizeRoundResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let stage1_out : Array[Byte] = bytes[0:8].to_array()
+  let removed_sections : Array[String] = []
+  for section in sections {
+    if section.section_id == 0U && not(keep_custom_section(section, config)) {
+      removed_sections.push(section_key(section, false))
+    } else if section.section_id == 10U && should_optimize_code_section(config) {
+      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let optimized_payload = optimize_code_section_payload(payload, config)
+      append_encoded_section(stage1_out, section.section_id, optimized_payload)
+    } else {
+      stage1_out.append(
+        bytes[section.section_start:section.section_end].to_array(),
+      )
+    }
+  }
+  let mut optimized_bytes = Bytes::from_array(stage1_out[:])
+  if config.enable_dce {
+    let dce = apply_dce_raise(optimized_bytes)
+    optimized_bytes = dce.bytes
+    if dce.removed_function_count > 0U {
+      removed_sections.push(
+        "dce:functions:" +
+        dce.removed_function_count.to_string() +
+        " bodies:" +
+        dce.removed_body_bytes.to_string(),
+      )
+    }
+    if dce.dropped_name_section {
+      removed_sections.push("custom:name(dce)")
+    }
+  }
+  if config.enable_dfe {
+    let dfe = apply_dfe_raise(optimized_bytes)
+    optimized_bytes = dfe.bytes
+    if dfe.removed_function_count > 0U {
+      removed_sections.push(
+        "dfe:functions:" +
+        dfe.removed_function_count.to_string() +
+        " bodies:" +
+        dfe.removed_body_bytes.to_string(),
+      )
+    }
+    if dfe.dropped_name_section {
+      removed_sections.push("custom:name(dfe)")
+    }
+  }
+  if config.enable_merge_similar_functions {
+    let msf = apply_merge_similar_functions_raise(optimized_bytes)
+    optimized_bytes = msf.bytes
+    if msf.removed_function_count > 0U {
+      removed_sections.push(
+        "msf:functions:" +
+        msf.removed_function_count.to_string() +
+        " bodies:" +
+        msf.removed_body_bytes.to_string(),
+      )
+    }
+    if msf.dropped_name_section {
+      removed_sections.push("custom:name(msf)")
+    }
+  }
+  { bytes: optimized_bytes, removed_sections }
+}
+
+///|
 pub fn analyze_section_sizes(
   bytes : Bytes,
 ) -> Result[Array[SectionSize], WalyzeError] {
@@ -1567,76 +1656,22 @@ pub fn optimize_for_size(
   config? : OptimizeConfig = OptimizeConfig::default(),
 ) -> Result[OptimizeResult, WalyzeError] {
   try? {
-    let sections = parse_core_sections_raise(bytes)
-    let stage1_out : Array[Byte] = bytes[0:8].to_array()
+    let rounds = if config.pass_rounds == 0U { 1U } else { config.pass_rounds }
+    let mut current = bytes
     let removed_sections : Array[String] = []
-    for section in sections {
-      if section.section_id == 0U && not(keep_custom_section(section, config)) {
-        removed_sections.push(section_key(section, false))
-      } else if section.section_id == 10U && config.enable_peephole {
-        let payload = bytes[section.payload_start:section.section_end].to_bytes()
-        let optimized_payload = optimize_code_section_payload(payload, config)
-        append_encoded_section(
-          stage1_out,
-          section.section_id,
-          optimized_payload,
-        )
-      } else {
-        stage1_out.append(
-          bytes[section.section_start:section.section_end].to_array(),
-        )
-      }
-    }
-    let mut optimized_bytes = Bytes::from_array(stage1_out[:])
-    if config.enable_dce {
-      let dce = apply_dce_raise(optimized_bytes)
-      optimized_bytes = dce.bytes
-      if dce.removed_function_count > 0U {
-        removed_sections.push(
-          "dce:functions:" +
-          dce.removed_function_count.to_string() +
-          " bodies:" +
-          dce.removed_body_bytes.to_string(),
-        )
-      }
-      if dce.dropped_name_section {
-        removed_sections.push("custom:name(dce)")
-      }
-    }
-    if config.enable_dfe {
-      let dfe = apply_dfe_raise(optimized_bytes)
-      optimized_bytes = dfe.bytes
-      if dfe.removed_function_count > 0U {
-        removed_sections.push(
-          "dfe:functions:" +
-          dfe.removed_function_count.to_string() +
-          " bodies:" +
-          dfe.removed_body_bytes.to_string(),
-        )
-      }
-      if dfe.dropped_name_section {
-        removed_sections.push("custom:name(dfe)")
-      }
-    }
-    if config.enable_merge_similar_functions {
-      let msf = apply_merge_similar_functions_raise(optimized_bytes)
-      optimized_bytes = msf.bytes
-      if msf.removed_function_count > 0U {
-        removed_sections.push(
-          "msf:functions:" +
-          msf.removed_function_count.to_string() +
-          " bodies:" +
-          msf.removed_body_bytes.to_string(),
-        )
-      }
-      if msf.dropped_name_section {
-        removed_sections.push("custom:name(msf)")
+    for _ in 0U..<rounds {
+      let round = optimize_for_size_round_raise(current, config)
+      let changed = not(bytes_equal(round.bytes, current))
+      current = round.bytes
+      removed_sections.append(round.removed_sections[:])
+      if not(changed) {
+        break
       }
     }
     {
-      bytes: optimized_bytes,
+      bytes: current,
       before_size: bytes.length().reinterpret_as_uint(),
-      after_size: optimized_bytes.length().reinterpret_as_uint(),
+      after_size: current.length().reinterpret_as_uint(),
       removed_sections,
     }
   }

@@ -27,7 +27,7 @@ just run -- top-functions path/to/module.wasm 20
 just run -- callgraph path/to/module.wasm 20
 just run -- dce-report path/to/module.wasm 20
 just run -- runtime-profile path/to/module.wasm 100
-just run -- optimize in.wasm out.wasm --strip-all-custom --dce-apply --dfe-apply --msf-apply
+just run -- optimize in.wasm out.wasm --strip-all-custom --converge --dce-apply --dfe-apply --msf-apply
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
 just run -- component-callgraph path/to/component.wasm 20
