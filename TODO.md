@@ -57,3 +57,4 @@
 - [x] Perf: export index 抽出で name 文字列デコードを回避（`skip_name_string`）し、重複排除を `seen` map で O(n) 化
 - [x] Perf: `optimize_for_size` の fixed-point 反復で「サイズ回帰ラウンド」を早期終了し、巨大 wasm の O1 実行時間を削減
 - [x] Bench: `pglite/duckdb` を `moon bench` に追加し、`analyze summary` / `optimize -O1` の速度を継続観測可能にした
+- [x] P2/P1: `cfp/cfp-const/signature-refining` の型互換判定を GC canonical map ベースへ拡張し、type index 不一致（同値シグネチャ）でも forwarding を検出可能にした

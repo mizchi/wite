@@ -1982,6 +1982,37 @@ fn sample_module_with_param_forwarding_call_return_thunk_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_param_forwarding_thunk_with_duplicate_type_indices_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 2 duplicated func types (i32) -> (i32)
+  append_section(
+    out,
+    1U,
+    bytes_of([
+      0x02, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x01, 0x7f, 0x01, 0x7f,
+    ]),
+  )
+  // function section: 3 local functions (indices 0..2) with type idx [0,0,1]
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x01]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0; call 1; end
+  // #1: local.get 0; call 2; end (param-forwarding thunk, type index differs from target)
+  // #2: local.get 0; i32.const 1; i32.add; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x06, 0x00, 0x20, 0x00, 0x10, 0x01, 0x0b, 0x06, 0x00, 0x20, 0x00,
+      0x10, 0x02, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_const_forwarding_thunk_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -4900,6 +4931,46 @@ test "optimize cfp phase2 rewrites forwarding thunk with unused locals and enabl
 ///|
 test "optimize cfp phase2 rewrites forwarding thunk with call+return and enables dce" {
   let bytes = sample_module_with_param_forwarding_call_return_thunk_bytes()
+  guard profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 3U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.removed_sections.any(s => s.contains("cfp:calls:1")))
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
+test "optimize cfp rewrites param-forwarding thunk when wrapper/target type indices differ but signatures match" {
+  let bytes = sample_module_with_param_forwarding_thunk_with_duplicate_type_indices_bytes()
   guard profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return

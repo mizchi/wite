@@ -10193,6 +10193,9 @@ pub fn analyze_host_generated_code(
           type_payload, "analyze-host",
         )
         let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
+        let gc_type_canonical_map = collect_gc_type_canonical_map_from_entries_raise(
+          parsed_type_entries,
+        )
         let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
         for i in 0..<parsed_type_entries.length() {
           if parsed_type_entries[i].form == 0x60U {
@@ -10234,7 +10237,12 @@ pub fn analyze_host_generated_code(
           )
         }
         let param_alias_map = collect_call_forwarding_alias_map(
-          code_bodies, imported_function_count, function_type_by_index, function_param_count_by_index,
+          code_bodies,
+          imported_function_count,
+          function_type_by_index,
+          function_type_entry_by_type_index,
+          function_param_count_by_index,
+          gc_type_canonical_map,
         )
         param_alias_map.each((function_index, target_function_index) => {
           param_forwarding_thunk_count += 1U
@@ -10253,7 +10261,11 @@ pub fn analyze_host_generated_code(
           })
         })
         let const_alias_map = collect_const_call_forwarding_alias_map(
-          code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+          code_bodies,
+          imported_function_count,
+          function_type_by_index,
+          function_type_entry_by_type_index,
+          gc_type_canonical_map,
         )
         const_alias_map.each((function_index, alias_info) => {
           const_forwarding_thunk_count += 1U
@@ -10274,7 +10286,11 @@ pub fn analyze_host_generated_code(
           })
         })
         let signature_alias_map = collect_signature_refine_alias_map(
-          code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+          code_bodies,
+          imported_function_count,
+          function_type_by_index,
+          function_type_entry_by_type_index,
+          gc_type_canonical_map,
         )
         signature_alias_map.each((function_index, alias_info) => {
           signature_refinable_thunk_count += 1U
@@ -11189,15 +11205,22 @@ fn parse_forward_call_target_with_appended_i32_consts(
 }
 
 ///|
-fn function_type_results_equal(
+fn function_type_results_equal_with_gc_canonical_map(
   a : FunctionTypeEntry,
   b : FunctionTypeEntry,
+  gc_type_canonical_map : Map[UInt, UInt],
 ) -> Bool {
   if a.results.length() != b.results.length() {
     return false
   }
   for i in 0..<a.results.length() {
-    if not(bytes_equal(a.results[i], b.results[i])) {
+    if not(
+        type_bytes_equal_with_gc_canonical_map(
+          a.results[i],
+          b.results[i],
+          gc_type_canonical_map,
+        ),
+      ) {
       return false
     }
   }
@@ -11210,21 +11233,66 @@ fn is_i32_value_type(value_type : Bytes) -> Bool {
 }
 
 ///|
+fn collect_gc_type_canonical_map_from_entries_raise(
+  parsed_type_entries : Array[ParsedTypeSectionEntry],
+) -> Map[UInt, UInt] raise WalyzeError {
+  let gc_type_canonical_map : Map[UInt, UInt] = {}
+  for i in 0..<parsed_type_entries.length() {
+    let old_type_index = i.reinterpret_as_uint()
+    let entry = parsed_type_entries[i]
+    if entry.form == 0x60U {
+      continue
+    }
+    let mut canonical = old_type_index
+    for j in 0..<i {
+      if parsed_type_entries[j].form == entry.form &&
+        parsed_type_entries[j].form != 0x60U &&
+        gc_type_entries_equal_with_canonical_map_raise(
+          entry.raw,
+          parsed_type_entries[j].raw,
+          gc_type_canonical_map,
+        ) {
+        canonical = remap_gc_type_index_for_refine(
+          j.reinterpret_as_uint(),
+          gc_type_canonical_map,
+        )
+        break
+      }
+    }
+    gc_type_canonical_map.set(old_type_index, canonical)
+  }
+  gc_type_canonical_map
+}
+
+///|
 fn can_const_forward_with_appended_i32_to_target(
   wrapper_type : FunctionTypeEntry,
   target_type : FunctionTypeEntry,
   appended_i32_const_count : UInt,
+  gc_type_canonical_map : Map[UInt, UInt],
 ) -> Bool {
   let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
   let target_param_count = target_type.params.length().reinterpret_as_uint()
   if target_param_count != wrapper_param_count + appended_i32_const_count {
     return false
   }
-  if not(function_type_results_equal(wrapper_type, target_type)) {
+  if not(
+      function_type_results_equal_with_gc_canonical_map(
+        wrapper_type,
+        target_type,
+        gc_type_canonical_map,
+      ),
+    ) {
     return false
   }
   for i in 0..<wrapper_type.params.length() {
-    if not(bytes_equal(wrapper_type.params[i], target_type.params[i])) {
+    if not(
+        type_bytes_equal_with_gc_canonical_map(
+          wrapper_type.params[i],
+          target_type.params[i],
+          gc_type_canonical_map,
+        ),
+      ) {
       return false
     }
   }
@@ -11276,6 +11344,7 @@ fn can_signature_refine_forward_to_target(
   wrapper_type : FunctionTypeEntry,
   target_type : FunctionTypeEntry,
   forwarded_param_count : UInt,
+  gc_type_canonical_map : Map[UInt, UInt],
 ) -> UInt? {
   let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
   let target_param_count = target_type.params.length().reinterpret_as_uint()
@@ -11285,12 +11354,24 @@ fn can_signature_refine_forward_to_target(
   if wrapper_param_count <= target_param_count {
     return None
   }
-  if not(function_type_results_equal(wrapper_type, target_type)) {
+  if not(
+      function_type_results_equal_with_gc_canonical_map(
+        wrapper_type,
+        target_type,
+        gc_type_canonical_map,
+      ),
+    ) {
     return None
   }
   let target_param_count_i = UInt::reinterpret_as_int(target_param_count)
   for i in 0..<target_param_count_i {
-    if not(bytes_equal(wrapper_type.params[i], target_type.params[i])) {
+    if not(
+        type_bytes_equal_with_gc_canonical_map(
+          wrapper_type.params[i],
+          target_type.params[i],
+          gc_type_canonical_map,
+        ),
+      ) {
       return None
     }
   }
@@ -11309,6 +11390,7 @@ fn collect_const_call_forwarding_alias_map(
   imported_function_count : UInt,
   function_type_by_index : Array[UInt],
   function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+  gc_type_canonical_map : Map[UInt, UInt],
 ) -> Map[UInt, CfpConstAlias] {
   let alias_candidate : Map[UInt, CfpConstAlias] = {}
   for i in 0..<code_bodies.length() {
@@ -11340,6 +11422,7 @@ fn collect_const_call_forwarding_alias_map(
                     wrapper_type,
                     target_type,
                     appended_i32_const_instrs.length().reinterpret_as_uint(),
+                    gc_type_canonical_map,
                   ) {
                   alias_candidate.set(old_index, {
                     target,
@@ -11400,7 +11483,9 @@ fn collect_call_forwarding_alias_map(
   code_bodies : Array[Bytes],
   imported_function_count : UInt,
   function_type_by_index : Array[UInt],
+  function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
   function_param_count_by_index : Array[UInt],
+  gc_type_canonical_map : Map[UInt, UInt],
 ) -> Map[UInt, UInt] {
   let alias_candidate : Map[UInt, UInt] = {}
   for i in 0..<code_bodies.length() {
@@ -11417,11 +11502,24 @@ fn collect_call_forwarding_alias_map(
       Some(target) =>
         if target != old_index {
           let target_pos = UInt::reinterpret_as_int(target)
-          if target_pos >= 0 &&
-            target_pos < function_type_by_index.length() &&
-            function_type_by_index[old_pos] ==
-            function_type_by_index[target_pos] {
-            alias_candidate.set(old_index, target)
+          if target_pos >= 0 && target_pos < function_type_by_index.length() {
+            let wrapper_type_index = function_type_by_index[old_pos]
+            let target_type_index = function_type_by_index[target_pos]
+            match function_type_entry_by_type_index.get(wrapper_type_index) {
+              Some(wrapper_type) =>
+                match function_type_entry_by_type_index.get(target_type_index) {
+                  Some(target_type) =>
+                    if function_type_entries_equal_with_gc_canonical_map(
+                        wrapper_type,
+                        target_type,
+                        gc_type_canonical_map,
+                      ) {
+                      alias_candidate.set(old_index, target)
+                    }
+                  None => ()
+                }
+              None => ()
+            }
           }
         }
       None => ()
@@ -11622,6 +11720,9 @@ fn apply_const_call_forwarding_propagation_raise(
   let parsed_type_entries = parse_type_section_entries_with_refs_raise(
     type_payload, "cfp-const",
   )
+  let gc_type_canonical_map = collect_gc_type_canonical_map_from_entries_raise(
+    parsed_type_entries,
+  )
   let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
   for i in 0..<parsed_type_entries.length() {
     if parsed_type_entries[i].form == 0x60U {
@@ -11638,7 +11739,11 @@ fn apply_const_call_forwarding_propagation_raise(
     .length()
     .reinterpret_as_uint()
   let alias_map = collect_const_call_forwarding_alias_map(
-    code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+    code_bodies,
+    imported_function_count,
+    function_type_by_index,
+    function_type_entry_by_type_index,
+    gc_type_canonical_map,
   )
   let mut has_alias = false
   alias_map.each((_, _target) => has_alias = true)
@@ -11746,6 +11851,21 @@ fn apply_call_forwarding_propagation_raise(
     type_payload, "cfp",
   )
   let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  for i in 0..<parsed_type_entries.length() {
+    if parsed_type_entries[i].form == 0x60U {
+      function_type_entry_by_type_index.set(
+        i.reinterpret_as_uint(),
+        parse_function_type_entry_from_raw_raise(
+          parsed_type_entries[i].raw,
+          "cfp",
+        ),
+      )
+    }
+  }
+  let gc_type_canonical_map = collect_gc_type_canonical_map_from_entries_raise(
+    parsed_type_entries,
+  )
   let function_type_by_index = imported_function_type_indices.copy()
   function_type_by_index.append(local_function_type_indices[:])
   let function_param_count_by_index : Array[UInt] = []
@@ -11767,15 +11887,23 @@ fn apply_call_forwarding_propagation_raise(
         type_index.to_string(),
       )
     }
-    function_param_count_by_index.push(
-      parse_function_type_param_count_from_raw_raise(
-        parsed_type_entries[type_pos].raw,
-        "cfp",
-      ),
-    )
+    match function_type_entry_by_type_index.get(type_index) {
+      Some(function_type_entry) => function_param_count_by_index.push(
+        function_type_entry.params.length().reinterpret_as_uint(),
+      )
+      None =>
+        raise WalyzeError::InvalidFormat(
+          "missing function type entry in cfp: " + type_index.to_string(),
+        )
+    }
   }
   let alias_map = collect_call_forwarding_alias_map(
-    code_bodies, imported_function_count, function_type_by_index, function_param_count_by_index,
+    code_bodies,
+    imported_function_count,
+    function_type_by_index,
+    function_type_entry_by_type_index,
+    function_param_count_by_index,
+    gc_type_canonical_map,
   )
   let mut has_alias = false
   alias_map.each((_, _target) => has_alias = true)
@@ -11805,6 +11933,7 @@ fn collect_signature_refine_alias_map(
   imported_function_count : UInt,
   function_type_by_index : Array[UInt],
   function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+  gc_type_canonical_map : Map[UInt, UInt],
 ) -> Map[UInt, SignatureRefineAlias] {
   let alias_candidate : Map[UInt, SignatureRefineAlias] = {}
   for i in 0..<code_bodies.length() {
@@ -11829,7 +11958,10 @@ fn collect_signature_refine_alias_map(
               Some(target_type) =>
                 match
                   can_signature_refine_forward_to_target(
-                    wrapper_type, target_type, forwarded_param_count,
+                    wrapper_type,
+                    target_type,
+                    forwarded_param_count,
+                    gc_type_canonical_map,
                   ) {
                   Some(dropped_param_count) =>
                     alias_candidate.set(old_index, {
@@ -12007,6 +12139,9 @@ fn apply_signature_refining_raise(
     type_payload, "signature-refine",
   )
   let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
+  let gc_type_canonical_map = collect_gc_type_canonical_map_from_entries_raise(
+    parsed_type_entries,
+  )
   let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
   for i in 0..<parsed_type_entries.length() {
     if parsed_type_entries[i].form == 0x60U {
@@ -12046,7 +12181,11 @@ fn apply_signature_refining_raise(
     .length()
     .reinterpret_as_uint()
   let alias_map = collect_signature_refine_alias_map(
-    code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+    code_bodies,
+    imported_function_count,
+    function_type_by_index,
+    function_type_entry_by_type_index,
+    gc_type_canonical_map,
   )
   let mut has_alias = false
   alias_map.each((_index, _alias) => has_alias = true)
