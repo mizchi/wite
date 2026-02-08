@@ -49,3 +49,5 @@
 - [x] Analyze: `runtime-profile` / `hot-size` に unresolved 理由分類（import-missing / signature-mismatch / runtime-exception）を追加
 - [x] Analyze: `function-gap` API/CLI と `bench/kpi/zlib_function_gap.tsv` を追加（walyze vs wasm-opt function TopK 差分）
 - [x] KPI: `migration_top3` のスコアに function-gap 指標（`fn_gap_top` / `fn_gap_positive`）を統合
+- [x] Perf: `analyze_call_graph_summary` を full callgraph 構築から分離し、summary 専用経路を追加（巨大 wasm の `analyze` 実行時間/メモリを削減）
+- [x] Perf: export index 抽出で name 文字列デコードを回避（`skip_name_string`）し、重複排除を `seen` map で O(n) 化

@@ -779,6 +779,24 @@ fn sample_module_with_two_exported_functions_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_duplicate_export_roots_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 twice with different names
+  append_section(
+    out,
+    7U,
+    bytes_of([0x02, 0x01, 0x61, 0x00, 0x00, 0x01, 0x62, 0x00, 0x00]),
+  )
+  // code section: 1 body (locals=0, end)
+  append_section(out, 10U, bytes_of([0x01, 0x02, 0x00, 0x0b]))
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_fc_opcode_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -2989,6 +3007,51 @@ test "analyze call graph summary with dead function" {
   assert_eq(summary.dead_function_count, 1U)
   assert_eq(summary.reachable_body_bytes, 6U)
   assert_eq(summary.dead_body_bytes, 5U)
+}
+
+///|
+test "analyze call graph summary matches call graph report counters" {
+  let bytes = sample_module_with_dead_function_bytes()
+  guard analyze_call_graph(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  guard analyze_call_graph_summary(bytes) is Ok(summary) else {
+    assert_true(false)
+    return
+  }
+  let mut reachable_count = 0U
+  for node in report.nodes {
+    if node.reachable_from_roots {
+      reachable_count += 1U
+    }
+  }
+  assert_eq(summary.imported_function_count, report.imported_function_count)
+  assert_eq(summary.local_function_count, report.local_function_count)
+  assert_eq(summary.roots, report.roots)
+  assert_eq(summary.has_indirect_calls, report.has_indirect_calls)
+  assert_eq(summary.partial, report.partial)
+  assert_eq(summary.reachable_function_count, reachable_count)
+  assert_eq(
+    summary.dead_function_count,
+    report.local_function_count - reachable_count,
+  )
+  assert_eq(summary.reachable_body_bytes, report.reachable_body_bytes)
+  assert_eq(summary.dead_body_bytes, report.dead_body_bytes)
+}
+
+///|
+test "analyze call graph summary deduplicates duplicate export roots" {
+  let bytes = sample_module_with_duplicate_export_roots_bytes()
+  guard analyze_call_graph_summary(bytes) is Ok(summary) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(summary.imported_function_count, 0U)
+  assert_eq(summary.local_function_count, 1U)
+  assert_eq(summary.roots, [0U])
+  assert_eq(summary.reachable_function_count, 1U)
+  assert_eq(summary.dead_function_count, 0U)
 }
 
 ///|

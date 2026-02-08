@@ -1030,6 +1030,16 @@ fn read_name_string(parser : Cursor) -> String raise WalyzeError {
 }
 
 ///|
+fn skip_name_string(parser : Cursor) -> Unit raise WalyzeError {
+  let name_len_u = parser.read_u32_leb128()
+  let name_len = UInt::reinterpret_as_int(name_len_u)
+  if name_len < 0 {
+    raise WalyzeError::InvalidFormat("name length overflow")
+  }
+  parser.skip(name_len)
+}
+
+///|
 fn bytes_to_name_string(bytes : Bytes) -> String {
   let out : Array[Char] = []
   for b in bytes {
@@ -1403,12 +1413,13 @@ fn parse_export_indices_by_kind(
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
+  let seen : Map[UInt, Bool] = {}
   for _ in 0U..<count {
-    ignore(read_name_string(parser))
+    skip_name_string(parser)
     let kind = parser.read_byte().to_uint()
     let index = parser.read_u32_leb128()
     if kind == kind_filter {
-      push_unique_u32(out, index)
+      push_unique_u32_with_seen(out, seen, index)
     }
   }
   out
@@ -9838,6 +9849,142 @@ fn analyze_call_graph_raise(
 }
 
 ///|
+fn analyze_call_graph_summary_raise(
+  bytes : Bytes,
+) -> CallGraphSummary raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut imported_function_count = 0U
+  let mut local_function_count = 0U
+  let mut code_bodies : Array[Bytes] = []
+  let roots : Array[UInt] = []
+  let root_seen : Map[UInt, Bool] = {}
+  let mut partial = false
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U => imported_function_count += parse_import_function_count(payload)
+      3U => local_function_count += parse_vec_count(payload)
+      7U =>
+        for index in parse_export_indices_by_kind(payload, 0U) {
+          push_unique_u32_with_seen(roots, root_seen, index)
+        }
+      8U =>
+        push_unique_u32_with_seen(
+          roots,
+          root_seen,
+          parse_start_function_index(payload),
+        )
+      6U => {
+        let refs_result = try? parse_global_section_function_refs_raise(payload)
+        match refs_result {
+          Ok(indices) =>
+            for index in indices {
+              push_unique_u32_with_seen(roots, root_seen, index)
+            }
+          Err(_) => partial = true
+        }
+      }
+      9U => {
+        let refs_result = try? parse_element_section_function_refs_raise(
+          payload,
+        )
+        match refs_result {
+          Ok(indices) =>
+            for index in indices {
+              push_unique_u32_with_seen(roots, root_seen, index)
+            }
+          Err(_) => partial = true
+        }
+      }
+      10U => code_bodies = parse_code_bodies(payload)
+      _ => ()
+    }
+  }
+  if code_bodies.length().reinterpret_as_uint() != local_function_count {
+    raise WalyzeError::InvalidFormat(
+      "function/code section count mismatch: function=" +
+      local_function_count.to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let local_body_bytes : Array[UInt] = []
+  let direct_callees_by_local : Array[Array[UInt]] = []
+  let mut has_indirect_calls = false
+  for body in code_bodies {
+    local_body_bytes.push(body.length().reinterpret_as_uint())
+    let mut direct_callees : Array[UInt] = []
+    let prefix_result = try? parse_local_decl_prefix_end(body)
+    match prefix_result {
+      Ok(prefix_end) => {
+        let instr_bytes = body[prefix_end:body.length()].to_bytes()
+        match parse_instruction_spans(instr_bytes) {
+          Some(spans) => {
+            let (callees, body_has_indirect) = collect_direct_callees(
+              instr_bytes, spans,
+            )
+            direct_callees = callees
+            if body_has_indirect {
+              has_indirect_calls = true
+            }
+          }
+          None => partial = true
+        }
+      }
+      Err(_) => partial = true
+    }
+    direct_callees_by_local.push(direct_callees)
+  }
+  let visited : Map[UInt, Bool] = {}
+  let queue = roots.copy()
+  let mut head = 0
+  while head < queue.length() {
+    let index = queue[head]
+    head += 1
+    if visited.get(index) is Some(_) {
+      continue
+    }
+    visited.set(index, true)
+    if index < imported_function_count {
+      continue
+    }
+    let local_index = index - imported_function_count
+    let pos = UInt::reinterpret_as_int(local_index)
+    if pos < 0 || pos >= direct_callees_by_local.length() {
+      continue
+    }
+    for callee in direct_callees_by_local[pos] {
+      if visited.get(callee) is None {
+        queue.push(callee)
+      }
+    }
+  }
+  let mut reachable_function_count = 0U
+  let mut reachable_body_bytes = 0U
+  let mut dead_body_bytes = 0U
+  for i in 0..<local_body_bytes.length() {
+    let function_index = imported_function_count + i.reinterpret_as_uint()
+    if visited.get(function_index) is Some(_) {
+      reachable_function_count += 1U
+      reachable_body_bytes += local_body_bytes[i]
+    } else {
+      dead_body_bytes += local_body_bytes[i]
+    }
+  }
+  {
+    imported_function_count,
+    local_function_count,
+    roots,
+    has_indirect_calls,
+    partial,
+    reachable_function_count,
+    dead_function_count: local_function_count - reachable_function_count,
+    reachable_body_bytes,
+    dead_body_bytes,
+  }
+}
+
+///|
 pub fn analyze_call_graph(
   bytes : Bytes,
 ) -> Result[CallGraphReport, WalyzeError] {
@@ -9848,29 +9995,7 @@ pub fn analyze_call_graph(
 pub fn analyze_call_graph_summary(
   bytes : Bytes,
 ) -> Result[CallGraphSummary, WalyzeError] {
-  match analyze_call_graph(bytes) {
-    Ok(report) => {
-      let mut reachable_function_count = 0U
-      for node in report.nodes {
-        if node.reachable_from_roots {
-          reachable_function_count += 1U
-        }
-      }
-      Ok({
-        imported_function_count: report.imported_function_count,
-        local_function_count: report.local_function_count,
-        roots: report.roots,
-        has_indirect_calls: report.has_indirect_calls,
-        partial: report.partial,
-        reachable_function_count,
-        dead_function_count: report.local_function_count -
-        reachable_function_count,
-        reachable_body_bytes: report.reachable_body_bytes,
-        dead_body_bytes: report.dead_body_bytes,
-      })
-    }
-    Err(err) => Err(err)
-  }
+  try? analyze_call_graph_summary_raise(bytes)
 }
 
 ///|
