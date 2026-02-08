@@ -9,9 +9,38 @@ fn encode_u32_leb128(value : UInt) -> Array[Byte] {
 }
 
 ///|
+fn encode_u32_leb128_wide(value : UInt) -> Array[Byte] {
+  let out : Array[Byte] = []
+  let mut current = value
+  while true {
+    let mut byte_u = current % 128U
+    current = current / 128U
+    if current > 0U {
+      byte_u += 128U
+      out.push(byte_u.to_byte())
+    } else {
+      out.push(byte_u.to_byte())
+      break
+    }
+  }
+  out
+}
+
+///|
 fn append_section(out : Array[Byte], id : UInt, payload : Array[Byte]) -> Unit {
   out.push(id.to_byte())
   out.append(encode_u32_leb128(payload.length().reinterpret_as_uint())[:])
+  out.append(payload[:])
+}
+
+///|
+fn append_section_wide(
+  out : Array[Byte],
+  id : UInt,
+  payload : Array[Byte],
+) -> Unit {
+  out.push(id.to_byte())
+  out.append(encode_u32_leb128_wide(payload.length().reinterpret_as_uint())[:])
   out.append(payload[:])
 }
 
@@ -1995,6 +2024,51 @@ fn sample_module_with_const_forwarding_call_return_thunk_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_cfp_const_size_regression_guard_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 (func)
+  //   #1 (func (param i32))
+  append_section(
+    out,
+    1U,
+    bytes_of([0x02, 0x60, 0x00, 0x00, 0x60, 0x01, 0x7f, 0x00]),
+  )
+  // function section: 3 local functions with type idx [0, 0, 1]
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x01]))
+  // export section:
+  //   #0 as "main"
+  //   #1 as "wrapper" (must remain reachable)
+  //   #2 as "target"
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x03, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00, 0x07, 0x77, 0x72, 0x61,
+      0x70, 0x70, 0x65, 0x72, 0x00, 0x01, 0x06, 0x74, 0x61, 0x72, 0x67, 0x65,
+      0x74, 0x00, 0x02,
+    ]),
+  )
+  // code section:
+  // #0: call 1 x 16; end
+  // #1: i32.const 5; call 2; end  (cfp-const candidate but exported)
+  // #2: local.get 0; drop; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x22, 0x00, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10,
+      0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10,
+      0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x0b,
+      0x06, 0x00, 0x41, 0x05, 0x10, 0x02, 0x0b, 0x04, 0x00, 0x20, 0x00, 0x1a,
+      0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_gc_signature_refining_thunk_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -2097,6 +2171,69 @@ fn sample_module_with_gc_signature_refining_call_return_thunk_bytes() -> Bytes {
       0x00, 0x10, 0x02, 0x0f, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6a, 0x0b,
     ]),
   )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_cfp_target_leb_growth_bytes() -> Bytes {
+  let function_count = 131U
+  let wrapper_index = 1U
+  let target_index = 130U
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section_wide(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+
+  // function section: 131 local functions with type idx 0
+  let function_payload : Array[Byte] = []
+  function_payload.append(encode_u32_leb128_wide(function_count)[:])
+  for _ in 0U..<function_count {
+    function_payload.push(0x00)
+  }
+  append_section_wide(out, 3U, function_payload)
+
+  // export section: export all functions so DCE cannot remove filler functions
+  let export_payload : Array[Byte] = []
+  export_payload.append(encode_u32_leb128_wide(function_count)[:])
+  for i in 0U..<function_count {
+    let name = "f" + i.to_string()
+    let name_bytes = ascii_bytes(name)
+    export_payload.append(
+      encode_u32_leb128_wide(name_bytes.length().reinterpret_as_uint())[:],
+    )
+    export_payload.append(name_bytes[:])
+    export_payload.push(0x00)
+    export_payload.append(encode_u32_leb128_wide(i)[:])
+  }
+  append_section_wide(out, 7U, export_payload)
+
+  // code section:
+  // #0: call 1 * 24; end
+  // #1: call 130; end (cfp alias 1 -> 130)
+  // #others: end
+  let code_payload : Array[Byte] = []
+  code_payload.append(encode_u32_leb128_wide(function_count)[:])
+  for i in 0U..<function_count {
+    let body : Array[Byte] = [0x00]
+    if i == 0U {
+      for _ in 0..<24 {
+        body.push(0x10)
+        body.append(encode_u32_leb128_wide(wrapper_index)[:])
+      }
+      body.push(0x0b)
+    } else if i == wrapper_index {
+      body.push(0x10)
+      body.append(encode_u32_leb128_wide(target_index)[:])
+      body.push(0x0b)
+    } else {
+      body.push(0x0b)
+    }
+    code_payload.append(
+      encode_u32_leb128_wide(body.length().reinterpret_as_uint())[:],
+    )
+    code_payload.append(body[:])
+  }
+  append_section_wide(out, 10U, code_payload)
   Bytes::from_array(out[:])
 }
 
@@ -4723,6 +4860,41 @@ test "optimize cfp phase2 rewrites forwarding thunk with call+return and enables
 }
 
 ///|
+test "optimize cfp skips rewrites that increase call immediate leb size" {
+  let bytes = sample_module_with_cfp_target_leb_growth_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=1U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.after_size <= optimized.before_size)
+  assert_true(not(optimized.removed_sections.any(s => s.contains("cfp:calls:"))))
+  guard profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, before_profile.function_count)
+  assert_true(runtime_zero_arg_export_behaviors_equal(bytes, optimized.bytes))
+}
+
+///|
 test "optimize cfp-const rewrites const-forwarding thunk and enables dce" {
   let bytes = sample_module_with_const_forwarding_thunk_bytes()
   guard profile_module(bytes) is Ok(before_profile) else {
@@ -4981,6 +5153,43 @@ test "optimize signature-refining phase3 rewrites forwarding thunk with unused l
       -9, -1, 0, 1, 7, 123456,
     ]),
   )
+}
+
+///|
+test "optimize dce cluster rolls back when passes regress size" {
+  let bytes = sample_module_with_cfp_const_size_regression_guard_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=1U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.after_size <= optimized.before_size)
+  assert_true(
+    optimized.removed_sections.any(s =>
+      s.contains("dce-cluster:rollback:size-regress")),
+  )
+  assert_true(
+    not(optimized.removed_sections.any(s =>
+      s.contains("cfp-const:calls:"))),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 3U)
 }
 
 ///|

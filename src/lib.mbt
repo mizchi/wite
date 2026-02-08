@@ -8153,10 +8153,12 @@ fn optimize_for_size_round_raise(
     }
   }
   if config.enable_dce {
+    let dce_cluster_before = optimized_bytes
+    let dce_cluster_removed_sections : Array[String] = []
     let directize = apply_directize_raise(optimized_bytes)
     optimized_bytes = directize.bytes
     if directize.rewritten_call_count > 0U {
-      removed_sections.push(
+      dce_cluster_removed_sections.push(
         "directize:calls:" + directize.rewritten_call_count.to_string(),
       )
     }
@@ -8165,19 +8167,21 @@ fn optimize_for_size_round_raise(
     )
     optimized_bytes = cfp_const.bytes
     if cfp_const.rewritten_call_count > 0U {
-      removed_sections.push(
+      dce_cluster_removed_sections.push(
         "cfp-const:calls:" + cfp_const.rewritten_call_count.to_string(),
       )
     }
     let cfp = apply_call_forwarding_propagation_raise(optimized_bytes)
     optimized_bytes = cfp.bytes
     if cfp.rewritten_call_count > 0U {
-      removed_sections.push("cfp:calls:" + cfp.rewritten_call_count.to_string())
+      dce_cluster_removed_sections.push(
+        "cfp:calls:" + cfp.rewritten_call_count.to_string(),
+      )
     }
     let signature_refine = apply_signature_refining_raise(optimized_bytes)
     optimized_bytes = signature_refine.bytes
     if signature_refine.rewritten_call_count > 0U {
-      removed_sections.push(
+      dce_cluster_removed_sections.push(
         "signature-refine:calls:" +
         signature_refine.rewritten_call_count.to_string(),
       )
@@ -8185,7 +8189,7 @@ fn optimize_for_size_round_raise(
     let dce = apply_dce_raise(optimized_bytes, config)
     optimized_bytes = dce.bytes
     if dce.removed_function_count > 0U {
-      removed_sections.push(
+      dce_cluster_removed_sections.push(
         "dce:functions:" +
         dce.removed_function_count.to_string() +
         " bodies:" +
@@ -8193,7 +8197,22 @@ fn optimize_for_size_round_raise(
       )
     }
     if dce.dropped_name_section {
-      removed_sections.push("custom:name(dce)")
+      dce_cluster_removed_sections.push("custom:name(dce)")
+    }
+    let dce_cluster_before_size = dce_cluster_before
+      .length()
+      .reinterpret_as_uint()
+    let dce_cluster_after_size = optimized_bytes.length().reinterpret_as_uint()
+    if dce_cluster_after_size > dce_cluster_before_size {
+      optimized_bytes = dce_cluster_before
+      removed_sections.push(
+        "dce-cluster:rollback:size-regress:" +
+        dce_cluster_before_size.to_string() +
+        "->" +
+        dce_cluster_after_size.to_string(),
+      )
+    } else {
+      removed_sections.append(dce_cluster_removed_sections[:])
     }
   }
   if should_refine_types(config) {
@@ -11398,11 +11417,15 @@ fn rewrite_instruction_calls_for_call_forwarding_raise(
         Some(v) => v
         None => target
       }
-      if rewritten_target != target {
+      if rewritten_target != target &&
+        encode_u32_leb128(rewritten_target).length() <=
+        encode_u32_leb128(target).length() {
         rewritten_call_count += 1U
+        out.push(0x10U.to_byte())
+        out.append(encode_u32_leb128(rewritten_target)[:])
+      } else {
+        out.append(instr_bytes[span.start:span.end_].to_array())
       }
-      out.push(0x10U.to_byte())
-      out.append(encode_u32_leb128(rewritten_target)[:])
     } else {
       out.append(instr_bytes[span.start:span.end_].to_array())
     }
