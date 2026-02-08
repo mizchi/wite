@@ -1505,13 +1505,18 @@ fn collect_direct_callees(
   spans : Array[InstrSpan],
 ) -> (Array[UInt], Bool) {
   let callees : Array[UInt] = []
+  let callee_seen : Map[UInt, Bool] = {}
   let mut has_indirect = false
   for span in spans {
     if span.opcode == 0x10U {
       if span.end_ > span.start + 1 {
         let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
         match decode_u32_leb128_bytes(imm) {
-          Some(index) => if not(callees.contains(index)) { callees.push(index) }
+          Some(index) =>
+            if callee_seen.get(index) is None {
+              callee_seen.set(index, true)
+              callees.push(index)
+            }
           None => ()
         }
       }
@@ -7313,6 +7318,7 @@ fn analyze_call_graph_raise(
   let export_names : Map[UInt, Array[String]] = {}
   let function_names : Map[UInt, String] = {}
   let roots : Array[UInt] = []
+  let root_seen : Map[UInt, Bool] = {}
   let mut partial = false
   for section in sections {
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
@@ -7324,25 +7330,20 @@ fn analyze_call_graph_raise(
         merge_export_function_names(export_names, parsed)
         parsed.each((index, names) => if should_include_export_root(
             names, export_root_names,
-          ) &&
-          not(roots.contains(index)) {
-          roots.push(index)
+          ) {
+          push_unique_u32_with_seen(roots, root_seen, index)
         })
       }
       8U => {
         let start_index = parse_start_function_index(payload)
-        if not(roots.contains(start_index)) {
-          roots.push(start_index)
-        }
+        push_unique_u32_with_seen(roots, root_seen, start_index)
       }
       6U => {
         let refs_result = try? parse_global_section_function_refs_raise(payload)
         match refs_result {
           Ok(indices) =>
             for index in indices {
-              if not(roots.contains(index)) {
-                roots.push(index)
-              }
+              push_unique_u32_with_seen(roots, root_seen, index)
             }
           Err(_) => partial = true
         }
@@ -7354,9 +7355,7 @@ fn analyze_call_graph_raise(
         match refs_result {
           Ok(indices) =>
             for index in indices {
-              if not(roots.contains(index)) {
-                roots.push(index)
-              }
+              push_unique_u32_with_seen(roots, root_seen, index)
             }
           Err(_) => partial = true
         }

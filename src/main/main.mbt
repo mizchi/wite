@@ -46,8 +46,8 @@ fn print_section_sizes(sections : Array[@walyze.SectionSize]) -> Unit {
 }
 
 ///|
-fn pad_two_digits(value : UInt) -> String {
-  if value < 10U {
+fn pad_two_digits_u64(value : UInt64) -> String {
+  if value < 10UL {
     "0" + value.to_string()
   } else {
     value.to_string()
@@ -59,10 +59,10 @@ fn format_percent(numerator : UInt, denominator : UInt) -> String {
   if denominator == 0U {
     return "0.00%"
   }
-  let scaled = numerator * 10000U / denominator
-  let whole = scaled / 100U
-  let frac = scaled % 100U
-  whole.to_string() + "." + pad_two_digits(frac) + "%"
+  let scaled = numerator.to_uint64() * 10000UL / denominator.to_uint64()
+  let whole = scaled / 100UL
+  let frac = scaled % 100UL
+  whole.to_string() + "." + pad_two_digits_u64(frac) + "%"
 }
 
 ///|

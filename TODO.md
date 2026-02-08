@@ -46,7 +46,7 @@
   - opcode 集計で命令ごとに key/mnemonic 文字列生成と `0xfc/0xfd` immediate decode を繰り返している
   - roots/callees dedup が `Array.contains` ベースで、件数増で悪化しやすい
 - 改善結果（2026-02-08, `duckdb-mvp.wasm`, `deep-analyze ... 20`）:
-  - 実行時間: `4.13s -> 1.57s`
+  - 実行時間: `4.13s -> 1.34s`
   - 最大RSS: `~1.16GB -> ~640MB`
 
 ### Perf TODO (priority)
@@ -56,7 +56,7 @@
 - [x] PR3 (P0): top-k 収集を API レベルで導入し、全件ソートをやめる（`limit` 連携）
 - [x] PR4 (P1): opcode 集計を数値キー中心に変更し、文字列化を最終出力時に遅延する（非-prefixed 命令）
 - [x] PR5 (P1): roots/callees dedup を `Map/Set` ベースへ置換する（`contains` 依存を削減）
-- [ ] PR6 (Bug): `deep-analyze` の `%` 表示オーバーフローを修正する（`numerator * 10000` 回避）
+- [x] PR6 (Bug): `deep-analyze` の `%` 表示オーバーフローを修正する（`numerator * 10000` 回避）
 
 ## Architecture Guardrails（mwac / walyze）
 
