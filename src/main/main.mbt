@@ -168,7 +168,7 @@ fn run_analyze(path : String) -> Unit {
 ///|
 fn run_deep_analyze(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_wasm_breakdown(bytes) {
+  match @walyze.analyze_wasm_breakdown(bytes, top_limit=limit) {
     Ok(report) => {
       println("wasm deep analysis:")
       println("  total_bytes: " + report.total_bytes.to_string())

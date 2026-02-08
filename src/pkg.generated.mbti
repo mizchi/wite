@@ -28,7 +28,7 @@ pub fn analyze_keep_reasons(Bytes, config? : OptimizeConfig) -> Result[KeepReaso
 
 pub fn analyze_section_sizes(Bytes) -> Result[Array[SectionSize], WalyzeError]
 
-pub fn analyze_wasm_breakdown(Bytes) -> Result[WasmBreakdownReport, WalyzeError]
+pub fn analyze_wasm_breakdown(Bytes, top_limit? : UInt) -> Result[WasmBreakdownReport, WalyzeError]
 
 pub fn error_to_string(WalyzeError) -> String
 

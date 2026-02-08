@@ -82,7 +82,7 @@ just run -- optimize out.component.wasm out.component.opt.wasm -Oz --converge
 Main APIs are in `src/lib.mbt`:
 
 - `analyze_section_sizes(bytes)`
-- `analyze_wasm_breakdown(bytes)`
+- `analyze_wasm_breakdown(bytes, top_limit=...)`
 - `analyze_function_sizes(bytes)`
 - `analyze_code_block_sizes(bytes)`
 - `analyze_call_graph(bytes)`

@@ -6756,11 +6756,11 @@ fn parse_prefixed_opcode_subopcode(
   if span.end_ <= span.start + 1 {
     return None
   }
-  let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
-  let parser = Cursor::new(imm)
+  let parser = Cursor::new(instr_bytes)
+  parser.set_pos(span.start + 1)
   let result = try? parser.read_u32_leb128()
   match result {
-    Ok(v) => Some(v)
+    Ok(v) => if parser.get_pos() <= span.end_ { Some(v) } else { None }
     Err(_) => None
   }
 }
@@ -6872,53 +6872,176 @@ fn opcode_mnemonic_or_key(
 }
 
 ///|
-fn collect_opcode_stats_from_code_bodies(
-  code_bodies : Array[Bytes],
-) -> (Array[OpcodeStat], UInt, UInt, Bool) {
-  let grouped : Map[String, OpcodeStat] = {}
-  let mut instruction_count = 0U
-  let mut instruction_bytes = 0U
-  let mut partial = false
-  for body in code_bodies {
-    let prefix_result = try? parse_local_decl_prefix_end(body)
-    match prefix_result {
-      Ok(prefix_end) => {
-        let instr_bytes = body[prefix_end:body.length()].to_bytes()
-        instruction_bytes += instr_bytes.length().reinterpret_as_uint()
-        match parse_instruction_spans(instr_bytes) {
-          Some(spans) => {
-            instruction_count += spans.length().reinterpret_as_uint()
-            for span in spans {
-              let subopcode = parse_prefixed_opcode_subopcode(instr_bytes, span)
-              let key = opcode_stat_key(span.opcode, subopcode)
-              let mnemonic = opcode_mnemonic_or_key(span.opcode, subopcode, key)
-              let span_size = (span.end_ - span.start).reinterpret_as_uint()
-              match grouped.get(key) {
-                Some(prev) =>
-                  grouped.set(key, {
-                    key,
-                    mnemonic,
-                    count: prev.count + 1U,
-                    total_bytes: prev.total_bytes + span_size,
-                  })
-                None =>
-                  grouped.set(key, {
-                    key,
-                    mnemonic,
-                    count: 1U,
-                    total_bytes: span_size,
-                  })
-              }
-            }
-          }
-          None => partial = true
-        }
-      }
-      Err(_) => partial = true
+priv struct OpcodeCounter {
+  opcode : UInt
+  subopcode : UInt?
+  count : UInt
+  total_bytes : UInt
+}
+
+///|
+fn compare_function_size(a : FunctionSize, b : FunctionSize) -> Int {
+  if a.body_bytes > b.body_bytes {
+    -1
+  } else if a.body_bytes < b.body_bytes {
+    1
+  } else if a.function_index < b.function_index {
+    -1
+  } else if a.function_index > b.function_index {
+    1
+  } else {
+    0
+  }
+}
+
+///|
+fn compare_code_block_size(a : CodeBlockSize, b : CodeBlockSize) -> Int {
+  if a.total_bytes > b.total_bytes {
+    -1
+  } else if a.total_bytes < b.total_bytes {
+    1
+  } else if a.function_index < b.function_index {
+    -1
+  } else if a.function_index > b.function_index {
+    1
+  } else if a.block_index < b.block_index {
+    -1
+  } else if a.block_index > b.block_index {
+    1
+  } else {
+    0
+  }
+}
+
+///|
+fn push_unique_u32_with_seen(
+  out : Array[UInt],
+  seen : Map[UInt, Bool],
+  value : UInt,
+) -> Unit {
+  if seen.get(value) is Some(_) {
+    return
+  }
+  seen.set(value, true)
+  out.push(value)
+}
+
+///|
+fn push_function_size_with_limit(
+  out : Array[FunctionSize],
+  entry : FunctionSize,
+  top_limit : UInt,
+) -> Unit {
+  if top_limit == 0U {
+    out.push(entry)
+    return
+  }
+  if out.length().reinterpret_as_uint() < top_limit {
+    out.push(entry)
+    return
+  }
+  let mut worst = 0
+  for i in 1..<out.length() {
+    if compare_function_size(out[worst], out[i]) < 0 {
+      worst = i
     }
   }
+  if compare_function_size(entry, out[worst]) < 0 {
+    out[worst] = entry
+  }
+}
+
+///|
+fn push_code_block_size_with_limit(
+  out : Array[CodeBlockSize],
+  entry : CodeBlockSize,
+  top_limit : UInt,
+) -> Unit {
+  if top_limit == 0U {
+    out.push(entry)
+    return
+  }
+  if out.length().reinterpret_as_uint() < top_limit {
+    out.push(entry)
+    return
+  }
+  let mut worst = 0
+  for i in 1..<out.length() {
+    if compare_code_block_size(out[worst], out[i]) < 0 {
+      worst = i
+    }
+  }
+  if compare_code_block_size(entry, out[worst]) < 0 {
+    out[worst] = entry
+  }
+}
+
+///|
+fn add_opcode_counter_base(
+  grouped : Map[UInt, OpcodeCounter],
+  opcode : UInt,
+  span_size : UInt,
+) -> Unit {
+  match grouped.get(opcode) {
+    Some(prev) =>
+      grouped.set(opcode, {
+        opcode,
+        subopcode: None,
+        count: prev.count + 1U,
+        total_bytes: prev.total_bytes + span_size,
+      })
+    None =>
+      grouped.set(opcode, {
+        opcode,
+        subopcode: None,
+        count: 1U,
+        total_bytes: span_size,
+      })
+  }
+}
+
+///|
+fn add_opcode_counter_prefixed(
+  grouped : Map[String, OpcodeCounter],
+  opcode : UInt,
+  subopcode : UInt?,
+  span_size : UInt,
+) -> Unit {
+  let key = opcode_stat_key(opcode, subopcode)
+  match grouped.get(key) {
+    Some(prev) =>
+      grouped.set(key, {
+        opcode,
+        subopcode,
+        count: prev.count + 1U,
+        total_bytes: prev.total_bytes + span_size,
+      })
+    None =>
+      grouped.set(key, { opcode, subopcode, count: 1U, total_bytes: span_size })
+  }
+}
+
+///|
+fn opcode_stats_from_counters(
+  base_grouped : Map[UInt, OpcodeCounter],
+  prefixed_grouped : Map[String, OpcodeCounter],
+) -> Array[OpcodeStat] {
   let out : Array[OpcodeStat] = []
-  grouped.each((_, value) => out.push(value))
+  base_grouped.each((_opcode, counter) => {
+    let key = format_opcode_hex(counter.opcode)
+    out.push({
+      key,
+      mnemonic: opcode_mnemonic_or_key(counter.opcode, None, key),
+      count: counter.count,
+      total_bytes: counter.total_bytes,
+    })
+  })
+  prefixed_grouped.each((key, counter) => out.push({
+    key,
+    mnemonic: opcode_mnemonic_or_key(counter.opcode, counter.subopcode, key),
+    count: counter.count,
+    total_bytes: counter.total_bytes,
+  }))
   out.sort_by((a, b) => if a.total_bytes > b.total_bytes {
     -1
   } else if a.total_bytes < b.total_bytes {
@@ -6930,22 +7053,80 @@ fn collect_opcode_stats_from_code_bodies(
   } else {
     a.key.compare(b.key)
   })
-  (out, instruction_count, instruction_bytes, partial)
+  out
 }
 
 ///|
 pub fn analyze_wasm_breakdown(
   bytes : Bytes,
+  top_limit? : UInt = 0U,
 ) -> Result[WasmBreakdownReport, WalyzeError] {
   try? {
     let sections = parse_core_sections_raise(bytes)
+    let section_sizes = summarize_sections(sections, false)
+    let custom_sections = summarize_custom_sections_raise(sections, bytes)
+    let export_names : Map[UInt, Array[String]] = {}
+    let function_names : Map[UInt, String] = {}
+    let roots : Array[UInt] = []
+    let root_seen : Map[UInt, Bool] = {}
+    let mut imported_function_count = 0U
     let mut local_function_count = 0U
     let mut code_bodies : Array[Bytes] = []
+    let mut callgraph_partial = false
     for section in sections {
       let payload = bytes[section.payload_start:section.section_end].to_bytes()
       match section.section_id {
+        2U => imported_function_count += parse_import_function_count(payload)
         3U => local_function_count = parse_vec_count(payload)
+        7U => {
+          let parsed = parse_export_function_names(payload)
+          merge_export_function_names(export_names, parsed)
+          parsed.each((index, _names) => push_unique_u32_with_seen(
+            roots, root_seen, index,
+          ))
+        }
+        8U =>
+          push_unique_u32_with_seen(
+            roots,
+            root_seen,
+            parse_start_function_index(payload),
+          )
+        6U => {
+          let refs_result = try? parse_global_section_function_refs_raise(
+            payload,
+          )
+          match refs_result {
+            Ok(indices) =>
+              for index in indices {
+                push_unique_u32_with_seen(roots, root_seen, index)
+              }
+            Err(_) => callgraph_partial = true
+          }
+        }
+        9U => {
+          let refs_result = try? parse_element_section_function_refs_raise(
+            payload,
+          )
+          match refs_result {
+            Ok(indices) =>
+              for index in indices {
+                push_unique_u32_with_seen(roots, root_seen, index)
+              }
+            Err(_) => callgraph_partial = true
+          }
+        }
         10U => code_bodies = parse_code_bodies(payload)
+        0U =>
+          match section.custom_name {
+            Some(name) =>
+              if name == "name" {
+                parse_name_section_function_names(payload).each((
+                  index,
+                  function_name,
+                ) => function_names.set(index, function_name))
+              }
+            None => ()
+          }
         _ => ()
       }
     }
@@ -6957,40 +7138,154 @@ pub fn analyze_wasm_breakdown(
         code_bodies.length().to_string(),
       )
     }
-    let section_sizes = summarize_sections(sections, false)
-    let custom_sections = summarize_custom_sections_raise(sections, bytes)
-    let top_functions = match analyze_function_sizes(bytes) {
-      Ok(v) => v
-      Err(e) => raise e
+    let top_functions : Array[FunctionSize] = []
+    let top_blocks : Array[CodeBlockSize] = []
+    let local_function_indices : Array[UInt] = []
+    let direct_callees_map : Map[UInt, Array[UInt]] = {}
+    let body_bytes_map : Map[UInt, UInt] = {}
+    let base_opcode_grouped : Map[UInt, OpcodeCounter] = {}
+    let prefixed_opcode_grouped : Map[String, OpcodeCounter] = {}
+    let mut block_count = 0U
+    let mut instruction_count = 0U
+    let mut instruction_bytes = 0U
+    let mut opcode_partial = false
+    let mut has_indirect_calls = false
+    for i in 0..<code_bodies.length() {
+      let function_index = imported_function_count + i.reinterpret_as_uint()
+      let body = code_bodies[i]
+      let body_bytes = body.length().reinterpret_as_uint()
+      let exports = match export_names.get(function_index) {
+        Some(v) => v
+        None => []
+      }
+      local_function_indices.push(function_index)
+      body_bytes_map.set(function_index, body_bytes)
+      push_function_size_with_limit(
+        top_functions,
+        {
+          function_index,
+          body_bytes,
+          name: function_names.get(function_index),
+          export_names: exports,
+        },
+        top_limit,
+      )
+      let mut direct_callees : Array[UInt] = []
+      let prefix_result = try? parse_local_decl_prefix_end(body)
+      match prefix_result {
+        Ok(prefix_end) => {
+          let instr_bytes = body[prefix_end:body.length()].to_bytes()
+          instruction_bytes += instr_bytes.length().reinterpret_as_uint()
+          match parse_instruction_spans(instr_bytes) {
+            Some(spans) => {
+              instruction_count += spans.length().reinterpret_as_uint()
+              let (function_blocks, complete) = collect_function_code_blocks(
+                function_index,
+                function_names.get(function_index),
+                exports,
+                instr_bytes,
+                spans,
+              )
+              block_count += function_blocks.length().reinterpret_as_uint()
+              for block in function_blocks {
+                push_code_block_size_with_limit(top_blocks, block, top_limit)
+              }
+              if not(complete) {
+                opcode_partial = true
+              }
+              let (callees, body_has_indirect) = collect_direct_callees(
+                instr_bytes, spans,
+              )
+              direct_callees = callees
+              if body_has_indirect {
+                has_indirect_calls = true
+              }
+              for span in spans {
+                let span_size = (span.end_ - span.start).reinterpret_as_uint()
+                if span.opcode == 0xfcU || span.opcode == 0xfdU {
+                  add_opcode_counter_prefixed(
+                    prefixed_opcode_grouped,
+                    span.opcode,
+                    parse_prefixed_opcode_subopcode(instr_bytes, span),
+                    span_size,
+                  )
+                } else {
+                  add_opcode_counter_base(
+                    base_opcode_grouped,
+                    span.opcode,
+                    span_size,
+                  )
+                }
+              }
+            }
+            None => {
+              opcode_partial = true
+              callgraph_partial = true
+            }
+          }
+        }
+        Err(_) => {
+          opcode_partial = true
+          callgraph_partial = true
+        }
+      }
+      direct_callees_map.set(function_index, direct_callees)
     }
-    let block_report = match analyze_code_block_sizes(bytes) {
-      Ok(v) => v
-      Err(e) => raise e
-    }
-    let callgraph = match analyze_call_graph(bytes) {
-      Ok(v) => v
-      Err(e) => raise e
-    }
-    let (opcodes, instruction_count, instruction_bytes, opcode_partial) = collect_opcode_stats_from_code_bodies(
-      code_bodies,
+    top_functions.sort_by(compare_function_size)
+    top_blocks.sort_by(compare_code_block_size)
+    let opcodes = opcode_stats_from_counters(
+      base_opcode_grouped, prefixed_opcode_grouped,
     )
+    let visited : Map[UInt, Bool] = {}
+    let queue = roots.copy()
+    let mut head = 0
+    while head < queue.length() {
+      let index = queue[head]
+      head += 1
+      if visited.get(index) is Some(_) {
+        continue
+      }
+      visited.set(index, true)
+      match direct_callees_map.get(index) {
+        Some(callees) =>
+          for callee in callees {
+            if visited.get(callee) is None {
+              queue.push(callee)
+            }
+          }
+        None => ()
+      }
+    }
+    let mut reachable_body_bytes = 0U
+    let mut dead_body_bytes = 0U
+    for function_index in local_function_indices {
+      let body_bytes = match body_bytes_map.get(function_index) {
+        Some(v) => v
+        None => 0U
+      }
+      if visited.get(function_index) is Some(_) {
+        reachable_body_bytes += body_bytes
+      } else {
+        dead_body_bytes += body_bytes
+      }
+    }
     {
       total_bytes: bytes.length().reinterpret_as_uint(),
       sections: section_sizes,
       custom_sections,
-      imported_function_count: callgraph.imported_function_count,
-      local_function_count: callgraph.local_function_count,
+      imported_function_count,
+      local_function_count,
       top_functions,
-      block_count: block_report.block_count,
-      top_blocks: block_report.blocks,
+      block_count,
+      top_blocks,
       instruction_count,
       instruction_bytes,
-      opcode_partial: opcode_partial || block_report.partial,
+      opcode_partial,
       opcodes,
-      callgraph_partial: callgraph.partial,
-      has_indirect_calls: callgraph.has_indirect_calls,
-      reachable_body_bytes: callgraph.reachable_body_bytes,
-      dead_body_bytes: callgraph.dead_body_bytes,
+      callgraph_partial,
+      has_indirect_calls,
+      reachable_body_bytes,
+      dead_body_bytes,
     }
   }
 }

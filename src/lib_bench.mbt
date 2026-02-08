@@ -46,6 +46,18 @@ fn must_optimize_after_size(bytes : Bytes, config : OptimizeConfig) -> UInt {
 }
 
 ///|
+fn must_analyze_wasm_breakdown_score(bytes : Bytes, top_limit : UInt) -> UInt {
+  match analyze_wasm_breakdown(bytes, top_limit~) {
+    Ok(report) => report.instruction_count + report.dead_body_bytes
+    Err(err) => {
+      println("analyze_wasm_breakdown failed: " + error_to_string(err))
+      panic()
+      0U
+    }
+  }
+}
+
+///|
 test "bench: core profile binaryen zlib" (b : @bench.T) {
   let bytes = read_fixture_or_fail("bench/corpus/core/binaryen/zlib.wasm")
   b.bench(fn() { b.keep(must_profile_module_total(bytes)) })
@@ -89,4 +101,10 @@ test "bench: component top functions wac dummy_wasi_http_0.2.3" (b : @bench.T) {
       }
     }
   })
+}
+
+///|
+test "bench: core deep analyze binaryen zlib (top20)" (b : @bench.T) {
+  let bytes = read_fixture_or_fail("bench/corpus/core/binaryen/zlib.wasm")
+  b.bench(fn() { b.keep(must_analyze_wasm_breakdown_score(bytes, 20U)) })
 }

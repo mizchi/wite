@@ -2040,6 +2040,19 @@ test "analyze wasm breakdown reports deep section and opcode details" {
 }
 
 ///|
+test "analyze wasm breakdown respects top_limit" {
+  let bytes = sample_module_with_named_functions_bytes()
+  guard analyze_wasm_breakdown(bytes, top_limit=1U) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.local_function_count, 2U)
+  assert_eq(report.block_count, 2U)
+  assert_eq(report.top_functions.length(), 1)
+  assert_eq(report.top_blocks.length(), 1)
+}
+
+///|
 test "analyze wasm breakdown splits prefixed opcodes" {
   let bytes = sample_module_with_fc_opcode_bytes()
   guard analyze_wasm_breakdown(bytes) is Ok(report) else {
