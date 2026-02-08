@@ -27,6 +27,34 @@
 - [x] A2: no-change 理由を「実装対象 / 非対象」に分類し、優先度と工数見積もりを TODO に接続する（`bench/kpi/no_change_triage.tsv`）
 - [x] A3: pass waterfall の寄与をもとに、`code` / `dce` の追加移植候補を Top3 に絞る（`bench/kpi/migration_top3.md`）
 
+## Performance Review (2026-02-08)
+
+- 対象: `deep-analyze` の性能レビュー（`section/custom/function/block/opcode/callgraph` 統合レポート）
+- 計測サンプル:
+  - `duckdb-mvp.wasm` (`39,362,651 bytes`)
+  - `function_count=62,171`, `block_count=618,122`
+- 実測（ローカル）:
+  - `analyze`: `0.03s`
+  - `top-functions`: `0.28s`
+  - `block-sizes`: `1.08s`
+  - `callgraph`: `1.68s`
+  - `deep-analyze`: `4.13s`（条件により `~6.14s`）、`max RSS ~1.16GB`（条件により `~1.93GB`）
+- 主要ボトルネック:
+  - `deep-analyze` が `analyze_function_sizes` / `analyze_code_block_sizes` / `analyze_call_graph` / opcode集計で同一 wasm を多重走査している
+  - `deep-analyze` では summary だけ欲しい箇所でも callgraph `nodes` 全量を構築している
+  - top-N 表示でも関数/ブロックを全件保持・全件ソートしている
+  - opcode 集計で命令ごとに key/mnemonic 文字列生成と `0xfc/0xfd` immediate decode を繰り返している
+  - roots/callees dedup が `Array.contains` ベースで、件数増で悪化しやすい
+
+### Perf TODO (priority)
+
+- [ ] PR1 (P0): `analyze_wasm_breakdown` を単一パイプライン化し、section/code 走査を 1 回に統合する
+- [ ] PR2 (P0): `deep-analyze` 用に lightweight callgraph summary API（`nodes` なし）を追加する
+- [ ] PR3 (P0): top-k 収集を API レベルで導入し、全件ソートをやめる（`limit` 連携）
+- [ ] PR4 (P1): opcode 集計を数値キー中心に変更し、文字列化を最終出力時に遅延する
+- [ ] PR5 (P1): roots/callees dedup を `Map/Set` ベースへ置換する（`contains` 依存を削減）
+- [ ] PR6 (Bug): `deep-analyze` の `%` 表示オーバーフローを修正する（`numerator * 10000` 回避）
+
 ## Architecture Guardrails（mwac / walyze）
 
 - [x] 役割を bundler (`mwac`) / minifier (`walyze`) として整理する

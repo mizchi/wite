@@ -363,6 +363,43 @@ pub struct CodeBlockSizeReport {
 }
 
 ///|
+pub struct CustomSectionBreakdown {
+  name : String
+  count : UInt
+  total_bytes : UInt
+  payload_bytes : UInt
+  content_bytes : UInt
+}
+
+///|
+pub struct OpcodeStat {
+  key : String
+  mnemonic : String
+  count : UInt
+  total_bytes : UInt
+}
+
+///|
+pub struct WasmBreakdownReport {
+  total_bytes : UInt
+  sections : Array[SectionSize]
+  custom_sections : Array[CustomSectionBreakdown]
+  imported_function_count : UInt
+  local_function_count : UInt
+  top_functions : Array[FunctionSize]
+  block_count : UInt
+  top_blocks : Array[CodeBlockSize]
+  instruction_count : UInt
+  instruction_bytes : UInt
+  opcode_partial : Bool
+  opcodes : Array[OpcodeStat]
+  callgraph_partial : Bool
+  has_indirect_calls : Bool
+  reachable_body_bytes : UInt
+  dead_body_bytes : UInt
+}
+
+///|
 pub struct CallGraphNode {
   function_index : UInt
   body_bytes : UInt
@@ -4588,7 +4625,7 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
         Some(0U) =>
           match spans[i + 2].opcode {
             0x71U
-             // i32.and
+            // i32.and
             | 0x49U => { // i32.lt_u
               append_i32_const_small(out, 0U)
               i += 3
@@ -6499,8 +6536,7 @@ fn collect_function_code_blocks(
         kind: prev.kind,
         start_offset: prev.start_offset,
         end_offset: span.end_.reinterpret_as_uint(),
-        instruction_count: (i - open.start_span_index + 1)
-          .reinterpret_as_uint(),
+        instruction_count: (i - open.start_span_index + 1).reinterpret_as_uint(),
         total_bytes: (span.end_ - open.start_offset).reinterpret_as_uint(),
       }
     }
@@ -6620,6 +6656,341 @@ pub fn analyze_code_block_sizes(
       total_body_bytes,
       total_instruction_bytes,
       blocks,
+    }
+  }
+}
+
+///|
+fn summarize_custom_sections_raise(
+  sections : Array[RawSection],
+  bytes : Bytes,
+) -> Array[CustomSectionBreakdown] raise WalyzeError {
+  let grouped : Map[String, CustomSectionBreakdown] = {}
+  for section in sections {
+    if section.section_id != 0U {
+      continue
+    }
+    let name = match section.custom_name {
+      Some(v) => v
+      None => "(anon)"
+    }
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload_bytes = payload.length().reinterpret_as_uint()
+    let prefix_end = parse_custom_section_name_prefix_end(payload)
+    let content_bytes = (payload.length() - prefix_end).reinterpret_as_uint()
+    let total_bytes = section_total_bytes(section)
+    match grouped.get(name) {
+      Some(prev) =>
+        grouped.set(name, {
+          name: prev.name,
+          count: prev.count + 1U,
+          total_bytes: prev.total_bytes + total_bytes,
+          payload_bytes: prev.payload_bytes + payload_bytes,
+          content_bytes: prev.content_bytes + content_bytes,
+        })
+      None =>
+        grouped.set(name, {
+          name,
+          count: 1U,
+          total_bytes,
+          payload_bytes,
+          content_bytes,
+        })
+    }
+  }
+  let out : Array[CustomSectionBreakdown] = []
+  grouped.each((_, value) => out.push(value))
+  out.sort_by((a, b) => if a.total_bytes > b.total_bytes {
+    -1
+  } else if a.total_bytes < b.total_bytes {
+    1
+  } else if a.count > b.count {
+    -1
+  } else if a.count < b.count {
+    1
+  } else {
+    a.name.compare(b.name)
+  })
+  out
+}
+
+///|
+fn to_hex_digit(v : Int) -> Char {
+  match v {
+    0 => '0'
+    1 => '1'
+    2 => '2'
+    3 => '3'
+    4 => '4'
+    5 => '5'
+    6 => '6'
+    7 => '7'
+    8 => '8'
+    9 => '9'
+    10 => 'a'
+    11 => 'b'
+    12 => 'c'
+    13 => 'd'
+    14 => 'e'
+    15 => 'f'
+    _ => '0'
+  }
+}
+
+///|
+fn format_opcode_hex(opcode : UInt) -> String {
+  let value = (opcode & 0xffU).reinterpret_as_int()
+  let hi = value / 16
+  let lo = value % 16
+  String::from_array(['0', 'x', to_hex_digit(hi), to_hex_digit(lo)])
+}
+
+///|
+fn parse_prefixed_opcode_subopcode(
+  instr_bytes : Bytes,
+  span : InstrSpan,
+) -> UInt? {
+  if span.opcode != 0xfcU && span.opcode != 0xfdU {
+    return None
+  }
+  if span.end_ <= span.start + 1 {
+    return None
+  }
+  let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+  let parser = Cursor::new(imm)
+  let result = try? parser.read_u32_leb128()
+  match result {
+    Ok(v) => Some(v)
+    Err(_) => None
+  }
+}
+
+///|
+fn opcode_stat_key(opcode : UInt, subopcode : UInt?) -> String {
+  let base = format_opcode_hex(opcode)
+  if opcode == 0xfcU || opcode == 0xfdU {
+    match subopcode {
+      Some(v) => base + "." + v.to_string()
+      None => base
+    }
+  } else {
+    base
+  }
+}
+
+///|
+fn opcode_mnemonic_or_key(
+  opcode : UInt,
+  subopcode : UInt?,
+  key : String,
+) -> String {
+  match opcode {
+    0x00U => "unreachable"
+    0x01U => "nop"
+    0x02U => "block"
+    0x03U => "loop"
+    0x04U => "if"
+    0x05U => "else"
+    0x0bU => "end"
+    0x0cU => "br"
+    0x0dU => "br_if"
+    0x0eU => "br_table"
+    0x0fU => "return"
+    0x10U => "call"
+    0x11U => "call_indirect"
+    0x1aU => "drop"
+    0x1bU => "select"
+    0x20U => "local.get"
+    0x21U => "local.set"
+    0x22U => "local.tee"
+    0x23U => "global.get"
+    0x24U => "global.set"
+    0x28U => "i32.load"
+    0x36U => "i32.store"
+    0x3fU => "memory.size"
+    0x40U => "memory.grow"
+    0x41U => "i32.const"
+    0x42U => "i64.const"
+    0x43U => "f32.const"
+    0x44U => "f64.const"
+    0x45U => "i32.eqz"
+    0x46U => "i32.eq"
+    0x47U => "i32.ne"
+    0x48U => "i32.lt_s"
+    0x49U => "i32.lt_u"
+    0x4aU => "i32.gt_s"
+    0x4bU => "i32.gt_u"
+    0x4cU => "i32.le_s"
+    0x4dU => "i32.le_u"
+    0x4eU => "i32.ge_s"
+    0x4fU => "i32.ge_u"
+    0x67U => "i32.clz"
+    0x68U => "i32.ctz"
+    0x69U => "i32.popcnt"
+    0x6aU => "i32.add"
+    0x6bU => "i32.sub"
+    0x6cU => "i32.mul"
+    0x71U => "i32.and"
+    0x72U => "i32.or"
+    0x73U => "i32.xor"
+    0x74U => "i32.shl"
+    0x75U => "i32.shr_s"
+    0x76U => "i32.shr_u"
+    0xd0U => "ref.null"
+    0xd1U => "ref.is_null"
+    0xd2U => "ref.func"
+    0xfcU =>
+      match subopcode {
+        Some(0U) => "i32.trunc_sat_f32_s"
+        Some(1U) => "i32.trunc_sat_f32_u"
+        Some(2U) => "i32.trunc_sat_f64_s"
+        Some(3U) => "i32.trunc_sat_f64_u"
+        Some(4U) => "i64.trunc_sat_f32_s"
+        Some(5U) => "i64.trunc_sat_f32_u"
+        Some(6U) => "i64.trunc_sat_f64_s"
+        Some(7U) => "i64.trunc_sat_f64_u"
+        Some(8U) => "memory.init"
+        Some(9U) => "data.drop"
+        Some(10U) => "memory.copy"
+        Some(11U) => "memory.fill"
+        Some(12U) => "table.init"
+        Some(13U) => "elem.drop"
+        Some(14U) => "table.copy"
+        Some(15U) => "table.grow"
+        Some(16U) => "table.size"
+        Some(17U) => "table.fill"
+        _ => key
+      }
+    0xfdU =>
+      match subopcode {
+        Some(0U) => "v128.load"
+        Some(11U) => "v128.store"
+        _ => key
+      }
+    _ => key
+  }
+}
+
+///|
+fn collect_opcode_stats_from_code_bodies(
+  code_bodies : Array[Bytes],
+) -> (Array[OpcodeStat], UInt, UInt, Bool) {
+  let grouped : Map[String, OpcodeStat] = {}
+  let mut instruction_count = 0U
+  let mut instruction_bytes = 0U
+  let mut partial = false
+  for body in code_bodies {
+    let prefix_result = try? parse_local_decl_prefix_end(body)
+    match prefix_result {
+      Ok(prefix_end) => {
+        let instr_bytes = body[prefix_end:body.length()].to_bytes()
+        instruction_bytes += instr_bytes.length().reinterpret_as_uint()
+        match parse_instruction_spans(instr_bytes) {
+          Some(spans) => {
+            instruction_count += spans.length().reinterpret_as_uint()
+            for span in spans {
+              let subopcode = parse_prefixed_opcode_subopcode(instr_bytes, span)
+              let key = opcode_stat_key(span.opcode, subopcode)
+              let mnemonic = opcode_mnemonic_or_key(span.opcode, subopcode, key)
+              let span_size = (span.end_ - span.start).reinterpret_as_uint()
+              match grouped.get(key) {
+                Some(prev) =>
+                  grouped.set(key, {
+                    key,
+                    mnemonic,
+                    count: prev.count + 1U,
+                    total_bytes: prev.total_bytes + span_size,
+                  })
+                None =>
+                  grouped.set(key, {
+                    key,
+                    mnemonic,
+                    count: 1U,
+                    total_bytes: span_size,
+                  })
+              }
+            }
+          }
+          None => partial = true
+        }
+      }
+      Err(_) => partial = true
+    }
+  }
+  let out : Array[OpcodeStat] = []
+  grouped.each((_, value) => out.push(value))
+  out.sort_by((a, b) => if a.total_bytes > b.total_bytes {
+    -1
+  } else if a.total_bytes < b.total_bytes {
+    1
+  } else if a.count > b.count {
+    -1
+  } else if a.count < b.count {
+    1
+  } else {
+    a.key.compare(b.key)
+  })
+  (out, instruction_count, instruction_bytes, partial)
+}
+
+///|
+pub fn analyze_wasm_breakdown(
+  bytes : Bytes,
+) -> Result[WasmBreakdownReport, WalyzeError] {
+  try? {
+    let sections = parse_core_sections_raise(bytes)
+    let mut local_function_count = 0U
+    let mut code_bodies : Array[Bytes] = []
+    for section in sections {
+      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      match section.section_id {
+        3U => local_function_count = parse_vec_count(payload)
+        10U => code_bodies = parse_code_bodies(payload)
+        _ => ()
+      }
+    }
+    if code_bodies.length().reinterpret_as_uint() != local_function_count {
+      raise WalyzeError::InvalidFormat(
+        "function/code section count mismatch: function=" +
+        local_function_count.to_string() +
+        " code=" +
+        code_bodies.length().to_string(),
+      )
+    }
+    let section_sizes = summarize_sections(sections, false)
+    let custom_sections = summarize_custom_sections_raise(sections, bytes)
+    let top_functions = match analyze_function_sizes(bytes) {
+      Ok(v) => v
+      Err(e) => raise e
+    }
+    let block_report = match analyze_code_block_sizes(bytes) {
+      Ok(v) => v
+      Err(e) => raise e
+    }
+    let callgraph = match analyze_call_graph(bytes) {
+      Ok(v) => v
+      Err(e) => raise e
+    }
+    let (opcodes, instruction_count, instruction_bytes, opcode_partial) = collect_opcode_stats_from_code_bodies(
+      code_bodies,
+    )
+    {
+      total_bytes: bytes.length().reinterpret_as_uint(),
+      sections: section_sizes,
+      custom_sections,
+      imported_function_count: callgraph.imported_function_count,
+      local_function_count: callgraph.local_function_count,
+      top_functions,
+      block_count: block_report.block_count,
+      top_blocks: block_report.blocks,
+      instruction_count,
+      instruction_bytes,
+      opcode_partial: opcode_partial || block_report.partial,
+      opcodes,
+      callgraph_partial: callgraph.partial,
+      has_indirect_calls: callgraph.has_indirect_calls,
+      reachable_body_bytes: callgraph.reachable_body_bytes,
+      dead_body_bytes: callgraph.dead_body_bytes,
     }
   }
 }
@@ -7124,13 +7495,15 @@ fn collect_call_forwarding_alias_map(
       continue
     }
     let param_count = function_param_count_by_index[old_pos]
-    match parse_forward_call_target_with_param_count(code_bodies[i], param_count) {
+    match
+      parse_forward_call_target_with_param_count(code_bodies[i], param_count) {
       Some(target) =>
         if target != old_index {
           let target_pos = UInt::reinterpret_as_int(target)
           if target_pos >= 0 &&
             target_pos < function_type_by_index.length() &&
-            function_type_by_index[old_pos] == function_type_by_index[target_pos] {
+            function_type_by_index[old_pos] ==
+            function_type_by_index[target_pos] {
             alias_candidate.set(old_index, target)
           }
         }
@@ -7268,7 +7641,9 @@ fn apply_call_forwarding_propagation_raise(
     Some(v) => v
     None => return { bytes, rewritten_call_count: 0U }
   }
-  let local_function_type_indices = parse_function_type_indices(function_payload)
+  let local_function_type_indices = parse_function_type_indices(
+    function_payload,
+  )
   let code_bodies = parse_code_bodies(code_payload)
   if local_function_type_indices.length() != code_bodies.length() {
     raise WalyzeError::InvalidFormat(
@@ -7318,10 +7693,7 @@ fn apply_call_forwarding_propagation_raise(
     )
   }
   let alias_map = collect_call_forwarding_alias_map(
-    code_bodies,
-    imported_function_count,
-    function_type_by_index,
-    function_param_count_by_index,
+    code_bodies, imported_function_count, function_type_by_index, function_param_count_by_index,
   )
   let mut has_alias = false
   alias_map.each((_, _target) => has_alias = true)

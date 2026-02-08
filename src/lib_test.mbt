@@ -1741,6 +1741,29 @@ fn find_section_size(sections : Array[SectionSize], key : String) -> UInt? {
 }
 
 ///|
+fn find_custom_section_breakdown(
+  sections : Array[CustomSectionBreakdown],
+  name : String,
+) -> CustomSectionBreakdown? {
+  for section in sections {
+    if section.name == name {
+      return Some(section)
+    }
+  }
+  None
+}
+
+///|
+fn find_opcode_stat(stats : Array[OpcodeStat], key : String) -> OpcodeStat? {
+  for stat in stats {
+    if stat.key == key {
+      return Some(stat)
+    }
+  }
+  None
+}
+
+///|
 test "analyze section sizes for core module" {
   let bytes = sample_module_bytes()
   guard analyze_section_sizes(bytes) is Ok(sections) else {
@@ -1975,6 +1998,60 @@ test "analyze code block sizes for nested block module" {
   assert_eq(report.blocks[2].depth, 2U)
   assert_eq(report.blocks[2].total_bytes, 7U)
   assert_eq(report.blocks[2].instruction_count, 4U)
+}
+
+///|
+test "analyze wasm breakdown reports deep section and opcode details" {
+  let bytes = sample_module_with_named_functions_bytes()
+  guard analyze_wasm_breakdown(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.total_bytes, bytes.length().reinterpret_as_uint())
+  assert_eq(report.imported_function_count, 1U)
+  assert_eq(report.local_function_count, 2U)
+  assert_eq(report.instruction_count, 4U)
+  assert_eq(report.instruction_bytes, 5U)
+  assert_true(not(report.opcode_partial))
+  assert_true(not(report.callgraph_partial))
+  assert_true(not(report.has_indirect_calls))
+  assert_eq(report.reachable_body_bytes, 7U)
+  assert_eq(report.dead_body_bytes, 0U)
+  assert_eq(report.top_functions.length(), 2)
+  assert_eq(report.top_blocks.length(), 2)
+  guard find_custom_section_breakdown(report.custom_sections, "name")
+    is Some(custom_name) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(custom_name.count, 1U)
+  assert_true(custom_name.total_bytes > 0U)
+  guard find_opcode_stat(report.opcodes, "0x41") is Some(const_opcode) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(const_opcode.count, 1U)
+  assert_eq(const_opcode.total_bytes, 2U)
+  guard find_opcode_stat(report.opcodes, "0x0b") is Some(end_opcode) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(end_opcode.count, 2U)
+}
+
+///|
+test "analyze wasm breakdown splits prefixed opcodes" {
+  let bytes = sample_module_with_fc_opcode_bytes()
+  guard analyze_wasm_breakdown(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  guard find_opcode_stat(report.opcodes, "0xfc.0") is Some(fc_stat) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(fc_stat.count, 1U)
+  assert_true(fc_stat.total_bytes >= 2U)
 }
 
 ///|
@@ -2533,7 +2610,6 @@ test "kpi rume gain fixture has positive post-dce to post-rume delta" {
     enable_merge_similar_functions=true,
     enable_remove_unused_module_elements=true,
   )
-
   guard optimize_for_size(bytes, config=pre_config) is Ok(pre) else {
     assert_true(false)
     return
@@ -2546,7 +2622,6 @@ test "kpi rume gain fixture has positive post-dce to post-rume delta" {
     assert_true(false)
     return
   }
-
   assert_true(post_dce.after_size <= pre.after_size)
   assert_true(post_rume.after_size < post_dce.after_size)
   assert_true(post_rume.removed_sections.any(s => s.contains("rume:")))
@@ -2602,7 +2677,6 @@ test "kpi directize gain fixture records directize call rewrite" {
     enable_merge_similar_functions=true,
     enable_remove_unused_module_elements=true,
   )
-
   guard optimize_for_size(bytes, config=pre_config) is Ok(pre) else {
     assert_true(false)
     return
@@ -2615,7 +2689,6 @@ test "kpi directize gain fixture records directize call rewrite" {
     assert_true(false)
     return
   }
-
   assert_true(post_dce.after_size < pre.after_size)
   assert_true(
     post_dce.removed_sections.any(s => s.contains("directize:calls:1")),
@@ -3086,9 +3159,11 @@ test "optimize cfp phase2 rewrites param-forwarding thunk and enables dce" {
     return
   }
   assert_eq(after_profile.function_count, 2U)
-  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
-    -7, -1, 0, 1, 42, 123456,
-  ]))
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
 }
 
 ///|
@@ -3673,10 +3748,14 @@ test "optimize precompute removes i32.eqz+i32.eqz before br_if" {
   assert_eq(after.code_body_bytes, 9U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x0d, 0x00]))
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x45, 0x45, 0x0d, 0x00])),
+    not(
+      bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x45, 0x45, 0x0d, 0x00]),
+    ),
   )
   assert_true(
-    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [-7, -1, 0, 1, 42]),
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42,
+    ]),
   )
 }
 

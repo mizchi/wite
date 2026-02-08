@@ -17,6 +17,7 @@
 It provides:
 
 - core wasm section-size analysis (`twiggy`-style breakdown by section)
+- core wasm deep breakdown analysis (sections/custom-sections/functions/blocks/opcodes/callgraph in one report)
 - core wasm top-function size analysis (`twiggy top`-style by code body size)
 - core wasm code-block size analysis (`function/block/loop/if` bytes + instruction counts)
 - core wasm call graph + dead-body analysis (export/start roots)
@@ -49,6 +50,7 @@ It provides:
 
 ```bash
 just run -- analyze path/to/module.wasm
+just run -- deep-analyze path/to/module.wasm 20
 just run -- profile path/to/module.wasm
 just run -- top-functions path/to/module.wasm 20
 just run -- block-sizes path/to/module.wasm 20
@@ -80,6 +82,7 @@ just run -- optimize out.component.wasm out.component.opt.wasm -Oz --converge
 Main APIs are in `src/lib.mbt`:
 
 - `analyze_section_sizes(bytes)`
+- `analyze_wasm_breakdown(bytes)`
 - `analyze_function_sizes(bytes)`
 - `analyze_code_block_sizes(bytes)`
 - `analyze_call_graph(bytes)`

@@ -28,6 +28,8 @@ pub fn analyze_keep_reasons(Bytes, config? : OptimizeConfig) -> Result[KeepReaso
 
 pub fn analyze_section_sizes(Bytes) -> Result[Array[SectionSize], WalyzeError]
 
+pub fn analyze_wasm_breakdown(Bytes) -> Result[WasmBreakdownReport, WalyzeError]
+
 pub fn error_to_string(WalyzeError) -> String
 
 pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> OptimizeConfig
@@ -151,6 +153,14 @@ pub struct ContractReport {
   missing_component_exports : Array[String]
 }
 
+pub struct CustomSectionBreakdown {
+  name : String
+  count : UInt
+  total_bytes : UInt
+  payload_bytes : UInt
+  content_bytes : UInt
+}
+
 pub struct DceReport {
   roots : Array[UInt]
   partial : Bool
@@ -186,6 +196,13 @@ pub struct ModuleProfile {
   code_body_count : UInt
   code_body_bytes : UInt
   sections : Array[SectionSize]
+}
+
+pub struct OpcodeStat {
+  key : String
+  mnemonic : String
+  count : UInt
+  total_bytes : UInt
 }
 
 pub struct OptimizeConfig {
@@ -246,6 +263,25 @@ pub struct SectionSize {
   key : String
   section_id : UInt
   total_bytes : UInt
+}
+
+pub struct WasmBreakdownReport {
+  total_bytes : UInt
+  sections : Array[SectionSize]
+  custom_sections : Array[CustomSectionBreakdown]
+  imported_function_count : UInt
+  local_function_count : UInt
+  top_functions : Array[FunctionSize]
+  block_count : UInt
+  top_blocks : Array[CodeBlockSize]
+  instruction_count : UInt
+  instruction_bytes : UInt
+  opcode_partial : Bool
+  opcodes : Array[OpcodeStat]
+  callgraph_partial : Bool
+  has_indirect_calls : Bool
+  reachable_body_bytes : UInt
+  dead_body_bytes : UInt
 }
 
 // Type aliases

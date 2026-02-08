@@ -2,6 +2,7 @@
 fn print_usage() -> Unit {
   println("walyze commands:")
   println("  analyze <core.wasm>")
+  println("  deep-analyze <core.wasm> [limit]")
   println("  profile <core.wasm>")
   println("  top-functions <core.wasm> [limit]")
   println("  block-sizes <core.wasm> [limit]")
@@ -45,6 +46,111 @@ fn print_section_sizes(sections : Array[@walyze.SectionSize]) -> Unit {
 }
 
 ///|
+fn pad_two_digits(value : UInt) -> String {
+  if value < 10U {
+    "0" + value.to_string()
+  } else {
+    value.to_string()
+  }
+}
+
+///|
+fn format_percent(numerator : UInt, denominator : UInt) -> String {
+  if denominator == 0U {
+    return "0.00%"
+  }
+  let scaled = numerator * 10000U / denominator
+  let whole = scaled / 100U
+  let frac = scaled % 100U
+  whole.to_string() + "." + pad_two_digits(frac) + "%"
+}
+
+///|
+fn print_section_sizes_with_share(
+  sections : Array[@walyze.SectionSize],
+  total_bytes : UInt,
+) -> Unit {
+  for section in sections {
+    println(
+      "    " +
+      section.key +
+      ": " +
+      section.total_bytes.to_string() +
+      " bytes (" +
+      format_percent(section.total_bytes, total_bytes) +
+      ")",
+    )
+  }
+}
+
+///|
+fn print_custom_section_breakdown(
+  sections : Array[@walyze.CustomSectionBreakdown],
+  total_bytes : UInt,
+  limit : UInt,
+) -> Unit {
+  if sections.length() == 0 {
+    println("  custom sections: (none)")
+    return
+  }
+  println("  custom sections:")
+  let mut printed = 0U
+  for section in sections {
+    if printed >= limit {
+      break
+    }
+    println(
+      "    " +
+      section.name +
+      " count=" +
+      section.count.to_string() +
+      " total=" +
+      section.total_bytes.to_string() +
+      " bytes (" +
+      format_percent(section.total_bytes, total_bytes) +
+      ") payload=" +
+      section.payload_bytes.to_string() +
+      " content=" +
+      section.content_bytes.to_string(),
+    )
+    printed += 1U
+  }
+}
+
+///|
+fn print_opcode_stats(
+  stats : Array[@walyze.OpcodeStat],
+  total_instruction_bytes : UInt,
+  limit : UInt,
+) -> Unit {
+  if stats.length() == 0 {
+    println("  opcode mix: (none)")
+    return
+  }
+  println("  opcode mix:")
+  let mut printed = 0U
+  for stat in stats {
+    if printed >= limit {
+      break
+    }
+    println(
+      "    " +
+      stat.mnemonic +
+      " [" +
+      stat.key +
+      "] count=" +
+      stat.count.to_string() +
+      " bytes=" +
+      stat.total_bytes.to_string() +
+      " (" +
+      format_percent(stat.total_bytes, total_instruction_bytes) +
+      ")",
+    )
+    printed += 1U
+  }
+}
+
+///|
 fn run_analyze(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
   match @walyze.analyze_section_sizes(bytes) {
@@ -54,6 +160,60 @@ fn run_analyze(path : String) -> Unit {
     }
     Err(e) => {
       println("analyze failed: " + @walyze.error_to_string(e))
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
+fn run_deep_analyze(path : String, limit : UInt) -> Unit {
+  let bytes = read_bytes_or_exit(path)
+  match @walyze.analyze_wasm_breakdown(bytes) {
+    Ok(report) => {
+      println("wasm deep analysis:")
+      println("  total_bytes: " + report.total_bytes.to_string())
+      println(
+        "  functions: imported=" +
+        report.imported_function_count.to_string() +
+        " local=" +
+        report.local_function_count.to_string(),
+      )
+      println("  instruction_count: " + report.instruction_count.to_string())
+      println("  instruction_bytes: " + report.instruction_bytes.to_string())
+      println("  opcode_partial: " + report.opcode_partial.to_string())
+      println("  callgraph_partial: " + report.callgraph_partial.to_string())
+      println("  has_indirect_calls: " + report.has_indirect_calls.to_string())
+      let total_local_body_bytes = report.reachable_body_bytes +
+        report.dead_body_bytes
+      println(
+        "  reachable_body_bytes: " +
+        report.reachable_body_bytes.to_string() +
+        " (" +
+        format_percent(report.reachable_body_bytes, total_local_body_bytes) +
+        ")",
+      )
+      println(
+        "  dead_body_bytes: " +
+        report.dead_body_bytes.to_string() +
+        " (" +
+        format_percent(report.dead_body_bytes, total_local_body_bytes) +
+        ")",
+      )
+      println("  sections:")
+      print_section_sizes_with_share(report.sections, report.total_bytes)
+      print_custom_section_breakdown(
+        report.custom_sections,
+        report.total_bytes,
+        limit,
+      )
+      println("  top functions:")
+      print_function_sizes(report.top_functions, limit)
+      println("  top blocks:")
+      print_code_block_sizes(report.top_blocks, limit)
+      print_opcode_stats(report.opcodes, report.instruction_bytes, limit)
+    }
+    Err(e) => {
+      println("deep-analyze failed: " + @walyze.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -923,6 +1083,18 @@ fn main {
         @sys.exit(1)
       }
       run_analyze(args[2])
+    }
+    "deep-analyze" => {
+      if args.length() < 3 {
+        print_usage()
+        @sys.exit(1)
+      }
+      let limit = if args.length() >= 4 {
+        parse_uint_or_exit(args[3], "limit")
+      } else {
+        20U
+      }
+      run_deep_analyze(args[2], limit)
     }
     "profile" => {
       if args.length() < 3 {
