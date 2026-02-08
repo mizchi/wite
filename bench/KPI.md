@@ -111,6 +111,19 @@
 - 目的:
   - 「最適化できない理由」を定量化し、次の実装優先順位に直結させる
 
+### zlib gap 詳細レポート（第一KPIアトリビューション）
+
+- 指標: `zlib_gap_detail`
+- 定義:
+  - 対象: `bench/corpus/core/binaryen/zlib.wasm`
+  - 比較: `before` / `walyze -O1` / `wasm-opt -Oz`
+  - 出力:
+    - module/code_body/block_instruction の要約比較
+    - section 差分（before->walyze / before->wasm-opt）
+    - top-functions / block-sizes のスナップショット
+- 目的:
+  - core corpus gap の支配要因（現状ほぼ zlib）を、関数/ブロック/section 単位で帰属する
+
 ## 第二KPI: 実行速度
 
 - 指標: `moon_bench_mean`
@@ -136,6 +149,7 @@ just kpi
 - `bench/kpi/pass_waterfall.tsv`: pass waterfall の段階別差分
 - `bench/kpi/directize_chain.tsv`: directize→DCE→RUME 連鎖の段階差分
 - `bench/kpi/no_change_reasons.tsv`: no-change 理由ダッシュボードの生データ
+- `bench/kpi/zlib_gap.md`: zlib 専用の gap 詳細レポート
 - `bench/kpi/component_dce.tsv`: component-model DCE サイズKPIの明細
 - `bench/kpi/runtime.tsv`: 速度KPIの明細
 - `bench/kpi/bench.raw.log`: `moon bench` の生ログ

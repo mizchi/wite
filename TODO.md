@@ -17,6 +17,12 @@
 - [ ] N8 (P3): `remove-unused-module-elements` と index rewrite の境界テストを拡充する
 - [ ] N9 (Guardrails): `mwac` 連携点の bytes I/O 契約（入出力）を文書化する
 
+## Analysis Next (2026-02-08)
+
+- [x] A1: `zlib.wasm` 専用の gap 詳細レポートを追加し、`before/walyze/wasm-opt` の差分を section/function/block で見える化する
+- [ ] A2: no-change 理由を「実装対象 / 非対象」に分類し、優先度と工数見積もりを TODO に接続する
+- [ ] A3: pass waterfall の寄与をもとに、`code` / `dce` の追加移植候補を Top3 に絞る
+
 ## Architecture Guardrails（mwac / walyze）
 
 - [x] 役割を bundler (`mwac`) / minifier (`walyze`) として整理する
@@ -34,6 +40,7 @@
 - [x] 小型 fixture（`br_to_exit`, `elided-br`, `complexBinaryNames`）での pass 適用漏れを潰す
 - [x] `gc_target_feature.wasm` の `wasm-opt` 比較注記を KPI に反映する
 - [x] `gc_target_feature.wasm` は主要 gap 判定から除外し、参考値（`reference_*`）として併記する方針に固定する
+- [x] `zlib.wasm` の gap を専用レポート（`bench/kpi/zlib_gap.md`）で継続観測する
 
 ## P1: Closed-World 基盤
 
