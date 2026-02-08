@@ -5164,6 +5164,81 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
         _ => ()
       }
     }
+    if i + 2 < spans.length() &&
+      spans[i].opcode == 0x41U &&
+      is_optimize_instructions_i32_get_opcode(spans[i + 1].opcode) {
+      let rhs = instr_bytes[spans[i + 1].start:spans[i + 1].end_]
+      match
+        decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
+        Some(0U) =>
+          match spans[i + 2].opcode {
+            0x71U
+            // i32.and
+            | 0x6cU
+            // i32.mul
+            | 0x74U
+            // i32.shl
+            | 0x75U
+            // i32.shr_s
+            | 0x76U
+            // i32.shr_u
+            | 0x77U
+            // i32.rotl
+            | 0x78U => { // i32.rotr
+              append_i32_const_small(out, 0U)
+              i += 3
+              continue
+            }
+            0x6aU | 0x72U | 0x73U => {
+              // 0 + x / 0 | x / 0 ^ x => x
+              out.append(rhs.to_array())
+              i += 3
+              continue
+            }
+            0x46U => { // 0 == x => x.eqz
+              out.append(rhs.to_array())
+              out.push(0x45U.to_byte())
+              i += 3
+              continue
+            }
+            0x47U => { // 0 != x => x.eqz; i32.eqz
+              out.append(rhs.to_array())
+              out.push(0x45U.to_byte())
+              out.push(0x45U.to_byte())
+              i += 3
+              continue
+            }
+            _ => ()
+          }
+        Some(1U) =>
+          if spans[i + 2].opcode == 0x6cU {
+            // 1 * x => x
+            out.append(rhs.to_array())
+            i += 3
+            continue
+          }
+        _ => ()
+      }
+      match decode_i32_const_small_signed_from_span(instr_bytes, spans[i]) {
+        Some(-1) =>
+          match spans[i + 2].opcode {
+            0x71U => {
+              // -1 & x => x
+              out.append(rhs.to_array())
+              i += 3
+              continue
+            }
+            0x72U => {
+              // -1 | x => -1
+              out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+              i += 3
+              continue
+            }
+            _ => ()
+          }
+        _ => ()
+      }
+    }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
     i += 1
   }

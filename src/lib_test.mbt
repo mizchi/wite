@@ -1244,6 +1244,35 @@ fn sample_module_with_optimize_instructions_bitwise_cmp_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_optimize_instructions_const_first_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // i32.const 0; local.get 0; i32.eq; drop
+  // i32.const 0; local.get 0; i32.ne; drop
+  // i32.const 0; local.get 0; i32.or; drop
+  // i32.const -1; local.get 0; i32.and
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x19, 0x00, 0x41, 0x00, 0x20, 0x00, 0x46, 0x1a, 0x41, 0x00, 0x20, 0x00,
+      0x47, 0x1a, 0x41, 0x00, 0x20, 0x00, 0x72, 0x1a, 0x41, 0x7f, 0x20, 0x00, 0x71,
+      0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_local_cse_get_set_get_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -4288,6 +4317,47 @@ test "optimize-instructions simplifies bitwise and cmp with i32.const 0" {
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x4f])))
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x71])))
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x46])))
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
+test "optimize-instructions simplifies const-first bitwise and cmp patterns" {
+  let bytes = sample_module_with_optimize_instructions_const_first_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 25U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(after.code_body_bytes < before.code_body_bytes)
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x46])))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x47])))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x72])))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x7f, 0x20, 0x00, 0x71])))
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
       -7, -1, 0, 1, 42, 123456,
