@@ -18,7 +18,7 @@ fn print_usage() -> Unit {
   )
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations] [--scenario=<export>[:arg1,arg2,...]]")
-  println("  hot-size <core.wasm> [iterations] [limit]")
+  println("  hot-size <core.wasm> [iterations] [limit] [--scenario=<export>[:arg1,arg2,...]]")
   println(
     "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
   )
@@ -987,13 +987,21 @@ fn print_hotness_unresolved_reason_counts(
 }
 
 ///|
-fn run_hot_size(path : String, iterations : UInt, limit : UInt) -> Unit {
+fn run_hot_size(
+  path : String,
+  iterations : UInt,
+  limit : UInt,
+  scenarios : Array[@walyze.RuntimeProfileScenario],
+) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_hotness_size_matrix(bytes, iterations~) {
+  match @walyze.analyze_hotness_size_matrix(bytes, iterations~, scenarios~) {
     Ok(report) => {
       println("hot-size matrix:")
       println("  instantiate_ns: " + report.instantiate_ns.to_string())
       println("  iterations: " + report.iterations.to_string())
+      if scenarios.length() > 0 {
+        println("  scenarios: " + scenarios.length().to_string())
+      }
       println(
         "  thresholds: hot_ns>=" +
         report.hot_threshold_ns.to_string() +
@@ -1951,17 +1959,30 @@ fn main {
         print_usage()
         @sys.exit(1)
       }
-      let iterations = if args.length() >= 4 {
-        parse_uint_or_exit(args[3], "iterations")
-      } else {
-        50U
+      let mut iterations = 50U
+      let mut limit = 20U
+      let mut has_iterations = false
+      let mut has_limit = false
+      for i in 3..<args.length() {
+        let arg = args[i]
+        if arg.has_prefix("--scenario=") {
+          ()
+        } else if arg.has_prefix("--") {
+          println("unknown hot-size option: " + arg)
+          @sys.exit(1)
+        } else if not(has_iterations) {
+          iterations = parse_uint_or_exit(arg, "iterations")
+          has_iterations = true
+        } else if not(has_limit) {
+          limit = parse_uint_or_exit(arg, "limit")
+          has_limit = true
+        } else {
+          println("unexpected hot-size argument: " + arg)
+          @sys.exit(1)
+        }
       }
-      let limit = if args.length() >= 5 {
-        parse_uint_or_exit(args[4], "limit")
-      } else {
-        20U
-      }
-      run_hot_size(args[2], iterations, limit)
+      let scenarios = parse_runtime_profile_scenarios(args, 3)
+      run_hot_size(args[2], iterations, limit, scenarios)
     }
     "optimize" => run_optimize(args)
     "component-profile" => {

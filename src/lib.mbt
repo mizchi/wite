@@ -14217,6 +14217,20 @@ fn serialize_runtime_profile_scenarios(
 }
 
 ///|
+fn runtime_profile_scenario_display_name(
+  scenario : RuntimeProfileScenario,
+) -> String {
+  if scenario.args.length() == 0 {
+    return scenario.export_name
+  }
+  let encoded_args : Array[String] = []
+  for arg in scenario.args {
+    encoded_args.push(arg.to_string())
+  }
+  scenario.export_name + "(" + encoded_args.join("_") + ")"
+}
+
+///|
 extern "js" fn js_profile_runtime_exports(
   bytes : Bytes,
   iterations : Int,
@@ -14619,6 +14633,20 @@ fn map_runtime_unresolved_by_export_name(
 }
 
 ///|
+fn map_runtime_scenario_display_to_export_name(
+  scenarios : Array[RuntimeProfileScenario],
+) -> Map[String, String] {
+  let out : Map[String, String] = {}
+  for scenario in scenarios {
+    let display_name = runtime_profile_scenario_display_name(scenario)
+    if out.get(display_name) is None {
+      out.set(display_name, scenario.export_name)
+    }
+  }
+  out
+}
+
+///|
 fn has_hotness_size_entry(
   entries : Array[HotnessSizeEntry],
   export_name : String,
@@ -14758,8 +14786,9 @@ fn collect_hotness_unresolved_reason_counts(
 pub fn analyze_hotness_size_matrix(
   bytes : Bytes,
   iterations? : UInt = 50U,
+  scenarios? : Array[RuntimeProfileScenario] = [],
 ) -> Result[HotnessSizeMatrixReport, String] {
-  let runtime = match profile_runtime_zero_arg_exports(bytes, iterations~) {
+  let runtime = match profile_runtime_exports(bytes, iterations~, scenarios~) {
     Ok(v) => v
     Err(msg) => return Err(msg)
   }
@@ -14777,11 +14806,18 @@ pub fn analyze_hotness_size_matrix(
   let runtime_unresolved_by_name = map_runtime_unresolved_by_export_name(
     runtime.unresolved_exports,
   )
+  let scenario_display_to_export_name = map_runtime_scenario_display_to_export_name(
+    scenarios,
+  )
   let resolved_total_ns : Array[UInt64] = []
   let resolved_body_bytes : Array[UInt] = []
   let unresolved_exports : Array[String] = []
   for fn_profile in runtime.functions {
-    match export_to_function_index.get(fn_profile.name) {
+    let lookup_name = match scenario_display_to_export_name.get(fn_profile.name) {
+      Some(v) => v
+      None => fn_profile.name
+    }
+    match export_to_function_index.get(lookup_name) {
       Some(function_index) =>
         match function_size_by_index.get(function_index) {
           Some(function_size) => {
@@ -14797,7 +14833,11 @@ pub fn analyze_hotness_size_matrix(
   let large_threshold_bytes = average_u32(resolved_body_bytes)
   let entries : Array[HotnessSizeEntry] = []
   for fn_profile in runtime.functions {
-    match export_to_function_index.get(fn_profile.name) {
+    let lookup_name = match scenario_display_to_export_name.get(fn_profile.name) {
+      Some(v) => v
+      None => fn_profile.name
+    }
+    match export_to_function_index.get(lookup_name) {
       Some(function_index) =>
         match function_size_by_index.get(function_index) {
           Some(function_size) =>

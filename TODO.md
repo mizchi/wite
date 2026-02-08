@@ -48,6 +48,7 @@
 - [x] Analyze: `analyze-opt` に pass 単位 function 差分（gain/regression, TopK）を追加
 - [x] Analyze: `runtime-profile` / `hot-size` に unresolved 理由分類（import-missing / signature-mismatch / runtime-exception）を追加
 - [x] Analyze: `runtime-profile` に scenario 入力を追加（`--scenario=<export>[:arg1,arg2,...]`）し、引数付き export の複数ケース計測を可能にした
+- [x] Analyze: `hot-size` に scenario 入力を連携（`--scenario=<export>[:arg1,arg2,...]`）し、引数付き export の size 分類を可能にした
 - [x] Analyze: `function-gap` API/CLI と `bench/kpi/zlib_function_gap.tsv` を追加（walyze vs wasm-opt function TopK 差分）
 - [x] KPI: `migration_top3` のスコアに function-gap 指標（`fn_gap_top` / `fn_gap_positive`）を統合
 - [x] Perf: `analyze_call_graph_summary` を full callgraph 構築から分離し、summary 専用経路を追加（巨大 wasm の `analyze` 実行時間/メモリを削減）

@@ -6273,6 +6273,77 @@ test "analyze hotness-size matrix classifies unresolved reasons" {
 }
 
 ///|
+test "analyze hotness-size matrix supports argument scenarios" {
+  let bytes = sample_module_with_runtime_scenarios_bytes()
+  let scenarios : Array[RuntimeProfileScenario] = [
+    make_runtime_profile_scenario("add1", args=[0]),
+    make_runtime_profile_scenario("add1", args=[41]),
+    make_runtime_profile_scenario("run"),
+  ]
+  guard analyze_hotness_size_matrix(bytes, iterations=4U, scenarios~) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.unresolved_exports.length(), 0)
+  guard find_hotness_size_entry(report.entries, "add1(0)") is Some(add1_0) else {
+    assert_true(false)
+    return
+  }
+  guard find_hotness_size_entry(report.entries, "add1(41)") is Some(add1_41) else {
+    assert_true(false)
+    return
+  }
+  guard find_hotness_size_entry(report.entries, "run") is Some(run_entry) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(add1_0.function_index, Some(0U))
+  assert_eq(add1_41.function_index, Some(0U))
+  assert_eq(run_entry.function_index, Some(1U))
+  assert_true(add1_0.body_bytes > run_entry.body_bytes)
+  assert_true(add1_41.body_bytes > run_entry.body_bytes)
+}
+
+///|
+test "analyze hotness-size matrix reports scenario unresolved reasons" {
+  let bytes = sample_module_with_runtime_scenarios_bytes()
+  let scenarios : Array[RuntimeProfileScenario] = [
+    make_runtime_profile_scenario("add1"),
+    make_runtime_profile_scenario("missing", args=[1]),
+  ]
+  guard analyze_hotness_size_matrix(bytes, iterations=2U, scenarios~) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    report.entries.any(entry =>
+      entry.export_name == "add1" && entry.unresolved_reason == Some("signature-mismatch")),
+  )
+  assert_true(
+    report.entries.any(entry =>
+      entry.export_name == "missing(1)" && entry.unresolved_reason == Some("export-not-found")),
+  )
+  guard find_hotness_unresolved_reason(
+      report.unresolved_reason_counts,
+      "signature-mismatch",
+    )
+    is Some(sig_reason) else {
+    assert_true(false)
+    return
+  }
+  guard find_hotness_unresolved_reason(
+      report.unresolved_reason_counts,
+      "export-not-found",
+    )
+    is Some(missing_reason) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(sig_reason.count, 1U)
+  assert_eq(missing_reason.count, 1U)
+}
+
+///|
 test "runtime profile supports zero-arg exports with function imports" {
   let bytes = sample_module_with_runtime_imported_zero_arg_export_bytes()
   guard profile_runtime_zero_arg_exports(bytes, iterations=5U) is Ok(profile) else {
