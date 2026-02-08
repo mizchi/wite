@@ -667,6 +667,45 @@ fn sample_module_with_hot_size_runtime_gap_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_runtime_scenarios_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   type#0: (i32) -> i32
+  //   type#1: () -> ()
+  append_section(
+    out,
+    1U,
+    bytes_of([0x02, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x00, 0x00]),
+  )
+  // function section: local idx0 uses type#0, local idx1 uses type#1
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x01]))
+  // export section:
+  //   idx0 as "add1"
+  //   idx1 as "run"
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x02, 0x04, 0x61, 0x64, 0x64, 0x31, 0x00, 0x00, 0x03, 0x72, 0x75, 0x6e,
+      0x00, 0x01,
+    ]),
+  )
+  // code section:
+  //   idx0 body: local.get 0; i32.const 1; i32.add; end
+  //   idx1 body: i32.const 0; drop; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x07, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6a, 0x0b, 0x05, 0x00, 0x41,
+      0x00, 0x1a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_hot_size_unresolved_reasons_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -6099,6 +6138,47 @@ test "runtime profiler profiles zero-arg exports" {
   assert_true(profile.instantiate_ns > 0UL)
   assert_true(profile.functions.length() > 0)
   assert_true(profile.functions.any(f => f.calls == 5U))
+}
+
+///|
+test "runtime profiler supports argument scenarios with multiple cases" {
+  let bytes = sample_module_with_runtime_scenarios_bytes()
+  let scenarios : Array[RuntimeProfileScenario] = [
+    make_runtime_profile_scenario("add1", args=[0]),
+    make_runtime_profile_scenario("add1", args=[41]),
+    make_runtime_profile_scenario("run"),
+  ]
+  guard profile_runtime_exports(bytes, iterations=4U, scenarios~) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.iterations, 4U)
+  assert_true(profile.functions.length() >= 3)
+  assert_true(profile.functions.any(f => f.name == "add1(0)" && f.calls == 4U))
+  assert_true(profile.functions.any(f => f.name == "add1(41)" && f.calls == 4U))
+  assert_true(profile.functions.any(f => f.name == "run" && f.calls == 4U))
+  assert_eq(profile.unresolved_exports.length(), 0)
+}
+
+///|
+test "runtime profiler reports signature mismatch in argument scenarios" {
+  let bytes = sample_module_with_runtime_scenarios_bytes()
+  let scenarios : Array[RuntimeProfileScenario] = [
+    make_runtime_profile_scenario("add1"),
+    make_runtime_profile_scenario("missing", args=[1]),
+  ]
+  guard profile_runtime_exports(bytes, iterations=2U, scenarios~) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    profile.unresolved_exports.any(u =>
+      u.export_name == "add1" && u.reason == "signature-mismatch"),
+  )
+  assert_true(
+    profile.unresolved_exports.any(u =>
+      u.export_name == "missing(1)" && u.reason == "export-not-found"),
+  )
 }
 
 ///|

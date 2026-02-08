@@ -17,7 +17,7 @@ fn print_usage() -> Unit {
     "  retain-path <core.wasm> [limit] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
   )
   println("  dce-report <core.wasm> [limit]")
-  println("  runtime-profile <core.wasm> [iterations]")
+  println("  runtime-profile <core.wasm> [iterations] [--scenario=<export>[:arg1,arg2,...]]")
   println("  hot-size <core.wasm> [iterations] [limit]")
   println(
     "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
@@ -559,6 +559,96 @@ fn parse_uint_or_exit(text : String, name : String) -> UInt {
 }
 
 ///|
+fn split_string(s : String, delim : String) -> Array[String] {
+  let out : Array[String] = []
+  for part in s.split(delim) {
+    out.push(part.to_string())
+  }
+  out
+}
+
+///|
+fn parse_int_or_exit(text : String, name : String) -> Int {
+  if text.is_empty() {
+    println("invalid " + name + ": empty string")
+    @sys.exit(1)
+    return 0
+  }
+  let mut negative = false
+  let mut has_digit = false
+  let mut value = 0
+  let mut index = 0
+  for ch in text {
+    let code = ch.to_int()
+    if index == 0 && code == 45 {
+      negative = true
+      index += 1
+      continue
+    }
+    if code < 48 || code > 57 {
+      println("invalid " + name + ": " + text)
+      @sys.exit(1)
+      return 0
+    }
+    value = value * 10 + (code - 48)
+    has_digit = true
+    index += 1
+  }
+  if not(has_digit) {
+    println("invalid " + name + ": " + text)
+    @sys.exit(1)
+    return 0
+  }
+  if negative { -value } else { value }
+}
+
+///|
+fn parse_runtime_profile_scenarios(
+  args : Array[String],
+  start : Int,
+) -> Array[@walyze.RuntimeProfileScenario] {
+  let scenarios : Array[@walyze.RuntimeProfileScenario] = []
+  for i in start..<args.length() {
+    match args[i].strip_prefix("--scenario=") {
+      Some(spec_text) => {
+        let spec = spec_text.to_string()
+        if spec.is_empty() {
+          println("invalid scenario: empty spec")
+          @sys.exit(1)
+        }
+        let parts = split_string(spec, ":")
+        if parts.length() == 0 || parts[0].is_empty() {
+          println("invalid scenario: " + spec)
+          @sys.exit(1)
+        }
+        if parts.length() > 2 {
+          println("invalid scenario format: " + spec)
+          @sys.exit(1)
+        }
+        let export_name = parts[0]
+        let scenario_args : Array[Int] = []
+        if parts.length() == 2 && not(parts[1].is_empty()) {
+          for raw_arg in split_string(parts[1], ",") {
+            if raw_arg.is_empty() {
+              continue
+            }
+            scenario_args.push(parse_int_or_exit(raw_arg, "scenario-arg"))
+          }
+        }
+        scenarios.push(
+          @walyze.make_runtime_profile_scenario(
+            export_name,
+            args=scenario_args,
+          ),
+        )
+      }
+      None => ()
+    }
+  }
+  scenarios
+}
+
+///|
 fn run_optimize(args : Array[String]) -> Unit {
   if args.length() < 4 {
     print_usage()
@@ -746,15 +836,26 @@ fn run_dce_report(path : String, limit : UInt) -> Unit {
 }
 
 ///|
-fn run_runtime_profile(path : String, iterations : UInt) -> Unit {
+fn run_runtime_profile(
+  path : String,
+  iterations : UInt,
+  scenarios : Array[@walyze.RuntimeProfileScenario],
+) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.profile_runtime_zero_arg_exports(bytes, iterations~) {
+  match @walyze.profile_runtime_exports(bytes, iterations~, scenarios~) {
     Ok(profile) => {
       println("runtime profile:")
       println("  instantiate_ns: " + profile.instantiate_ns.to_string())
       println("  iterations: " + profile.iterations.to_string())
+      if scenarios.length() > 0 {
+        println("  scenarios: " + scenarios.length().to_string())
+      }
       if profile.functions.length() == 0 {
-        println("  functions: (no zero-arg exports)")
+        if scenarios.length() > 0 {
+          println("  functions: (no runnable scenarios)")
+        } else {
+          println("  functions: (no zero-arg exports)")
+        }
       } else {
         println("  functions:")
         for fn_profile in profile.functions {
@@ -1825,12 +1926,25 @@ fn main {
         print_usage()
         @sys.exit(1)
       }
-      let iterations = if args.length() >= 4 {
-        parse_uint_or_exit(args[3], "iterations")
-      } else {
-        50U
+      let mut iterations = 50U
+      let mut has_iterations = false
+      for i in 3..<args.length() {
+        let arg = args[i]
+        if arg.has_prefix("--scenario=") {
+          ()
+        } else if arg.has_prefix("--") {
+          println("unknown runtime-profile option: " + arg)
+          @sys.exit(1)
+        } else if not(has_iterations) {
+          iterations = parse_uint_or_exit(arg, "iterations")
+          has_iterations = true
+        } else {
+          println("unexpected runtime-profile argument: " + arg)
+          @sys.exit(1)
+        }
       }
-      run_runtime_profile(args[2], iterations)
+      let scenarios = parse_runtime_profile_scenarios(args, 3)
+      run_runtime_profile(args[2], iterations, scenarios)
     }
     "hot-size" => {
       if args.length() < 3 {

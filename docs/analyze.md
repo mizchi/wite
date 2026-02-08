@@ -30,13 +30,24 @@
 
 - `analyze-opt` に pass 単位 function 差分（gain/regression, TopK）を追加
 - `runtime-profile` に unresolved 理由を追加（`import-missing` / `signature-mismatch` / `runtime-exception`）
+- `runtime-profile` に scenario 入力を追加（`--scenario=<export>[:arg1,arg2,...]`）し、引数付き export の複数ケース計測を可能化
 - `hot-size` に unresolved 理由集計（reason 別 count）を追加
 - `function-gap`（`walyze` vs `wasm-opt`）を追加し、`zlib` の支配関数 gap を TopK 可視化
 - `migration_top3` を function-gap 指標つきで再スコア化（`fn_gap_top` / `fn_gap_positive`）
 
+## runtime-profile シナリオ運用
+
+- 形式: `runtime-profile <core.wasm> [iterations] [--scenario=<export>[:arg1,arg2,...]]`
+- 例:
+  - `walyze runtime-profile foo.wasm 20 --scenario=run`
+  - `walyze runtime-profile foo.wasm 20 --scenario=add1:0 --scenario=add1:41`
+- 挙動:
+  - `--scenario` 指定時は指定ケースのみ計測する
+  - 署名不一致は `signature-mismatch`、export 不在は `export-not-found` として unresolved に出る
+
 ## 拡張優先度
 
-- P0: runtime profile のシナリオ化（引数付き export、複数ケース）
+- P1: `hot-size` に runtime-profile scenario 入力を連携する（引数付き export の分類精度を上げる）
 - P2: section 解析のフォーマット耐性を上げる
 
 ## 運用ループ

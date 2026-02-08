@@ -22,11 +22,11 @@
 ## Analyze 拡張方針 (2026-02-08)
 
 - [x] A4 (P0): pass ごとの function 差分レポートを追加する（before/after を function index で対応付け、削減 bytes をランキング表示）
-- [ ] A5 (P0): runtime profile をシナリオ化する（zero-arg 依存を減らし、引数付き export と複数ケース計測を追加）
+- [x] A5 (P0): runtime profile をシナリオ化する（zero-arg 依存を減らし、引数付き export と複数ケース計測を追加）
 - [x] A6 (P1): `walyze` vs `wasm-opt` の function 対応差分レポートを追加する（gap の支配関数を TopK で特定）
 - [x] A7 (P1): `hot-size` の unresolved 理由を分類する（import 不足 / signature 不一致 / 実行時例外）
 - [x] A8 (P1): analyze で得た示唆を TODO 優先度へ自動接続する（`migration_top3` と function 差分の統合スコア）
-- [ ] Note: 知見と運用ルールは `docs/analyze.md` に集約する
+- [x] Note: 知見と運用ルールは `docs/analyze.md` に集約する
 
 ## Recent Progress
 
@@ -47,6 +47,7 @@
 - [x] テスト追加: `optimize-instructions simplifies const-first bitwise and cmp patterns`
 - [x] Analyze: `analyze-opt` に pass 単位 function 差分（gain/regression, TopK）を追加
 - [x] Analyze: `runtime-profile` / `hot-size` に unresolved 理由分類（import-missing / signature-mismatch / runtime-exception）を追加
+- [x] Analyze: `runtime-profile` に scenario 入力を追加（`--scenario=<export>[:arg1,arg2,...]`）し、引数付き export の複数ケース計測を可能にした
 - [x] Analyze: `function-gap` API/CLI と `bench/kpi/zlib_function_gap.tsv` を追加（walyze vs wasm-opt function TopK 差分）
 - [x] KPI: `migration_top3` のスコアに function-gap 指標（`fn_gap_top` / `fn_gap_positive`）を統合
 - [x] Perf: `analyze_call_graph_summary` を full callgraph 構築から分離し、summary 専用経路を追加（巨大 wasm の `analyze` 実行時間/メモリを削減）

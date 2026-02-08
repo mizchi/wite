@@ -681,6 +681,20 @@ pub struct RuntimeUnresolvedExport {
 }
 
 ///|
+pub struct RuntimeProfileScenario {
+  export_name : String
+  args : Array[Int]
+}
+
+///|
+pub fn make_runtime_profile_scenario(
+  export_name : String,
+  args? : Array[Int] = [],
+) -> RuntimeProfileScenario {
+  { export_name, args }
+}
+
+///|
 pub struct RuntimeProfile {
   instantiate_ns : UInt64
   iterations : UInt
@@ -14184,11 +14198,31 @@ fn parse_runtime_unresolved_exports(
 }
 
 ///|
-extern "js" fn js_profile_zero_arg_exports(
+fn serialize_runtime_profile_scenarios(
+  scenarios : Array[RuntimeProfileScenario],
+) -> String {
+  if scenarios.length() == 0 {
+    return ""
+  }
+  let entries : Array[String] = []
+  for scenario in scenarios {
+    let args_text = if scenario.args.length() == 0 {
+      ""
+    } else {
+      scenario.args.map(v => v.to_string()).join(",")
+    }
+    entries.push(scenario.export_name + "\t" + args_text)
+  }
+  entries.join(";;")
+}
+
+///|
+extern "js" fn js_profile_runtime_exports(
   bytes : Bytes,
   iterations : Int,
+  scenario_spec : String,
 ) -> String =
-  #| (bytes, iterations) => {
+  #| (bytes, iterations, scenarioSpec) => {
   #|   try {
   #|     const raw = bytes instanceof Uint8Array
   #|       ? bytes
@@ -14201,6 +14235,52 @@ extern "js" fn js_profile_zero_arg_exports(
   #|       .replace(/;;/g, ';');
   #|     const encodeUnresolved = (name, reason, detail) =>
   #|       sanitize(name) + '\t' + sanitize(reason) + '\t' + sanitize(detail);
+  #|     const encodeProfile = (name, calls, totalNs) =>
+  #|       sanitize(name) + ',' + String(calls) + ',' + String(totalNs);
+  #|     const parseScenarioSpec = (rawSpec) => {
+  #|       const out = { hasSpec: false, scenarios: [], invalid: [] };
+  #|       if (!rawSpec || rawSpec.length === 0) return out;
+  #|       out.hasSpec = true;
+  #|       for (const rawEntry of rawSpec.split(';;')) {
+  #|         if (!rawEntry) continue;
+  #|         const fields = rawEntry.split('\t');
+  #|         const exportName = (fields[0] || '').trim();
+  #|         const argsField = fields.length >= 2 ? (fields[1] || '').trim() : '';
+  #|         if (!exportName) continue;
+  #|         const args = [];
+  #|         let valid = true;
+  #|         if (argsField.length > 0) {
+  #|           for (const rawArg of argsField.split(',')) {
+  #|             const arg = rawArg.trim();
+  #|             if (!arg) continue;
+  #|             if (!/^[-]?\d+$/.test(arg)) {
+  #|               valid = false;
+  #|               break;
+  #|             }
+  #|             args.push(Number(arg));
+  #|           }
+  #|         }
+  #|         const displayName = argsField.length === 0
+  #|           ? exportName
+  #|           : exportName + '(' + argsField.replace(/,/g, '_') + ')';
+  #|         if (!valid) {
+  #|           out.invalid.push({
+  #|             displayName,
+  #|             detail: 'invalid-integer-arg',
+  #|           });
+  #|           continue;
+  #|         }
+  #|         out.scenarios.push({
+  #|           exportName,
+  #|           args,
+  #|           displayName: args.length === 0
+  #|             ? exportName
+  #|             : exportName + '(' + args.join('_') + ')',
+  #|         });
+  #|       }
+  #|       return out;
+  #|     };
+  #|     const scenario = parseScenarioSpec(scenarioSpec);
   #|     const module = new WebAssembly.Module(raw);
   #|     const exportNames = WebAssembly.Module.exports(module)
   #|       .filter((item) => item.kind === 'function')
@@ -14288,45 +14368,110 @@ extern "js" fn js_profile_zero_arg_exports(
   #|       instantiateNs = (t1 - t0).toString();
   #|     } catch (e) {
   #|       const msg = e && e.message ? e.message : String(e);
-  #|       const unresolved = exportNames.map((name) =>
-  #|         encodeUnresolved(name, 'import-missing', msg)
-  #|       );
+  #|       const unresolved = [];
+  #|       for (const invalid of scenario.invalid) {
+  #|         unresolved.push(
+  #|           encodeUnresolved(
+  #|             invalid.displayName,
+  #|             'invalid-scenario',
+  #|             invalid.detail,
+  #|           ),
+  #|         );
+  #|       }
+  #|       const targets = scenario.hasSpec
+  #|         ? scenario.scenarios.map((item) => item.displayName)
+  #|         : exportNames;
+  #|       for (const name of targets) {
+  #|         unresolved.push(encodeUnresolved(name, 'import-missing', msg));
+  #|       }
   #|       return 'ok|' + instantiateNs + '|||' + unresolved.join(';;');
   #|     }
   #|     const profiled = [];
   #|     const skipped = [];
-  #|     const unresolved = [];
-  #|     for (const [name, value] of Object.entries(instance.exports)) {
-  #|       if (typeof value !== 'function') continue;
-  #|       if (value.length !== 0) {
-  #|         skipped.push(name);
-  #|         unresolved.push(
-  #|           encodeUnresolved(name, 'signature-mismatch', 'arity=' + value.length)
-  #|         );
-  #|         continue;
-  #|       }
-  #|       let total = 0n;
-  #|       let failed = null;
-  #|       for (let i = 0; i < rounds; i++) {
-  #|         try {
-  #|           const s = process.hrtime.bigint();
-  #|           value();
-  #|           total += (process.hrtime.bigint() - s);
-  #|         } catch (e) {
-  #|           failed = e;
-  #|           break;
+  #|     const unresolved = scenario.invalid.map((invalid) =>
+  #|       encodeUnresolved(
+  #|         invalid.displayName,
+  #|         'invalid-scenario',
+  #|         invalid.detail,
+  #|       )
+  #|     );
+  #|     if (scenario.hasSpec) {
+  #|       for (const item of scenario.scenarios) {
+  #|         const value = instance.exports[item.exportName];
+  #|         if (typeof value !== 'function') {
+  #|           unresolved.push(
+  #|             encodeUnresolved(
+  #|               item.displayName,
+  #|               'export-not-found',
+  #|               item.exportName,
+  #|             ),
+  #|           );
+  #|           continue;
   #|         }
+  #|         if (value.length !== item.args.length) {
+  #|           unresolved.push(
+  #|             encodeUnresolved(
+  #|               item.displayName,
+  #|               'signature-mismatch',
+  #|               'arity=' + value.length + ' args=' + item.args.length,
+  #|             ),
+  #|           );
+  #|           continue;
+  #|         }
+  #|         let total = 0n;
+  #|         let failed = null;
+  #|         for (let i = 0; i < rounds; i++) {
+  #|           try {
+  #|             const s = process.hrtime.bigint();
+  #|             value(...item.args);
+  #|             total += (process.hrtime.bigint() - s);
+  #|           } catch (e) {
+  #|             failed = e;
+  #|             break;
+  #|           }
+  #|         }
+  #|         if (failed) {
+  #|           const msg = failed && failed.message ? failed.message : String(failed);
+  #|           unresolved.push(
+  #|             encodeUnresolved(item.displayName, 'runtime-exception', msg),
+  #|           );
+  #|           continue;
+  #|         }
+  #|         profiled.push(encodeProfile(item.displayName, rounds, total.toString()));
   #|       }
-  #|       if (failed) {
-  #|         const msg = failed && failed.message ? failed.message : String(failed);
-  #|         unresolved.push(
-  #|           encodeUnresolved(name, 'runtime-exception', msg)
-  #|         );
-  #|         continue;
+  #|     } else {
+  #|       for (const [name, value] of Object.entries(instance.exports)) {
+  #|         if (typeof value !== 'function') continue;
+  #|         if (value.length !== 0) {
+  #|           skipped.push(name);
+  #|           unresolved.push(
+  #|             encodeUnresolved(name, 'signature-mismatch', 'arity=' + value.length)
+  #|           );
+  #|           continue;
+  #|         }
+  #|         let total = 0n;
+  #|         let failed = null;
+  #|         for (let i = 0; i < rounds; i++) {
+  #|           try {
+  #|             const s = process.hrtime.bigint();
+  #|             value();
+  #|             total += (process.hrtime.bigint() - s);
+  #|           } catch (e) {
+  #|             failed = e;
+  #|             break;
+  #|           }
+  #|         }
+  #|         if (failed) {
+  #|           const msg = failed && failed.message ? failed.message : String(failed);
+  #|           unresolved.push(
+  #|             encodeUnresolved(name, 'runtime-exception', msg)
+  #|           );
+  #|           continue;
+  #|         }
+  #|         profiled.push(encodeProfile(name, rounds, total.toString()));
   #|       }
-  #|       profiled.push(name + ',' + rounds + ',' + total.toString());
   #|     }
-  #|     return 'ok|' + instantiateNs + '|' + profiled.join(';') + '|' + skipped.join(',') + '|' + unresolved.join(';;');
+  #|     return 'ok|' + instantiateNs + '|' + profiled.join(';;') + '|' + skipped.join(',') + '|' + unresolved.join(';;');
   #|   } catch (e) {
   #|     const msg = e && e.message ? e.message : String(e);
   #|     return 'err|' + msg;
@@ -14334,13 +14479,15 @@ extern "js" fn js_profile_zero_arg_exports(
   #| }
 
 ///|
-pub fn profile_runtime_zero_arg_exports(
+pub fn profile_runtime_exports(
   bytes : Bytes,
   iterations? : UInt = 50U,
+  scenarios? : Array[RuntimeProfileScenario] = [],
 ) -> Result[RuntimeProfile, String] {
-  let raw = js_profile_zero_arg_exports(
+  let raw = js_profile_runtime_exports(
     bytes,
     UInt::reinterpret_as_int(iterations),
+    serialize_runtime_profile_scenarios(scenarios),
   )
   let parts = split_string(raw, "|")
   if parts.length() < 2 {
@@ -14361,7 +14508,7 @@ pub fn profile_runtime_zero_arg_exports(
   }
   let functions : Array[RuntimeFunctionProfile] = []
   let profile_entries = if parts.length() >= 3 { parts[2] } else { "" }
-  for entry in split_non_empty(profile_entries, ";") {
+  for entry in split_non_empty(profile_entries, ";;") {
     let fields = split_string(entry, ",")
     if fields.length() != 3 {
       return Err("invalid function profile entry: " + entry)
@@ -14398,6 +14545,14 @@ pub fn profile_runtime_zero_arg_exports(
     skipped_exports,
     unresolved_exports,
   })
+}
+
+///|
+pub fn profile_runtime_zero_arg_exports(
+  bytes : Bytes,
+  iterations? : UInt = 50U,
+) -> Result[RuntimeProfile, String] {
+  profile_runtime_exports(bytes, iterations~)
 }
 
 ///|
