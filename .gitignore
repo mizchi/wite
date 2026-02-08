@@ -5,3 +5,5 @@ target
 .mooncakes/
 .moonagent/
 .jj/
+deps/
+wite.config.jsonc

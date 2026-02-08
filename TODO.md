@@ -36,9 +36,19 @@
 - [x] W4: `wite diff --baseline=wasm-opt` を追加し、`--view=function|section|block` で baseline 比較を統合
 - [x] W5: `wite add` を追加し、`dep-spec`（`wkg:mizchi/markdown` など）を `wite.config.jsonc` の `deps`（HTTPS URL）へ upsert 可能にした
 - [x] W6: `wite deps verify` を追加し、`wite.config.jsonc` の `deps` 全件を `.well-known` + backend 検証（oci/warg）で再確認可能にした
+- [x] W7: `wite deps sync` を追加し、`wite.config.jsonc` の `deps` 全件を `deps/<name>/` へ実体化可能にした（`--dir` / `--verify` / `--fail-fast`）
+- [x] W8: `build/analyze/profile` 実行時に config 内 `deps` を自動同期する導線を追加した（`deps sync --fail-fast`）
+- [x] W9: root `wite.config.jsonc` テンプレートと `just deps-verify` / `just deps-sync` タスクを追加した
+- [x] W10: `examplesl/minimal` の最小設定例と `just example-minimal` 実行タスクを追加した
+- [x] W11: `build/analyze/profile` に `kind`（auto/core/component）を追加し、config/CLI で上書き可能にした
+- [x] W12: `optimize` に `--kind`（auto/core/component）を追加し、core/component 経路を明示指定可能にした
 - [x] テスト追加: `parse_diff_view` / `parse_diff_baseline` の回帰テスト
 - [x] テスト追加: `parse_wite_config_text` / `parse_config_selection_flags` / `merge_command_flags` の回帰テスト
+- [x] テスト追加: `should_auto_sync_deps` / `build_auto_sync_deps_command_args` の回帰テスト
+- [x] テスト追加: `parse_binary_kind` / `analyze_view_supports_kind` / config `kind` パースの回帰テスト
+- [x] テスト追加: `extract_binary_kind_flags`（`--kind=<v>` / `--kind <v>`）の回帰テスト
 - [x] テスト追加: `parse_wasm_dependency_spec` / `parse_dependency_protocol` / `parse_add_command_options` / `upsert_wasm_dependency_config_json` の回帰テスト
+- [x] テスト追加: `parse_deps_sync_command_options` / `build_dep_sync_target_dir` の回帰テスト
 - [x] テスト追加: `parse_analyze_view` / `derive_build_output_path` / `normalize_opt_level_token` の回帰テスト
 - [x] Perf: `analyze_call_graph` / `analyze_call_graph_summary` を body 直走査 (`collect_direct_callees_from_body_raise`) + bitmap visited に置換し、`parse_instruction_spans` 依存を除去
 - [x] Bench: `moon bench` 内部 driver 計測で `analyze summary` が改善（`pglite mean: 110527us -> 73258us`, `duckdb mean: 801982us -> 546504us`）

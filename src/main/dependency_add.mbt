@@ -95,17 +95,17 @@ fn parse_wasm_dependency_spec(raw : String) -> WasmDependencySpec? {
       (Some(first), Some(last)) if first == last &&
         first > 0 &&
         first + 1 < base.length() => {
-          let ns = base[:first].to_string() catch { _ => "" }
-          let name = base[first + 1:].to_string() catch { _ => "" }
-          if ns.contains(":") || name.contains(":") {
-            return None
-          }
-          let colon_name = ns + ":" + name
-          if @oci_types.PackageName::parse(colon_name) is None {
-            return None
-          }
-          return Some({ ns, name, version })
+        let ns = base[:first].to_string() catch { _ => "" }
+        let name = base[first + 1:].to_string() catch { _ => "" }
+        if ns.contains(":") || name.contains(":") {
+          return None
         }
+        let colon_name = ns + ":" + name
+        if @oci_types.PackageName::parse(colon_name) is None {
+          return None
+        }
+        return Some({ ns, name, version })
+      }
       _ => return None
     }
   }
@@ -128,9 +128,13 @@ fn parse_wasm_dependency_spec(raw : String) -> WasmDependencySpec? {
 fn parse_https_dependency_url(raw : String) -> (String, WasmDependencySpec)? {
   let text = raw.trim().to_string()
   let rest = if text.has_prefix("https://") {
-    text[8:].to_string() catch { _ => "" }
+    text[8:].to_string() catch {
+      _ => ""
+    }
   } else if text.has_prefix("http://") {
-    text[7:].to_string() catch { _ => "" }
+    text[7:].to_string() catch {
+      _ => ""
+    }
   } else {
     return None
   }
@@ -141,7 +145,11 @@ fn parse_https_dependency_url(raw : String) -> (String, WasmDependencySpec)? {
     Some(i) if i > 0 && i + 1 < rest.length() => i
     _ => return None
   }
-  let host = normalize_dependency_host(rest[:slash].to_string() catch { _ => "" })
+  let host = normalize_dependency_host(
+    rest[:slash].to_string() catch {
+      _ => ""
+    },
+  )
   if host.is_empty() {
     return None
   }
@@ -346,6 +354,185 @@ fn parse_wkg_verify_cli_result(raw : String) -> Result[Unit, String] {
 }
 
 ///|
+extern "js" fn js_sanitize_dep_sync_name(raw : String) -> String =
+  #| (raw) => {
+  #|   const text = String(raw ?? '').trim();
+  #|   if (!text) return 'dep';
+  #|   const safe = text
+  #|     .replace(/\\/g, '/')
+  #|     .split('/')
+  #|     .filter((segment) => segment.length > 0 && segment !== '.' && segment !== '..')
+  #|     .join('_')
+  #|     .replace(/[^a-zA-Z0-9._-]/g, '_')
+  #|     .replace(/_+/g, '_')
+  #|     .replace(/^_+|_+$/g, '');
+  #|   return safe.length > 0 ? safe : 'dep';
+  #| }
+
+///|
+fn normalize_dep_sync_output_dir(raw : String) -> String {
+  let text = raw.trim()
+  if text.is_empty() {
+    "deps"
+  } else if text.has_suffix("/") {
+    text[:text.length() - 1].to_string() catch {
+      _ => text.to_string()
+    }
+  } else {
+    text.to_string()
+  }
+}
+
+///|
+fn build_dep_sync_target_dir(
+  base_dir : String,
+  dependency_name : String,
+) -> String {
+  let base = normalize_dep_sync_output_dir(base_dir)
+  let safe_name = js_sanitize_dep_sync_name(dependency_name)
+  if base.is_empty() {
+    safe_name
+  } else {
+    base + "/" + safe_name
+  }
+}
+
+///|
+extern "js" fn js_sync_wkg_package_cli(
+  package_spec : String,
+  registry_host : String,
+  output_dir : String,
+) -> String =
+  #| (packageSpec, registryHost, outputDir) => {
+  #|   const sanitize = (value) => String(value ?? '')
+  #|     .replace(/\r?\n/g, ' ')
+  #|     .replace(/\t/g, ' ')
+  #|     .slice(0, 4096);
+  #|   try {
+  #|     const fs = require('node:fs');
+  #|     const path = require('node:path');
+  #|     const { spawnSync } = require('node:child_process');
+  #|     const outDir = String(outputDir || 'deps').trim();
+  #|     if (!outDir) {
+  #|       return 'error\targs\toutput dir must not be empty';
+  #|     }
+  #|     fs.mkdirSync(outDir, { recursive: true });
+  #|     const outArg = outDir.endsWith('/') || outDir.endsWith('\\')
+  #|       ? outDir
+  #|       : outDir + path.sep;
+  #|     const args = [
+  #|       'get',
+  #|       String(packageSpec),
+  #|       '--registry',
+  #|       String(registryHost),
+  #|       '--output',
+  #|       outArg,
+  #|       '--overwrite',
+  #|     ];
+  #|     const result = spawnSync('wkg', args, { encoding: 'utf8' });
+  #|     if (result.error) {
+  #|       return 'error\tspawn\t' + sanitize(result.error.message || result.error);
+  #|     }
+  #|     const status = (result.status == null) ? -1 : result.status;
+  #|     if (status !== 0) {
+  #|       const detail = (result.stderr && result.stderr.length > 0)
+  #|         ? result.stderr
+  #|         : (result.stdout || '');
+  #|       return 'error\texit:' + String(status) + '\t' + sanitize(detail);
+  #|     }
+  #|     return 'ok\t' + sanitize(outDir) + '\t' + sanitize(result.stdout || '');
+  #|   } catch (e) {
+  #|     const detail = (e && (e.stack || e.message)) ? (e.stack || e.message) : e;
+  #|     return 'error\texception\t' + sanitize(detail);
+  #|   }
+  #| }
+
+///|
+extern "js" fn js_sync_wkg_package_to_file_cli(
+  package_spec : String,
+  registry_host : String,
+  output_path : String,
+) -> String =
+  #| (packageSpec, registryHost, outputPath) => {
+  #|   const sanitize = (value) => String(value ?? '')
+  #|     .replace(/\r?\n/g, ' ')
+  #|     .replace(/\t/g, ' ')
+  #|     .slice(0, 4096);
+  #|   try {
+  #|     const fs = require('node:fs');
+  #|     const path = require('node:path');
+  #|     const { spawnSync } = require('node:child_process');
+  #|     const outPath = String(outputPath || '').trim();
+  #|     if (!outPath) {
+  #|       return 'error\targs\toutput path must not be empty';
+  #|     }
+  #|     fs.mkdirSync(path.dirname(outPath), { recursive: true });
+  #|     const args = [
+  #|       'get',
+  #|       String(packageSpec),
+  #|       '--registry',
+  #|       String(registryHost),
+  #|       '--format',
+  #|       'wasm',
+  #|       '--output',
+  #|       outPath,
+  #|       '--overwrite',
+  #|     ];
+  #|     const result = spawnSync('wkg', args, { encoding: 'utf8' });
+  #|     if (result.error) {
+  #|       return 'error\tspawn\t' + sanitize(result.error.message || result.error);
+  #|     }
+  #|     const status = (result.status == null) ? -1 : result.status;
+  #|     if (status !== 0) {
+  #|       const detail = (result.stderr && result.stderr.length > 0)
+  #|         ? result.stderr
+  #|         : (result.stdout || '');
+  #|       return 'error\texit:' + String(status) + '\t' + sanitize(detail);
+  #|     }
+  #|     return 'ok\t' + sanitize(outPath) + '\t' + sanitize(result.stdout || '');
+  #|   } catch (e) {
+  #|     const detail = (e && (e.stack || e.message)) ? (e.stack || e.message) : e;
+  #|     return 'error\texception\t' + sanitize(detail);
+  #|   }
+  #| }
+
+///|
+fn parse_wkg_sync_cli_result(raw : String) -> Result[String, String] {
+  let parts : Array[String] = []
+  for part in raw.split("\t") {
+    parts.push(part.to_string())
+  }
+  if parts.length() > 0 && parts[0] == "ok" {
+    return Ok(if parts.length() >= 2 { parts[1] } else { "" })
+  }
+  let stage = if parts.length() >= 2 { parts[1] } else { "unknown" }
+  let detail = if parts.length() >= 3 { parts[2] } else { raw }
+  Err(stage + ": " + detail)
+}
+
+///|
+fn sync_dep_entry_with_wkg_cli(
+  host : String,
+  spec : WasmDependencySpec,
+  output_dir : String,
+) -> Result[String, String] {
+  let package_spec = build_verify_package_spec(spec)
+  let raw = js_sync_wkg_package_cli(package_spec, host, output_dir)
+  parse_wkg_sync_cli_result(raw)
+}
+
+///|
+fn sync_dep_spec_to_file_with_wkg_cli(
+  host : String,
+  spec : WasmDependencySpec,
+  output_path : String,
+) -> Result[String, String] {
+  let package_spec = build_verify_package_spec(spec)
+  let raw = js_sync_wkg_package_to_file_cli(package_spec, host, output_path)
+  parse_wkg_sync_cli_result(raw)
+}
+
+///|
 fn upsert_wasm_dependency_config_json(
   root : Json,
   dependency_name : String,
@@ -384,6 +571,14 @@ priv struct AddCommandOptions {
 priv struct DepsVerifyCommandOptions {
   config_path : String
   fail_fast : Bool
+}
+
+///|
+priv struct DepsSyncCommandOptions {
+  config_path : String
+  output_dir : String
+  fail_fast : Bool
+  verify : Bool
 }
 
 ///|
@@ -488,10 +683,7 @@ fn parse_add_command_options(
         match value.to_lower() {
           "true" | "1" | "yes" | "on" => verify = true
           "false" | "0" | "no" | "off" => verify = false
-          _ =>
-            return Err(
-              "invalid value for --verify: " + value.to_string(),
-            )
+          _ => return Err("invalid value for --verify: " + value.to_string())
         }
         i += 1
         continue
@@ -567,20 +759,14 @@ async fn verify_dependency_on_oci_backend(
   ) catch {
     e =>
       return Err(
-        "oci client init failed for " +
-        backend.registry +
-        ": " +
-        e.to_string(),
+        "oci client init failed for " + backend.registry + ": " + e.to_string(),
       )
   }
   if spec.version == "latest" {
     let tags = client.list_tags(package_name) catch {
       e =>
         return Err(
-          "oci tag lookup failed for " +
-          package_text +
-          ": " +
-          e.to_string(),
+          "oci tag lookup failed for " + package_text + ": " + e.to_string(),
         )
     }
     if tags.length() == 0 {
@@ -649,7 +835,9 @@ fn verify_dependency_on_warg_backend(
 }
 
 ///|
-async fn verify_add_dependency(options : AddCommandOptions) -> Result[String, String] {
+async fn verify_add_dependency(
+  options : AddCommandOptions,
+) -> Result[String, String] {
   verify_dependency_url(options.resolved_url, options.parsed.protocol)
 }
 
@@ -660,16 +848,11 @@ async fn verify_dependency_url(
 ) -> Result[String, String] {
   let (host, spec) = match parse_https_dependency_url(resolved_url) {
     Some(value) => value
-    None =>
-      return Err(
-        "invalid resolved dependency url: " + resolved_url,
-      )
+    None => return Err("invalid resolved dependency url: " + resolved_url)
   }
   let registry_config = @oci_discovery.fetch_registry_config(host) catch {
     e =>
-      return Err(
-        "registry discovery failed for " + host + ": " + e.to_string(),
-      )
+      return Err("registry discovery failed for " + host + ": " + e.to_string())
   }
   let backend = match resolve_verify_backend(protocol, registry_config) {
     Ok(value) => value
@@ -685,7 +868,8 @@ async fn verify_dependency_url(
   }
   match backend {
     VerifyBackend::Oci(oci) => verify_dependency_on_oci_backend(oci, spec)
-    VerifyBackend::Warg(warg) => verify_dependency_on_warg_backend(warg, host, spec)
+    VerifyBackend::Warg(warg) =>
+      verify_dependency_on_warg_backend(warg, host, spec)
   }
 }
 
@@ -736,6 +920,100 @@ fn parse_deps_verify_command_options(
 }
 
 ///|
+fn parse_deps_sync_command_options(
+  args : Array[String],
+) -> Result[DepsSyncCommandOptions, String] {
+  if args.length() < 3 || args[2] != "sync" {
+    return Err("deps requires subcommand 'sync'")
+  }
+  let mut config_path = "wite.config.jsonc"
+  let mut output_dir = "deps"
+  let mut fail_fast = false
+  let mut verify = false
+  let mut i = 3
+  while i < args.length() {
+    let arg = args[i]
+    if arg == "--config" {
+      if i + 1 >= args.length() {
+        return Err("missing path after --config")
+      }
+      config_path = args[i + 1]
+      i += 2
+      continue
+    }
+    if arg == "--dir" || arg == "--output-dir" || arg == "--out-dir" {
+      if i + 1 >= args.length() {
+        return Err("missing path after " + arg)
+      }
+      output_dir = args[i + 1]
+      i += 2
+      continue
+    }
+    if arg == "--fail-fast" {
+      fail_fast = true
+      i += 1
+      continue
+    }
+    if arg == "--no-fail-fast" {
+      fail_fast = false
+      i += 1
+      continue
+    }
+    if arg == "--verify" {
+      verify = true
+      i += 1
+      continue
+    }
+    if arg == "--no-verify" {
+      verify = false
+      i += 1
+      continue
+    }
+    match arg.strip_prefix("--config=") {
+      Some(value) => {
+        config_path = value.to_string()
+        i += 1
+        continue
+      }
+      None => ()
+    }
+    match arg.strip_prefix("--dir=") {
+      Some(value) => {
+        output_dir = value.to_string()
+        i += 1
+        continue
+      }
+      None => ()
+    }
+    match arg.strip_prefix("--output-dir=") {
+      Some(value) => {
+        output_dir = value.to_string()
+        i += 1
+        continue
+      }
+      None => ()
+    }
+    match arg.strip_prefix("--out-dir=") {
+      Some(value) => {
+        output_dir = value.to_string()
+        i += 1
+        continue
+      }
+      None => ()
+    }
+    if arg.has_prefix("--") {
+      return Err("unknown deps sync option: " + arg)
+    }
+    return Err("unexpected deps sync argument: " + arg)
+  }
+  let normalized_output_dir = normalize_dep_sync_output_dir(output_dir)
+  if normalized_output_dir.is_empty() {
+    return Err("deps sync output dir must not be empty")
+  }
+  Ok({ config_path, output_dir: normalized_output_dir, fail_fast, verify })
+}
+
+///|
 fn compare_dep_config_entry(a : DepConfigEntry, b : DepConfigEntry) -> Int {
   a.name.compare(b.name)
 }
@@ -755,14 +1033,9 @@ fn collect_dep_entries_from_config_json(
   }
   let out : Array[DepConfigEntry] = []
   let mut invalid_key : String? = None
-  deps.each((name, value) => {
-    match value {
-      Json::String(url) => out.push({ name, url, })
-      _ =>
-        if invalid_key is None {
-          invalid_key = Some(name)
-        }
-    }
+  deps.each((name, value) => match value {
+    Json::String(url) => out.push({ name, url })
+    _ => if invalid_key is None { invalid_key = Some(name) }
   })
   match invalid_key {
     Some(name) => Err("config deps entry must be string: " + name)
@@ -780,14 +1053,18 @@ fn load_config_json_for_add(path : String) -> Json {
   }
   let text = @fs.read_file_to_string(path) catch {
     e => {
-      println("failed to read config file: " + path + " (" + e.to_string() + ")")
+      println(
+        "failed to read config file: " + path + " (" + e.to_string() + ")",
+      )
       exit_process(1)
       "{}"
     }
   }
   @json5.parse(text) catch {
     e => {
-      println("failed to parse config file: " + path + " (" + e.to_string() + ")")
+      println(
+        "failed to parse config file: " + path + " (" + e.to_string() + ")",
+      )
       exit_process(1)
       Json::object({})
     }
@@ -799,7 +1076,9 @@ fn write_config_json_for_add(path : String, config : Json) -> Unit {
   let text = config.stringify(indent=2) + "\n"
   @fs.write_string_to_file(path, text) catch {
     e => {
-      println("failed to write config file: " + path + " (" + e.to_string() + ")")
+      println(
+        "failed to write config file: " + path + " (" + e.to_string() + ")",
+      )
       exit_process(1)
     }
   }
@@ -839,11 +1118,12 @@ async fn run_add_command(args : Array[String]) -> Unit {
     println("  verify: " + verify_result)
   }
   let current = load_config_json_for_add(options.config_path)
-  let updated = match upsert_wasm_dependency_config_json(
-    current,
-    options.dependency_name,
-    options.resolved_url,
-  ) {
+  let updated = match
+    upsert_wasm_dependency_config_json(
+      current,
+      options.dependency_name,
+      options.resolved_url,
+    ) {
     Ok(value) => value
     Err(msg) => {
       println("failed to update deps: " + msg)
@@ -918,7 +1198,155 @@ async fn run_deps_verify_command(args : Array[String]) -> Unit {
     }
     exit_process(1)
   }
-  println("deps verify succeeded: " + entries.length().to_string() + "/" + entries.length().to_string())
+  println(
+    "deps verify succeeded: " +
+    entries.length().to_string() +
+    "/" +
+    entries.length().to_string(),
+  )
+}
+
+///|
+fn validate_dep_sync_targets(
+  entries : Array[DepConfigEntry],
+  output_dir : String,
+) -> Result[Unit, String] {
+  let seen : Map[String, String] = {}
+  for entry in entries {
+    let target = build_dep_sync_target_dir(output_dir, entry.name)
+    match seen.get(target) {
+      Some(prev_name) =>
+        return Err(
+          "deps sync target collision: " +
+          prev_name +
+          " and " +
+          entry.name +
+          " -> " +
+          target,
+        )
+      None => seen.set(target, entry.name)
+    }
+  }
+  Ok(())
+}
+
+///|
+async fn run_deps_sync_command(args : Array[String]) -> Unit {
+  let options = match parse_deps_sync_command_options(args) {
+    Ok(value) => value
+    Err(msg) => {
+      println(msg)
+      print_usage()
+      exit_process(1)
+      {
+        config_path: "wite.config.jsonc",
+        output_dir: "deps",
+        fail_fast: false,
+        verify: false,
+      }
+    }
+  }
+  let config = load_config_json_for_add(options.config_path)
+  let entries = match collect_dep_entries_from_config_json(config) {
+    Ok(value) => value
+    Err(msg) => {
+      println("failed to read deps: " + msg)
+      exit_process(1)
+      []
+    }
+  }
+  if entries.length() == 0 {
+    println("no deps found in " + options.config_path)
+    return
+  }
+  match validate_dep_sync_targets(entries, options.output_dir) {
+    Ok(_) => ()
+    Err(msg) => {
+      println(msg)
+      exit_process(1)
+    }
+  }
+  println(
+    "deps sync: " +
+    entries.length().to_string() +
+    " entries -> " +
+    options.output_dir,
+  )
+  let failures : Array[String] = []
+  let mut synced = 0
+  for entry in entries {
+    let (host, spec) = match parse_https_dependency_url(entry.url) {
+      Some(value) => value
+      None => {
+        let msg = "invalid dependency url: " + entry.url
+        println("fail: " + entry.name)
+        println("  url: " + entry.url)
+        println("  reason: " + msg)
+        failures.push(entry.name + ": " + msg)
+        if options.fail_fast {
+          break
+        }
+        continue
+      }
+    }
+    if options.verify {
+      let verified = verify_dependency_url(entry.url, DependencyProtocol::Wkg)
+      match verified {
+        Ok(msg) => {
+          println("verify ok: " + entry.name)
+          println("  verify: " + msg)
+        }
+        Err(msg) => {
+          println("verify fail: " + entry.name)
+          println("  url: " + entry.url)
+          println("  reason: " + msg)
+          failures.push(entry.name + ": " + msg)
+          if options.fail_fast {
+            break
+          }
+          continue
+        }
+      }
+    }
+    let target_dir = build_dep_sync_target_dir(options.output_dir, entry.name)
+    let sync_result = sync_dep_entry_with_wkg_cli(host, spec, target_dir)
+    match sync_result {
+      Ok(output) => {
+        synced += 1
+        println("ok: " + entry.name)
+        println("  url: " + entry.url)
+        println("  output: " + output)
+      }
+      Err(msg) => {
+        println("fail: " + entry.name)
+        println("  url: " + entry.url)
+        println("  output: " + target_dir)
+        println("  reason: " + msg)
+        failures.push(entry.name + ": " + msg)
+        if options.fail_fast {
+          break
+        }
+      }
+    }
+  }
+  if failures.length() > 0 {
+    println(
+      "deps sync failed: " +
+      failures.length().to_string() +
+      "/" +
+      entries.length().to_string(),
+    )
+    for failure in failures {
+      println("  - " + failure)
+    }
+    exit_process(1)
+  }
+  println(
+    "deps sync succeeded: " +
+    synced.to_string() +
+    "/" +
+    entries.length().to_string(),
+  )
 }
 
 ///|
@@ -931,6 +1359,7 @@ async fn run_deps_command(args : Array[String]) -> Unit {
   }
   match args[2] {
     "verify" => run_deps_verify_command(args)
+    "sync" => run_deps_sync_command(args)
     _ => {
       println("unknown deps subcommand: " + args[2])
       print_usage()

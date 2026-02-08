@@ -38,6 +38,18 @@ test-update:
 run:
     moon run src/main --target {{target}}
 
+# Verify configured wasm package dependencies
+deps-verify:
+    moon run src/main --target {{target}} -- deps verify --config=./wite.config.jsonc --fail-fast
+
+# Sync configured wasm package dependencies to deps/
+deps-sync:
+    moon run src/main --target {{target}} -- deps sync --config=./wite.config.jsonc --verify --fail-fast
+
+# Run minimal example config under examplesl/minimal
+example-minimal:
+    moon run src/main --target {{target}} -- analyze bench/corpus/core/binaryen/br_to_exit.wasm --config=./examplesl/minimal/wite.config.jsonc
+
 # Generate type definition files
 info:
     moon info
