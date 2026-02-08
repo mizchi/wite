@@ -453,6 +453,32 @@ fn component_dce_kpi_optimize_config(roots : Array[String]) -> OptimizeConfig {
 }
 
 ///|
+fn component_gc_optimize_config(roots : Array[String]) -> OptimizeConfig {
+  make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    strip_debug_sections=false,
+    strip_dwarf_sections=false,
+    strip_target_features_section=false,
+    pass_rounds=1U,
+    enable_peephole=false,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=true,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=true,
+    closed_world=true,
+    closed_world_root_exports=roots,
+    safe_mode=false,
+  )
+}
+
+///|
 fn sample_module_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -846,6 +872,50 @@ fn sample_module_with_duplicate_functions_but_split_types_and_gc_bytes() -> Byte
   )
   // code section: identical bodies
   append_section(out, 10U, bytes_of([0x02, 0x02, 0x00, 0x0b, 0x02, 0x00, 0x0b]))
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_gc_hierarchy_duplicate_function_types_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 struct(i32)
+  //   #1 struct(i32)  (duplicate of #0)
+  //   #2 () -> ()
+  //   #3 (ref null #0) -> ()
+  //   #4 (ref null #1) -> ()
+  append_section(
+    out,
+    1U,
+    bytes_of([
+      0x05, 0x5f, 0x01, 0x7f, 0x00, 0x5f, 0x01, 0x7f, 0x00, 0x60, 0x00, 0x00, 0x60,
+      0x01, 0x63, 0x00, 0x00, 0x60, 0x01, 0x63, 0x01, 0x00,
+    ]),
+  )
+  // function section: 3 local functions with type indices [2,3,4]
+  append_section(out, 3U, bytes_of([0x03, 0x02, 0x03, 0x04]))
+  // export section: export run/a/b
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x03, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00, 0x01, 0x61, 0x00, 0x01, 0x01, 0x62,
+      0x00, 0x02,
+    ]),
+  )
+  // code section:
+  // #0: end
+  // #1: local.get 0; drop; end
+  // #2: local.get 0; drop; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x02, 0x00, 0x0b, 0x05, 0x00, 0x20, 0x00, 0x1a, 0x0b, 0x05, 0x00, 0x20,
+      0x00, 0x1a, 0x0b,
+    ]),
+  )
   Bytes::from_array(out[:])
 }
 
@@ -2945,6 +3015,40 @@ test "optimize type refining works on gc-mixed type section and unlocks dfe" {
 }
 
 ///|
+test "optimize type refining considers gc hierarchy-equivalent refs and unlocks dfe" {
+  let bytes = sample_module_with_gc_hierarchy_duplicate_function_types_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=true,
+    closed_world=true,
+    closed_world_root_exports=["run", "a", "b"],
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("type-refine:types:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dfe:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
 test "optimize signature pruning removes unused trailing params and rewrites callers" {
   let bytes = sample_module_with_signature_pruning_candidate_bytes()
   let config = make_optimize_config(
@@ -4506,6 +4610,35 @@ test "component dce corpus can run component core optimize kpi config" {
       return
     }
     let config = component_dce_kpi_optimize_config(policy.root_name_candidates)
+    guard analyze_component_core_optimize(bytes, config~) is Ok(report) else {
+      inspect(path, content="component core optimize failed")
+      assert_true(false)
+      return
+    }
+    assert_eq(
+      report.entries.length().reinterpret_as_uint(),
+      report.core_module_count,
+    )
+    assert_true(report.total_core_after_bytes <= report.total_core_before_bytes)
+  }
+}
+
+///|
+test "component root policy integrates with gc-aware optimize config" {
+  for path in bench_component_dce_corpus_paths() {
+    let bytes = @fs.read_file_to_bytes(path) catch {
+      _ => {
+        inspect(path, content="missing")
+        assert_true(false)
+        return
+      }
+    }
+    guard analyze_component_root_policy(bytes) is Ok(policy) else {
+      inspect(path, content="root policy failed")
+      assert_true(false)
+      return
+    }
+    let config = component_gc_optimize_config(policy.root_name_candidates)
     guard analyze_component_core_optimize(bytes, config~) is Ok(report) else {
       inspect(path, content="component core optimize failed")
       assert_true(false)

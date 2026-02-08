@@ -1610,6 +1610,189 @@ fn read_ref_type_bytes_raise(parser : Cursor) -> Bytes raise WalyzeError {
 }
 
 ///|
+fn decode_heap_type_ref_index_bytes(heap_type_bytes : Bytes) -> UInt? {
+  if heap_type_bytes.length() == 0 {
+    return None
+  }
+  let last = heap_type_bytes[heap_type_bytes.length() - 1].to_uint()
+  // Signed heaptype immediates with sign bit set are negative builtins.
+  if (last & 0x40U) != 0U {
+    return None
+  }
+  decode_u32_leb128_bytes(heap_type_bytes)
+}
+
+///|
+fn decode_ref_type_index_from_type_bytes(type_bytes : Bytes) -> UInt? {
+  if type_bytes.length() < 2 {
+    return None
+  }
+  let code = type_bytes[0].to_uint()
+  if code != 0x63U && code != 0x64U {
+    return None
+  }
+  decode_heap_type_ref_index_bytes(type_bytes[1:type_bytes.length()].to_bytes())
+}
+
+///|
+fn remap_gc_type_index_for_refine(
+  index : UInt,
+  gc_type_canonical_map : Map[UInt, UInt],
+) -> UInt {
+  match gc_type_canonical_map.get(index) {
+    Some(v) => v
+    None => index
+  }
+}
+
+///|
+fn type_bytes_equal_with_gc_canonical_map(
+  left : Bytes,
+  right : Bytes,
+  gc_type_canonical_map : Map[UInt, UInt],
+) -> Bool {
+  if bytes_equal(left, right) {
+    return true
+  }
+  if left.length() == 0 || right.length() == 0 {
+    return false
+  }
+  let left_code = left[0].to_uint()
+  let right_code = right[0].to_uint()
+  if left_code != right_code {
+    return false
+  }
+  let left_index = match decode_ref_type_index_from_type_bytes(left) {
+    Some(v) => v
+    None => return false
+  }
+  let right_index = match decode_ref_type_index_from_type_bytes(right) {
+    Some(v) => v
+    None => return false
+  }
+  remap_gc_type_index_for_refine(left_index, gc_type_canonical_map) ==
+  remap_gc_type_index_for_refine(right_index, gc_type_canonical_map)
+}
+
+///|
+fn read_storage_type_bytes_raise(
+  parser : Cursor,
+  context : String,
+) -> Bytes raise WalyzeError {
+  let start = parser.get_pos()
+  let code = parser.read_byte().to_uint()
+  match code {
+    0x78U | 0x77U => ()
+    0x7fU | 0x7eU | 0x7dU | 0x7cU | 0x7bU | 0x70U | 0x6fU => ()
+    0x63U | 0x64U => skip_heap_type(parser)
+    _ =>
+      raise WalyzeError::InvalidFormat(
+        "unsupported storage type in " + context + ": " + code.to_string(),
+      )
+  }
+  let end_ = parser.get_pos()
+  parser.bytes[start:end_].to_bytes()
+}
+
+///|
+priv struct ParsedGcTypeField {
+  storage_type : Bytes
+  mutability : Byte
+}
+
+///|
+priv struct ParsedGcTypeEntry {
+  form : UInt
+  fields : Array[ParsedGcTypeField]
+}
+
+///|
+fn parse_gc_non_function_type_entry_from_raw_raise(
+  raw : Bytes,
+  context : String,
+) -> ParsedGcTypeEntry raise WalyzeError {
+  let parser = Cursor::new(raw)
+  let form = parser.read_byte().to_uint()
+  let fields : Array[ParsedGcTypeField] = []
+  match form {
+    0x5fU => {
+      let field_count = parser.read_u32_leb128()
+      for _ in 0U..<field_count {
+        let storage_type = read_storage_type_bytes_raise(parser, context)
+        let mutability = parser.read_byte().to_uint()
+        if mutability > 1U {
+          raise WalyzeError::InvalidFormat(
+            "invalid field mutability in " +
+            context +
+            ": " +
+            mutability.to_string(),
+          )
+        }
+        fields.push({ storage_type, mutability: mutability.to_byte() })
+      }
+    }
+    0x5eU => {
+      let storage_type = read_storage_type_bytes_raise(parser, context)
+      let mutability = parser.read_byte().to_uint()
+      if mutability > 1U {
+        raise WalyzeError::InvalidFormat(
+          "invalid array field mutability in " +
+          context +
+          ": " +
+          mutability.to_string(),
+        )
+      }
+      fields.push({ storage_type, mutability: mutability.to_byte() })
+    }
+    _ =>
+      raise WalyzeError::InvalidFormat(
+        "unsupported gc type form in " + context + ": " + form.to_string(),
+      )
+  }
+  if not(parser.eof()) {
+    raise WalyzeError::InvalidFormat(
+      "trailing bytes in gc type entry in " + context,
+    )
+  }
+  { form, fields }
+}
+
+///|
+fn gc_type_entries_equal_with_canonical_map_raise(
+  left_raw : Bytes,
+  right_raw : Bytes,
+  gc_type_canonical_map : Map[UInt, UInt],
+) -> Bool raise WalyzeError {
+  if bytes_equal(left_raw, right_raw) {
+    return true
+  }
+  let left = parse_gc_non_function_type_entry_from_raw_raise(
+    left_raw, "type-refine-gc-compare",
+  )
+  let right = parse_gc_non_function_type_entry_from_raw_raise(
+    right_raw, "type-refine-gc-compare",
+  )
+  if left.form != right.form || left.fields.length() != right.fields.length() {
+    return false
+  }
+  for i in 0..<left.fields.length() {
+    if left.fields[i].mutability != right.fields[i].mutability {
+      return false
+    }
+    if not(
+        type_bytes_equal_with_gc_canonical_map(
+          left.fields[i].storage_type,
+          right.fields[i].storage_type,
+          gc_type_canonical_map,
+        ),
+      ) {
+      return false
+    }
+  }
+  true
+}
+
+///|
 fn read_const_expr_bytes_raise(
   parser : Cursor,
   payload : Bytes,
@@ -7954,6 +8137,41 @@ fn function_type_results_equal(
 }
 
 ///|
+fn function_type_entries_equal_with_gc_canonical_map(
+  a : FunctionTypeEntry,
+  b : FunctionTypeEntry,
+  gc_type_canonical_map : Map[UInt, UInt],
+) -> Bool {
+  if a.params.length() != b.params.length() ||
+    a.results.length() != b.results.length() {
+    return false
+  }
+  for i in 0..<a.params.length() {
+    if not(
+        type_bytes_equal_with_gc_canonical_map(
+          a.params[i],
+          b.params[i],
+          gc_type_canonical_map,
+        ),
+      ) {
+      return false
+    }
+  }
+  for i in 0..<a.results.length() {
+    if not(
+        type_bytes_equal_with_gc_canonical_map(
+          a.results[i],
+          b.results[i],
+          gc_type_canonical_map,
+        ),
+      ) {
+      return false
+    }
+  }
+  true
+}
+
+///|
 fn can_signature_refine_forward_to_target(
   wrapper_type : FunctionTypeEntry,
   target_type : FunctionTypeEntry,
@@ -8954,6 +9172,36 @@ fn apply_type_refining_raise(
   if parsed_type_entries.length() <= 1 {
     return { bytes, refined_type_count: 0U }
   }
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  let gc_type_canonical_map : Map[UInt, UInt] = {}
+  for i in 0..<parsed_type_entries.length() {
+    let old_type_index = i.reinterpret_as_uint()
+    let entry = parsed_type_entries[i]
+    if entry.form == 0x60U {
+      function_type_entry_by_type_index.set(
+        old_type_index,
+        parse_function_type_entry_from_raw_raise(entry.raw, "type-refine"),
+      )
+      continue
+    }
+    let mut canonical = old_type_index
+    for j in 0..<i {
+      if parsed_type_entries[j].form == entry.form &&
+        parsed_type_entries[j].form != 0x60U &&
+        gc_type_entries_equal_with_canonical_map_raise(
+          entry.raw,
+          parsed_type_entries[j].raw,
+          gc_type_canonical_map,
+        ) {
+        canonical = remap_gc_type_index_for_refine(
+          j.reinterpret_as_uint(),
+          gc_type_canonical_map,
+        )
+        break
+      }
+    }
+    gc_type_canonical_map.set(old_type_index, canonical)
+  }
   let keep_types : Array[Bool] = []
   let canonical_function_type_for_old : Map[UInt, UInt] = {}
   let mut refined_type_count = 0U
@@ -8964,11 +9212,34 @@ fn apply_type_refining_raise(
       keep_types.push(true)
       continue
     }
+    let current_function_type = match
+      function_type_entry_by_type_index.get(old_type_index) {
+      Some(v) => v
+      None =>
+        raise WalyzeError::InvalidFormat(
+          "missing function type entry in type-refine: " +
+          old_type_index.to_string(),
+        )
+    }
     let mut canonical = old_type_index
     for j in 0..<i {
-      if parsed_type_entries[j].form == 0x60U &&
-        bytes_equal(entry.raw, parsed_type_entries[j].raw) {
-        canonical = j.reinterpret_as_uint()
+      if parsed_type_entries[j].form != 0x60U {
+        continue
+      }
+      let candidate_type_index = j.reinterpret_as_uint()
+      let candidate_function_type = match
+        function_type_entry_by_type_index.get(candidate_type_index) {
+        Some(v) => v
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "missing candidate function type entry in type-refine: " +
+            candidate_type_index.to_string(),
+          )
+      }
+      if function_type_entries_equal_with_gc_canonical_map(
+          current_function_type, candidate_function_type, gc_type_canonical_map,
+        ) {
+        canonical = candidate_type_index
         break
       }
     }

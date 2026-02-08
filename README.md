@@ -14,6 +14,20 @@
 - 依存方向は `walyze -> mwac` のみ（`mwac -> walyze` の直接依存は作らない）
 - 連携は「`mwac` が出力した wasm/component bytes を `walyze` が後段で最適化する」形を基本とする
 
+### mwac/walyze bytes I/O 契約
+
+- 入力: `mwac` の生成物（core wasm bytes / component wasm bytes）
+- 出力: 最適化済み bytes（同じバイナリ種別を維持）
+- 不変条件:
+  - decode/encode 可能な wasm 形式を維持する
+  - `--safe-mode` または closed-world policy に従って root 保持を行う
+  - `exclude=[...]` で指定した root 候補は keep 対象に追加する
+- API 契約:
+  - core: `optimize_for_size(bytes, config=...)`
+  - component: `optimize_component_for_size(bytes, config=..., exclude=[...])`
+  - root-policy 診断: `analyze_component_root_policy(bytes, resolved_wit=..., exclude=[...])`
+  - core 内訳診断: `analyze_component_core_optimize(bytes, config=..., exclude=[...])`
+
 It provides:
 
 - core wasm section-size analysis (`twiggy`-style breakdown by section)
