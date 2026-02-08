@@ -13,7 +13,7 @@ fn print_usage() -> Unit {
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
   println(
-    "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
+    "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
   )
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
@@ -403,6 +403,7 @@ fn run_optimize(args : Array[String]) -> Unit {
   }
   let keep_custom_sections = parse_keep_custom(args, 4)
   let closed_world_root_exports = parse_closed_world_roots(args, 4)
+  let excluded_roots = parse_excluded_roots(args, 4)
   let config = @walyze.make_optimize_config(
     strip_all_custom~,
     strip_name_section~,
@@ -425,7 +426,8 @@ fn run_optimize(args : Array[String]) -> Unit {
     safe_mode~,
   )
   let bytes = read_bytes_or_exit(input_path)
-  match @walyze.optimize_for_size(bytes, config~) {
+  match
+    @walyze.optimize_binary_for_size(bytes, config~, exclude=excluded_roots) {
     Ok(result) => {
       @fs.write_bytes_to_file(output_path, result.bytes) catch {
         e => {
@@ -449,8 +451,8 @@ fn run_optimize(args : Array[String]) -> Unit {
         println("no-change reasons: " + result.no_change_reasons.join(", "))
       }
     }
-    Err(e) => {
-      println("optimize failed: " + @walyze.error_to_string(e))
+    Err(msg) => {
+      println("optimize failed: " + msg)
       @sys.exit(1)
     }
   }

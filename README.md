@@ -25,6 +25,8 @@
 - API 契約:
   - core: `optimize_for_size(bytes, config=...)`
   - component: `optimize_component_for_size(bytes, config=..., exclude=[...])`
+  - core/component 自動判定: `optimize_binary_for_size(bytes, config=..., exclude=[...])`
+  - plan 非依存 config 組み立て: `make_component_optimize_config(base=..., root_name_candidates=[...], exclude=[...])`
   - root-policy 診断: `analyze_component_root_policy(bytes, resolved_wit=..., exclude=[...])`
   - core 内訳診断: `analyze_component_core_optimize(bytes, config=..., exclude=[...])`
 
@@ -47,10 +49,10 @@ It provides:
 - core wasm inlining-optimizing base pass (trivial `() -> i32.const` callee inline)
 - core wasm dae-optimizing base pass (drop される純粋式の簡約)
 - core wasm remove-unused-types base pass (function-type pruning + call_indirect type remap + private GC type dependency-aware pruning)
-- core wasm optimize-instructions/precompute/simplify-locals/rse/coalesce-locals base pass (`i32.const+i32.const+i32.add` folding, `i32.const+i32.eqz` folding, `i32.eqz+i32.eqz+br_if` simplification, i32 rhs identity elimination (`+0`, `-0`, `|0`, `^0`, `<<0`, ...), bitwise/cmp simplification around const operands (`x&0 -> 0`, `x&-1 -> x`, `x==0 -> eqz`, `x<u0 -> 0`, `x>=u0 -> 1`, ...), same-local simplification (`x^x -> 0`, `x-x -> 0`, `x==x -> 1`, `x|x -> x`, ...), straight-line local const propagation, `local.set+local.get -> local.tee`, `local.tee+drop -> local.set`, `local.tee+local.set(same) -> local.set`, `local.get/global.get/ref.func/ref.null + drop` elision, local simplification fixed-point rounds, unused local elimination + local index compaction)
+- core wasm optimize-instructions/precompute/simplify-locals/rse/coalesce-locals base pass (`i32.const+i32.const+i32.add` folding, `i32.const+i32.eqz` folding, `i32.eqz+i32.eqz+br_if` simplification, i32 rhs identity elimination (`+0`, `-0`, `|0`, `^0`, `<<0`, ...), bitwise/cmp simplification around const operands (`x&0 -> 0`, `x&-1 -> x`, `x==0 -> eqz`, `x<u0 -> 0`, `x>=u0 -> 1`, ...), same-local simplification (`x^x -> 0`, `x-x -> 0`, `x==x -> 1`, `x|x -> x`, ...), straight-line local const propagation, `local.set+local.get -> local.tee`, `local.tee+drop -> local.set`, `local.tee+local.set(same) -> local.set`, `local.get/global.get/ref.func/ref.null/memory.size/table.size + drop` elision, local simplification fixed-point rounds, unused local elimination + local index compaction)
 - custom section strip passes (`strip-debug` / `strip-dwarf` / `strip-target-features`)
 - optimization level presets (`-O0/-O1/-O2/-O3/-Os/-Oz`, plus `--converge`)
-- size-oriented optimization pass (`wasm-opt`-style custom section stripping + vacuum + merge-blocks + remove-unused-brs + peephole + DCE + DFE + MSF)
+- size-oriented optimization pass (`wasm-opt`-style custom section stripping + vacuum + merge-blocks + remove-unused-brs + peephole + DCE + DFE + MSF + best-effort RUME)
 - closed-world root filtering (`--closed-world --closed-world-root=...`, with `--safe-mode` override)
 - static module profiler (imports/exports/functions/code-body bytes)
 - runtime profiler for zero-arg exports (call count / total ns / avg ns)
@@ -59,6 +61,7 @@ It provides:
 - component core-module call graph reports
 - WIT contract gap analysis (`mizchi/wit` integration)
 - component root-policy report (`component exports` + `WIT exports` + canonical ABI candidates)
+- component fixed-point optimize（`component -> core optimize -> component`、`--converge` で反復）
 
 ## CLI
 
@@ -80,6 +83,8 @@ just run -- component-dce-kpi path/to/component.wasm path/to/wit-dir --exclude=h
 just run -- contract path/to/component.wasm path/to/wit-dir
 just run -- root-policy path/to/component.wasm path/to/wit-dir --exclude=hello
 ```
+
+`optimize` は入力ヘッダから core/component を自動判定し、component では固定点ループ（`--converge` / `--rounds=<n>`）を適用します。
 
 連携例（bundler + minifier）:
 
@@ -103,11 +108,13 @@ Main APIs are in `src/lib.mbt`:
 - `analyze_keep_reasons(bytes, config=...)`
 - `analyze_dce_report(bytes)`
 - `optimize_for_size(bytes, config=...)`
+- `optimize_binary_for_size(bytes, config=..., exclude=[...])`
 - `profile_module(bytes)`
 - `profile_runtime_zero_arg_exports(bytes, iterations=...)`
 - `profile_component(bytes)`
 - `analyze_component_function_sizes(bytes)`
 - `analyze_component_call_graphs(bytes)`
+- `make_component_optimize_config(base=..., root_name_candidates=[...], exclude=[...])`
 - `optimize_component_for_size(bytes, config=..., exclude=[...])`
 - `analyze_component_core_optimize(bytes, config=..., exclude=[...])`
 - `analyze_component_contract(bytes, resolved_wit)`

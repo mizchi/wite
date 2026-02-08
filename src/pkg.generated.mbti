@@ -32,7 +32,11 @@ pub fn analyze_wasm_breakdown(Bytes, top_limit? : UInt) -> Result[WasmBreakdownR
 
 pub fn error_to_string(WalyzeError) -> String
 
+pub fn make_component_optimize_config(base? : OptimizeConfig, root_name_candidates? : Array[String], exclude? : Array[String]) -> OptimizeConfig
+
 pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> OptimizeConfig
+
+pub fn optimize_binary_for_size(Bytes, config? : OptimizeConfig, exclude? : Array[String]) -> Result[OptimizeResult, String]
 
 pub fn optimize_component_for_size(Bytes, config? : OptimizeConfig, exclude? : Array[String]) -> Result[OptimizeResult, String]
 
