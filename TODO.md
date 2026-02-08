@@ -132,7 +132,7 @@
 - [x] `coalesce-locals` 最小実装（unused local 削減 + local index 圧縮）
 - [x] `inlining-optimizing` の最小実装（`() -> i32.const` callee の call inline）
 - [x] `dae-optimizing` の最小実装（drop される純粋式の除去）
-- [ ] `duplicate-import-elimination` を検討する
+- [x] `duplicate-import-elimination` の最小実装（func/table/memory/global の重複 import 統合 + index remap）
 - [ ] `simplify-globals*` / `reorder-globals` / `memory-packing` を検討する
 
 ## P6: 計測と品質

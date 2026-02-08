@@ -1084,6 +1084,64 @@ fn rewrite_import_section_payload_for_keep_raise(
 }
 
 ///|
+fn rewrite_import_section_payload_for_keep_kinds_raise(
+  payload : Bytes,
+  keep_function_imports : Array[Bool],
+  keep_table_imports : Array[Bool],
+  keep_memory_imports : Array[Bool],
+  keep_global_imports : Array[Bool],
+) -> (Bytes, UInt) raise WalyzeError {
+  let entries = parse_import_section_entries_raise(payload)
+  let kept_entries : Array[Bytes] = []
+  let mut removed_count = 0U
+  for entry in entries {
+    let mut keep = true
+    if entry.kind == 0U {
+      let index = UInt::reinterpret_as_int(entry.kind_index)
+      if index < 0 || index >= keep_function_imports.length() {
+        raise WalyzeError::InvalidFormat(
+          "function import keep index out of range",
+        )
+      }
+      keep = keep_function_imports[index]
+    } else if entry.kind == 1U {
+      let index = UInt::reinterpret_as_int(entry.kind_index)
+      if index < 0 || index >= keep_table_imports.length() {
+        raise WalyzeError::InvalidFormat("table import keep index out of range")
+      }
+      keep = keep_table_imports[index]
+    } else if entry.kind == 2U {
+      let index = UInt::reinterpret_as_int(entry.kind_index)
+      if index < 0 || index >= keep_memory_imports.length() {
+        raise WalyzeError::InvalidFormat(
+          "memory import keep index out of range",
+        )
+      }
+      keep = keep_memory_imports[index]
+    } else if entry.kind == 3U {
+      let index = UInt::reinterpret_as_int(entry.kind_index)
+      if index < 0 || index >= keep_global_imports.length() {
+        raise WalyzeError::InvalidFormat(
+          "global import keep index out of range",
+        )
+      }
+      keep = keep_global_imports[index]
+    }
+    if keep {
+      kept_entries.push(entry.bytes)
+    } else {
+      removed_count += 1U
+    }
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(kept_entries.length().reinterpret_as_uint())[:])
+  for entry in kept_entries {
+    out.append(entry[:].to_array())
+  }
+  (Bytes::from_array(out[:]), removed_count)
+}
+
+///|
 fn parse_import_function_type_indices(
   payload : Bytes,
 ) -> Array[UInt] raise WalyzeError {
@@ -2530,6 +2588,15 @@ fn remap_data_segment_index_raise(
         "data segment remap missing index: " + index.to_string(),
       )
   }
+}
+
+///|
+fn make_identity_index_map(count : UInt) -> Map[UInt, UInt] {
+  let out : Map[UInt, UInt] = {}
+  for i in 0U..<count {
+    out.set(i, i)
+  }
+  out
 }
 
 ///|
@@ -5955,6 +6022,543 @@ fn apply_coalesce_locals_raise(
 }
 
 ///|
+fn apply_duplicate_import_elimination(
+  bytes : Bytes,
+) -> DuplicateImportElimApplyResult {
+  let result = try? apply_duplicate_import_elimination_raise(bytes)
+  match result {
+    Ok(v) => v
+    Err(_) => {
+      bytes,
+      removed_import_count: 0U,
+      removed_function_import_count: 0U,
+      removed_table_import_count: 0U,
+      removed_memory_import_count: 0U,
+      removed_global_import_count: 0U,
+      dropped_name_section: false,
+    }
+  }
+}
+
+///|
+fn apply_duplicate_import_elimination_raise(
+  bytes : Bytes,
+) -> DuplicateImportElimApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut import_section_payload : Bytes? = None
+  let mut function_section_payload : Bytes? = None
+  let mut table_section_payload : Bytes? = None
+  let mut memory_section_payload : Bytes? = None
+  let mut global_section_payload : Bytes? = None
+  let mut element_section_payload : Bytes? = None
+  let mut data_section_payload : Bytes? = None
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U => import_section_payload = Some(payload)
+      3U => function_section_payload = Some(payload)
+      4U => table_section_payload = Some(payload)
+      5U => memory_section_payload = Some(payload)
+      6U => global_section_payload = Some(payload)
+      9U => element_section_payload = Some(payload)
+      11U => data_section_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let import_payload = match import_section_payload {
+    Some(v) => v
+    None =>
+      return {
+        bytes,
+        removed_import_count: 0U,
+        removed_function_import_count: 0U,
+        removed_table_import_count: 0U,
+        removed_memory_import_count: 0U,
+        removed_global_import_count: 0U,
+        dropped_name_section: false,
+      }
+  }
+  let import_entries = parse_import_section_entries_raise(import_payload)
+  if import_entries.length() <= 1 {
+    return {
+      bytes,
+      removed_import_count: 0U,
+      removed_function_import_count: 0U,
+      removed_table_import_count: 0U,
+      removed_memory_import_count: 0U,
+      removed_global_import_count: 0U,
+      dropped_name_section: false,
+    }
+  }
+  let mut imported_function_count = 0U
+  let mut imported_table_count = 0U
+  let mut imported_memory_count = 0U
+  let mut imported_global_count = 0U
+  for entry in import_entries {
+    match entry.kind {
+      0U => imported_function_count += 1U
+      1U => imported_table_count += 1U
+      2U => imported_memory_count += 1U
+      3U => imported_global_count += 1U
+      _ => ()
+    }
+  }
+  let keep_function_imports : Array[Bool] = []
+  for _ in 0U..<imported_function_count {
+    keep_function_imports.push(true)
+  }
+  let keep_table_imports : Array[Bool] = []
+  for _ in 0U..<imported_table_count {
+    keep_table_imports.push(true)
+  }
+  let keep_memory_imports : Array[Bool] = []
+  for _ in 0U..<imported_memory_count {
+    keep_memory_imports.push(true)
+  }
+  let keep_global_imports : Array[Bool] = []
+  for _ in 0U..<imported_global_count {
+    keep_global_imports.push(true)
+  }
+  let unique_function_import_entries : Array[Bytes] = []
+  let unique_function_import_indices : Array[UInt] = []
+  let canonical_function_import_index : Map[UInt, UInt] = {}
+  let unique_table_import_entries : Array[Bytes] = []
+  let unique_table_import_indices : Array[UInt] = []
+  let canonical_table_import_index : Map[UInt, UInt] = {}
+  let unique_memory_import_entries : Array[Bytes] = []
+  let unique_memory_import_indices : Array[UInt] = []
+  let canonical_memory_import_index : Map[UInt, UInt] = {}
+  let unique_global_import_entries : Array[Bytes] = []
+  let unique_global_import_indices : Array[UInt] = []
+  let canonical_global_import_index : Map[UInt, UInt] = {}
+  let mut removed_function_import_count = 0U
+  let mut removed_table_import_count = 0U
+  let mut removed_memory_import_count = 0U
+  let mut removed_global_import_count = 0U
+  for entry in import_entries {
+    match entry.kind {
+      0U => {
+        let mut canonical = entry.kind_index
+        let mut found = false
+        for i in 0..<unique_function_import_entries.length() {
+          if bytes_equal(unique_function_import_entries[i], entry.bytes) {
+            canonical = unique_function_import_indices[i]
+            found = true
+            break
+          }
+        }
+        if not(found) {
+          unique_function_import_entries.push(entry.bytes)
+          unique_function_import_indices.push(entry.kind_index)
+        }
+        canonical_function_import_index.set(entry.kind_index, canonical)
+        if canonical != entry.kind_index {
+          let old_pos = UInt::reinterpret_as_int(entry.kind_index)
+          if old_pos < 0 || old_pos >= keep_function_imports.length() {
+            raise WalyzeError::InvalidFormat(
+              "function import dedupe index out of range",
+            )
+          }
+          keep_function_imports[old_pos] = false
+          removed_function_import_count += 1U
+        }
+      }
+      1U => {
+        let mut canonical = entry.kind_index
+        let mut found = false
+        for i in 0..<unique_table_import_entries.length() {
+          if bytes_equal(unique_table_import_entries[i], entry.bytes) {
+            canonical = unique_table_import_indices[i]
+            found = true
+            break
+          }
+        }
+        if not(found) {
+          unique_table_import_entries.push(entry.bytes)
+          unique_table_import_indices.push(entry.kind_index)
+        }
+        canonical_table_import_index.set(entry.kind_index, canonical)
+        if canonical != entry.kind_index {
+          let old_pos = UInt::reinterpret_as_int(entry.kind_index)
+          if old_pos < 0 || old_pos >= keep_table_imports.length() {
+            raise WalyzeError::InvalidFormat(
+              "table import dedupe index out of range",
+            )
+          }
+          keep_table_imports[old_pos] = false
+          removed_table_import_count += 1U
+        }
+      }
+      2U => {
+        let mut canonical = entry.kind_index
+        let mut found = false
+        for i in 0..<unique_memory_import_entries.length() {
+          if bytes_equal(unique_memory_import_entries[i], entry.bytes) {
+            canonical = unique_memory_import_indices[i]
+            found = true
+            break
+          }
+        }
+        if not(found) {
+          unique_memory_import_entries.push(entry.bytes)
+          unique_memory_import_indices.push(entry.kind_index)
+        }
+        canonical_memory_import_index.set(entry.kind_index, canonical)
+        if canonical != entry.kind_index {
+          let old_pos = UInt::reinterpret_as_int(entry.kind_index)
+          if old_pos < 0 || old_pos >= keep_memory_imports.length() {
+            raise WalyzeError::InvalidFormat(
+              "memory import dedupe index out of range",
+            )
+          }
+          keep_memory_imports[old_pos] = false
+          removed_memory_import_count += 1U
+        }
+      }
+      3U => {
+        let mut canonical = entry.kind_index
+        let mut found = false
+        for i in 0..<unique_global_import_entries.length() {
+          if bytes_equal(unique_global_import_entries[i], entry.bytes) {
+            canonical = unique_global_import_indices[i]
+            found = true
+            break
+          }
+        }
+        if not(found) {
+          unique_global_import_entries.push(entry.bytes)
+          unique_global_import_indices.push(entry.kind_index)
+        }
+        canonical_global_import_index.set(entry.kind_index, canonical)
+        if canonical != entry.kind_index {
+          let old_pos = UInt::reinterpret_as_int(entry.kind_index)
+          if old_pos < 0 || old_pos >= keep_global_imports.length() {
+            raise WalyzeError::InvalidFormat(
+              "global import dedupe index out of range",
+            )
+          }
+          keep_global_imports[old_pos] = false
+          removed_global_import_count += 1U
+        }
+      }
+      _ => ()
+    }
+  }
+  let removed_import_count = removed_function_import_count +
+    removed_table_import_count +
+    removed_memory_import_count +
+    removed_global_import_count
+  if removed_import_count == 0U {
+    return {
+      bytes,
+      removed_import_count: 0U,
+      removed_function_import_count: 0U,
+      removed_table_import_count: 0U,
+      removed_memory_import_count: 0U,
+      removed_global_import_count: 0U,
+      dropped_name_section: false,
+    }
+  }
+  let local_function_count = match function_section_payload {
+    Some(payload) => parse_vec_count(payload)
+    None => 0U
+  }
+  let local_table_count = match table_section_payload {
+    Some(payload) => parse_table_section_entries_raise(payload).length().reinterpret_as_uint()
+    None => 0U
+  }
+  let local_memory_count = match memory_section_payload {
+    Some(payload) => parse_memory_section_entries_raise(payload).length().reinterpret_as_uint()
+    None => 0U
+  }
+  let local_global_count = match global_section_payload {
+    Some(payload) =>
+      parse_global_section_entries_with_refs_raise(payload)
+      .length()
+      .reinterpret_as_uint()
+    None => 0U
+  }
+  let function_index_map : Map[UInt, UInt] = {}
+  let mut kept_function_import_count = 0U
+  for i in 0U..<imported_function_count {
+    let i_pos = UInt::reinterpret_as_int(i)
+    if i_pos < 0 || i_pos >= keep_function_imports.length() {
+      raise WalyzeError::InvalidFormat(
+        "function import keep index out of range in dedupe map",
+      )
+    }
+    if keep_function_imports[i_pos] {
+      function_index_map.set(i, kept_function_import_count)
+      kept_function_import_count += 1U
+    }
+  }
+  for i in 0U..<imported_function_count {
+    let i_pos = UInt::reinterpret_as_int(i)
+    if i_pos < 0 || i_pos >= keep_function_imports.length() {
+      raise WalyzeError::InvalidFormat(
+        "function import keep index out of range in dedupe map canonical",
+      )
+    }
+    if not(keep_function_imports[i_pos]) {
+      let canonical = match canonical_function_import_index.get(i) {
+        Some(v) => v
+        None => i
+      }
+      function_index_map.set(
+        i,
+        remap_function_index_raise(canonical, function_index_map),
+      )
+    }
+  }
+  for i in 0U..<local_function_count {
+    let old_index = imported_function_count + i
+    function_index_map.set(old_index, kept_function_import_count + i)
+  }
+  let table_index_map : Map[UInt, UInt] = {}
+  let mut kept_table_import_count = 0U
+  for i in 0U..<imported_table_count {
+    let i_pos = UInt::reinterpret_as_int(i)
+    if i_pos < 0 || i_pos >= keep_table_imports.length() {
+      raise WalyzeError::InvalidFormat(
+        "table import keep index out of range in dedupe map",
+      )
+    }
+    if keep_table_imports[i_pos] {
+      table_index_map.set(i, kept_table_import_count)
+      kept_table_import_count += 1U
+    }
+  }
+  for i in 0U..<imported_table_count {
+    let i_pos = UInt::reinterpret_as_int(i)
+    if i_pos < 0 || i_pos >= keep_table_imports.length() {
+      raise WalyzeError::InvalidFormat(
+        "table import keep index out of range in dedupe map canonical",
+      )
+    }
+    if not(keep_table_imports[i_pos]) {
+      let canonical = match canonical_table_import_index.get(i) {
+        Some(v) => v
+        None => i
+      }
+      table_index_map.set(i, remap_table_index_raise(canonical, table_index_map))
+    }
+  }
+  for i in 0U..<local_table_count {
+    let old_index = imported_table_count + i
+    table_index_map.set(old_index, kept_table_import_count + i)
+  }
+  let memory_index_map : Map[UInt, UInt] = {}
+  let mut kept_memory_import_count = 0U
+  for i in 0U..<imported_memory_count {
+    let i_pos = UInt::reinterpret_as_int(i)
+    if i_pos < 0 || i_pos >= keep_memory_imports.length() {
+      raise WalyzeError::InvalidFormat(
+        "memory import keep index out of range in dedupe map",
+      )
+    }
+    if keep_memory_imports[i_pos] {
+      memory_index_map.set(i, kept_memory_import_count)
+      kept_memory_import_count += 1U
+    }
+  }
+  for i in 0U..<imported_memory_count {
+    let i_pos = UInt::reinterpret_as_int(i)
+    if i_pos < 0 || i_pos >= keep_memory_imports.length() {
+      raise WalyzeError::InvalidFormat(
+        "memory import keep index out of range in dedupe map canonical",
+      )
+    }
+    if not(keep_memory_imports[i_pos]) {
+      let canonical = match canonical_memory_import_index.get(i) {
+        Some(v) => v
+        None => i
+      }
+      memory_index_map.set(
+        i,
+        remap_memory_index_raise(canonical, memory_index_map),
+      )
+    }
+  }
+  for i in 0U..<local_memory_count {
+    let old_index = imported_memory_count + i
+    memory_index_map.set(old_index, kept_memory_import_count + i)
+  }
+  let global_index_map : Map[UInt, UInt] = {}
+  let mut kept_global_import_count = 0U
+  for i in 0U..<imported_global_count {
+    let i_pos = UInt::reinterpret_as_int(i)
+    if i_pos < 0 || i_pos >= keep_global_imports.length() {
+      raise WalyzeError::InvalidFormat(
+        "global import keep index out of range in dedupe map",
+      )
+    }
+    if keep_global_imports[i_pos] {
+      global_index_map.set(i, kept_global_import_count)
+      kept_global_import_count += 1U
+    }
+  }
+  for i in 0U..<imported_global_count {
+    let i_pos = UInt::reinterpret_as_int(i)
+    if i_pos < 0 || i_pos >= keep_global_imports.length() {
+      raise WalyzeError::InvalidFormat(
+        "global import keep index out of range in dedupe map canonical",
+      )
+    }
+    if not(keep_global_imports[i_pos]) {
+      let canonical = match canonical_global_import_index.get(i) {
+        Some(v) => v
+        None => i
+      }
+      global_index_map.set(
+        i,
+        remap_global_index_raise(canonical, global_index_map),
+      )
+    }
+  }
+  for i in 0U..<local_global_count {
+    let old_index = imported_global_count + i
+    global_index_map.set(old_index, kept_global_import_count + i)
+  }
+  let keep_local_functions : Array[Bool] = []
+  for _ in 0U..<local_function_count {
+    keep_local_functions.push(true)
+  }
+  let keep_local_globals : Array[Bool] = []
+  for _ in 0U..<local_global_count {
+    keep_local_globals.push(true)
+  }
+  let element_index_map = match element_section_payload {
+    Some(payload) => make_identity_index_map(parse_vec_count(payload))
+    None => make_identity_index_map(0U)
+  }
+  let data_index_map = match data_section_payload {
+    Some(payload) => make_identity_index_map(parse_vec_count(payload))
+    None => make_identity_index_map(0U)
+  }
+  let (rewritten_import_payload, removed_by_rewrite) = rewrite_import_section_payload_for_keep_kinds_raise(
+    import_payload,
+    keep_function_imports,
+    keep_table_imports,
+    keep_memory_imports,
+    keep_global_imports,
+  )
+  let out : Array[Byte] = bytes[0:8].to_array()
+  let mut dropped_name_section = false
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U =>
+        if parse_vec_count(rewritten_import_payload) > 0U {
+          append_encoded_section(out, 2U, rewritten_import_payload)
+        }
+      6U => {
+        let rewritten_function = rewrite_global_section_payload_for_index_map_raise(
+          payload,
+          function_index_map,
+        )
+        let rewritten = rewrite_global_section_payload_for_keep_local_and_global_index_map_raise(
+          rewritten_function,
+          keep_local_globals,
+          global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 6U, rewritten)
+        }
+      }
+      7U => {
+        let rewritten_function = rewrite_export_section_payload_for_dce_raise(
+          payload,
+          function_index_map,
+        )
+        let (rewritten, _) = rewrite_export_section_payload_for_module_index_maps_raise(
+          rewritten_function,
+          table_index_map,
+          memory_index_map,
+          global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 7U, rewritten)
+        }
+      }
+      8U =>
+        append_encoded_section(
+          out,
+          8U,
+          rewrite_start_section_payload_for_dce_raise(payload, function_index_map),
+        )
+      9U => {
+        let rewritten_function = rewrite_element_section_payload_for_index_map_raise(
+          payload,
+          function_index_map,
+        )
+        let (rewritten, _, _) = rewrite_element_section_payload_for_table_index_map_raise(
+          rewritten_function,
+          table_index_map,
+          global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 9U, rewritten)
+        }
+      }
+      10U => {
+        let rewritten_function = rewrite_code_section_payload_for_dce_raise(
+          payload,
+          keep_local_functions,
+          function_index_map,
+        )
+        let rewritten = rewrite_code_section_payload_for_module_index_map_raise(
+          rewritten_function,
+          table_index_map,
+          memory_index_map,
+          global_index_map,
+          element_index_map,
+          data_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 10U, rewritten)
+        }
+      }
+      11U => {
+        let (rewritten, _, _) = rewrite_data_section_payload_for_memory_global_index_map_raise(
+          payload,
+          memory_index_map,
+          global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 11U, rewritten)
+        }
+      }
+      0U =>
+        match section.custom_name {
+          Some(name) =>
+            if name == "name" && removed_function_import_count > 0U {
+              dropped_name_section = true
+            } else {
+              out.append(
+                bytes[section.section_start:section.section_end].to_array(),
+              )
+            }
+          None =>
+            out.append(
+              bytes[section.section_start:section.section_end].to_array(),
+            )
+        }
+      _ =>
+        out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  {
+    bytes: Bytes::from_array(out[:]),
+    removed_import_count: removed_by_rewrite,
+    removed_function_import_count,
+    removed_table_import_count,
+    removed_memory_import_count,
+    removed_global_import_count,
+    dropped_name_section,
+  }
+}
+
+///|
 fn decode_const_expr_i32_const_nonnegative_offset_raise(
   expr_bytes : Bytes,
 ) -> UInt? raise WalyzeError {
@@ -6327,6 +6931,14 @@ fn should_signature_prune(config : OptimizeConfig) -> Bool {
 }
 
 ///|
+fn should_duplicate_import_eliminate(config : OptimizeConfig) -> Bool {
+  config.enable_dce ||
+  config.enable_dfe ||
+  config.enable_merge_similar_functions ||
+  config.enable_remove_unused_module_elements
+}
+
+///|
 fn custom_strip_pass_requested(config : OptimizeConfig) -> Bool {
   config.strip_all_custom ||
   config.strip_name_section ||
@@ -6463,6 +7075,29 @@ fn optimize_for_size_round_raise(
       removed_sections.push(
         "coalesce-locals:removed:" + coalesce.removed_local_count.to_string(),
       )
+    }
+  }
+  if should_duplicate_import_eliminate(config) {
+    let duplicate_import_elim = apply_duplicate_import_elimination(
+      optimized_bytes,
+    )
+    optimized_bytes = duplicate_import_elim.bytes
+    if duplicate_import_elim.removed_import_count > 0U {
+      removed_sections.push(
+        "dup-imports:imports:" +
+        duplicate_import_elim.removed_import_count.to_string() +
+        " funcs:" +
+        duplicate_import_elim.removed_function_import_count.to_string() +
+        " tables:" +
+        duplicate_import_elim.removed_table_import_count.to_string() +
+        " memories:" +
+        duplicate_import_elim.removed_memory_import_count.to_string() +
+        " globals:" +
+        duplicate_import_elim.removed_global_import_count.to_string(),
+      )
+    }
+    if duplicate_import_elim.dropped_name_section {
+      removed_sections.push("custom:name(dup-imports)")
     }
   }
   if config.enable_dce {
@@ -7957,6 +8592,17 @@ priv struct CfpApplyResult {
 priv struct SignatureRefineApplyResult {
   bytes : Bytes
   rewritten_call_count : UInt
+}
+
+///|
+priv struct DuplicateImportElimApplyResult {
+  bytes : Bytes
+  removed_import_count : UInt
+  removed_function_import_count : UInt
+  removed_table_import_count : UInt
+  removed_memory_import_count : UInt
+  removed_global_import_count : UInt
+  dropped_name_section : Bool
 }
 
 ///|

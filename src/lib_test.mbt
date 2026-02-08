@@ -1877,6 +1877,72 @@ fn sample_module_with_unused_import_memory_global_table_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_duplicate_imports_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0: () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // import section:
+  //   func env.f type 0 (x2 duplicate)
+  //   table env.t (x2 duplicate)
+  //   memory env.m (x2 duplicate)
+  //   global env.g i32 const (x2 duplicate)
+  append_section(
+    out,
+    2U,
+    bytes_of([
+      0x08, 0x03, 0x65, 0x6e, 0x76, 0x01, 0x66, 0x00, 0x00, 0x03, 0x65, 0x6e, 0x76,
+      0x01, 0x66, 0x00, 0x00, 0x03, 0x65, 0x6e, 0x76, 0x01, 0x74, 0x01, 0x70, 0x00,
+      0x01, 0x03, 0x65, 0x6e, 0x76, 0x01, 0x74, 0x01, 0x70, 0x00, 0x01, 0x03, 0x65,
+      0x6e, 0x76, 0x01, 0x6d, 0x02, 0x00, 0x01, 0x03, 0x65, 0x6e, 0x76, 0x01, 0x6d,
+      0x02, 0x00, 0x01, 0x03, 0x65, 0x6e, 0x76, 0x01, 0x67, 0x03, 0x7f, 0x00, 0x03,
+      0x65, 0x6e, 0x76, 0x01, 0x67, 0x03, 0x7f, 0x00,
+    ]),
+  )
+  // function section: 1 local function (index old=2)
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // global section:
+  //   local#0(index old=2): i32 = global.get 1
+  //   local#1(index old=3): funcref = ref.func 1
+  append_section(
+    out,
+    6U,
+    bytes_of([0x02, 0x7f, 0x00, 0x23, 0x01, 0x0b, 0x70, 0x00, 0xd2, 0x01, 0x0b]),
+  )
+  // export section:
+  //   run(func old=2), t(table old=1), m(memory old=1), gfun(global old=3)
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x04, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x02, 0x01, 0x74, 0x01, 0x01, 0x01, 0x6d,
+      0x02, 0x01, 0x04, 0x67, 0x66, 0x75, 0x6e, 0x03, 0x03,
+    ]),
+  )
+  // start section: old function index 2
+  append_section(out, 8U, bytes_of([0x02]))
+  // element section:
+  //   active table old=1, function old=2
+  append_section(out, 9U, bytes_of([0x01, 0x02, 0x01, 0x41, 0x00, 0x0b, 0x00, 0x01, 0x02]))
+  // code section (#0):
+  //   call 1; global.get 2; drop; global.get 3; drop;
+  //   table.size 1; drop; memory.size 1; drop; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x11, 0x00, 0x10, 0x01, 0x23, 0x02, 0x1a, 0x23, 0x03, 0x1a, 0xfc, 0x10,
+      0x01, 0x1a, 0x3f, 0x01, 0x1a, 0x0b,
+    ]),
+  )
+  // data section:
+  //   active memory old=1
+  append_section(out, 11U, bytes_of([0x01, 0x02, 0x01, 0x41, 0x00, 0x0b, 0x01, 0x00]))
+  Bytes::from_array(out[:])
+}
+
+///|
 fn bytes_contains_seq(bytes : Bytes, seq : Array[Int]) -> Bool {
   if seq.length() == 0 {
     return true
@@ -2767,6 +2833,61 @@ test "optimize with rume apply removes unused import/global/memory/table and rem
       0x07, 0x67, 0x5f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x03, 0x02,
     ]),
   )
+}
+
+///|
+test "optimize removes duplicate imports and remaps all related indices" {
+  let bytes = sample_module_with_duplicate_imports_bytes()
+  guard profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.import_count, 8U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.removed_sections.any(s => s.contains("dup-imports:")))
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.import_count, 4U)
+  assert_true(bytes_contains_seq(optimized.bytes, [0x10, 0x00]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
+  assert_true(bytes_contains_seq(optimized.bytes, [0xd2, 0x00, 0x0b]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0xd2, 0x01, 0x0b])))
+  assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x00]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x01])))
+  assert_true(bytes_contains_seq(optimized.bytes, [0x3f, 0x00]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x3f, 0x01])))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x03, 0x72, 0x75, 0x6e, 0x00, 0x01,
+    ]),
+  )
+  assert_true(bytes_contains_seq(optimized.bytes, [0x01, 0x74, 0x01, 0x00]))
+  assert_true(bytes_contains_seq(optimized.bytes, [0x01, 0x6d, 0x02, 0x00]))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x04, 0x67, 0x66, 0x75, 0x6e, 0x03, 0x02,
+    ]),
+  )
+  assert_true(bytes_contains_seq(optimized.bytes, [0x08, 0x01, 0x01]))
+  assert_true(runtime_zero_arg_export_behaviors_equal(bytes, optimized.bytes))
 }
 
 ///|
