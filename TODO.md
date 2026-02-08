@@ -30,6 +30,8 @@
 
 ## Recent Progress
 
+- [x] Perf: `analyze_call_graph` / `analyze_call_graph_summary` を body 直走査 (`collect_direct_callees_from_body_raise`) + bitmap visited に置換し、`parse_instruction_spans` 依存を除去
+- [x] Bench: `moon bench` 内部 driver 計測で `analyze summary` が改善（`pglite mean: 110527us -> 73258us`, `duckdb mean: 801982us -> 546504us`）
 - [x] P5: `inlining-optimizing` を拡張（identity/no-op callee を call-site で除去）し、zlib の DCE 連鎖を強化
 - [x] Analyze: `runtime-profile` / `hot-size` を import 依存 wasm でも動作する stub import 生成に拡張
 - [x] KPI: `collect_kpi.sh` の section parser を更新し、`zlib_gap.md` の section delta（code/function/type）を復旧

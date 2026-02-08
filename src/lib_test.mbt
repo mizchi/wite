@@ -865,6 +865,30 @@ fn sample_module_with_duplicate_export_roots_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_duplicate_direct_calls_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 2 local functions
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export index 0 as "main"
+  append_section(
+    out,
+    7U,
+    bytes_of([0x01, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00]),
+  )
+  // code section:
+  // #0: call 1; call 1; end
+  // #1: end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x02, 0x06, 0x00, 0x10, 0x01, 0x10, 0x01, 0x0b, 0x02, 0x00, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_fc_opcode_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -3243,6 +3267,21 @@ test "analyze call graph summary marks indirect calls" {
   assert_true(not(summary.partial))
   assert_eq(summary.reachable_function_count, 1U)
   assert_eq(summary.dead_function_count, 0U)
+}
+
+///|
+test "analyze call graph deduplicates duplicate direct callees" {
+  let bytes = sample_module_with_duplicate_direct_calls_bytes()
+  guard analyze_call_graph(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.imported_function_count, 0U)
+  assert_eq(report.local_function_count, 2U)
+  assert_eq(report.nodes.length(), 2)
+  assert_eq(report.nodes[0].direct_callees, [1U])
+  assert_true(report.nodes[0].reachable_from_roots)
+  assert_true(report.nodes[1].reachable_from_roots)
 }
 
 ///|

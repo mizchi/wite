@@ -1766,28 +1766,62 @@ fn decode_u32_leb128_bytes(bytes : Bytes) -> UInt? {
 }
 
 ///|
+fn decode_u32_leb128_range(
+  bytes : Bytes,
+  start : Int,
+  end_ : Int,
+) -> UInt? {
+  if start < 0 || start >= end_ || end_ > bytes.length() {
+    return None
+  }
+  let parser = Cursor::new(bytes)
+  parser.set_pos(start)
+  let result = try? parser.read_u32_leb128()
+  match result {
+    Ok(v) => if parser.get_pos() == end_ { Some(v) } else { None }
+    Err(_) => None
+  }
+}
+
+///|
 fn collect_direct_callees(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
 ) -> (Array[UInt], Bool) {
   let callees : Array[UInt] = []
-  let callee_seen : Map[UInt, Bool] = {}
   let mut has_indirect = false
   for span in spans {
     if span.opcode == 0x10U {
-      if span.end_ > span.start + 1 {
-        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
-        match decode_u32_leb128_bytes(imm) {
-          Some(index) =>
-            if callee_seen.get(index) is None {
-              callee_seen.set(index, true)
-              callees.push(index)
-            }
-          None => ()
-        }
+      match decode_span_u32_immediate(instr_bytes, span) {
+        Some(index) => push_unique_u32(callees, index)
+        None => ()
       }
     } else if span.opcode == 0x11U {
       has_indirect = true
+    }
+  }
+  (callees, has_indirect)
+}
+
+///|
+fn collect_direct_callees_from_body_raise(
+  body : Bytes,
+) -> (Array[UInt], Bool) raise WalyzeError {
+  let prefix_end = parse_local_decl_prefix_end(body)
+  let parser = Cursor::new(body)
+  parser.set_pos(prefix_end)
+  let callees : Array[UInt] = []
+  let mut has_indirect = false
+  while not(parser.eof()) {
+    let opcode = parser.read_byte().to_uint()
+    match opcode {
+      0x10U => push_unique_u32(callees, parser.read_u32_leb128())
+      0x11U => {
+        has_indirect = true
+        ignore(parser.read_u32_leb128())
+        ignore(parser.read_u32_leb128())
+      }
+      _ => skip_instruction_immediate_raise(parser, opcode)
     }
   }
   (callees, has_indirect)
@@ -2088,6 +2122,36 @@ fn rewrite_const_expr_function_indices_raise(
 fn push_unique_u32(out : Array[UInt], value : UInt) -> Unit {
   if not(out.contains(value)) {
     out.push(value)
+  }
+}
+
+///|
+fn make_bool_array(length : Int, value : Bool) -> Array[Bool] {
+  let out : Array[Bool] = []
+  for _ in 0..<length {
+    out.push(value)
+  }
+  out
+}
+
+///|
+fn is_visited_function_index(visited : Array[Bool], index : UInt) -> Bool {
+  let pos = UInt::reinterpret_as_int(index)
+  if pos < 0 || pos >= visited.length() {
+    false
+  } else {
+    visited[pos]
+  }
+}
+
+///|
+fn mark_visited_function_index(visited : Array[Bool], index : UInt) -> Bool {
+  let pos = UInt::reinterpret_as_int(index)
+  if pos < 0 || pos >= visited.length() || visited[pos] {
+    false
+  } else {
+    visited[pos] = true
+    true
   }
 }
 
@@ -5156,11 +5220,7 @@ fn is_branch_opcode(opcode : UInt) -> Bool {
 
 ///|
 fn decode_span_u32_immediate(instr_bytes : Bytes, span : InstrSpan) -> UInt? {
-  if span.end_ <= span.start + 1 {
-    return None
-  }
-  let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
-  decode_u32_leb128_bytes(imm)
+  decode_u32_leb128_range(instr_bytes, span.start + 1, span.end_)
 }
 
 ///|
@@ -9805,21 +9865,12 @@ fn analyze_call_graph_raise(
     let function_index = imported_function_count + i.reinterpret_as_uint()
     let body = code_bodies[i]
     let mut direct_callees : Array[UInt] = []
-    let prefix_result = try? parse_local_decl_prefix_end(body)
-    match prefix_result {
-      Ok(prefix_end) => {
-        let instr_bytes = body[prefix_end:body.length()].to_bytes()
-        match parse_instruction_spans(instr_bytes) {
-          Some(spans) => {
-            let (callees, body_has_indirect) = collect_direct_callees(
-              instr_bytes, spans,
-            )
-            direct_callees = callees
-            if body_has_indirect {
-              has_indirect_calls = true
-            }
-          }
-          None => partial = true
+    let direct_result = try? collect_direct_callees_from_body_raise(body)
+    match direct_result {
+      Ok((callees, body_has_indirect)) => {
+        direct_callees = callees
+        if body_has_indirect {
+          has_indirect_calls = true
         }
       }
       Err(_) => partial = true
@@ -9837,20 +9888,26 @@ fn analyze_call_graph_raise(
       reachable_from_roots: false,
     })
   }
-  let visited : Map[UInt, Bool] = {}
+  let total_function_count_u = imported_function_count + local_function_count
+  let total_function_count = UInt::reinterpret_as_int(total_function_count_u)
+  if total_function_count < 0 {
+    raise WalyzeError::InvalidFormat(
+      "function count overflow in analyze-call-graph",
+    )
+  }
+  let visited = make_bool_array(total_function_count, false)
   let queue = roots.copy()
   let mut head = 0
   while head < queue.length() {
     let index = queue[head]
     head += 1
-    if visited.get(index) is Some(_) {
+    if not(mark_visited_function_index(visited, index)) {
       continue
     }
-    visited.set(index, true)
     match index_to_pos.get(index) {
       Some(pos) =>
         for callee in nodes[pos].direct_callees {
-          if visited.get(callee) is None {
+          if not(is_visited_function_index(visited, callee)) {
             queue.push(callee)
           }
         }
@@ -9861,7 +9918,7 @@ fn analyze_call_graph_raise(
   let mut dead_body_bytes = 0U
   for i in 0..<nodes.length() {
     let node = nodes[i]
-    let reachable = visited.get(node.function_index) is Some(_)
+    let reachable = is_visited_function_index(visited, node.function_index)
     if reachable {
       reachable_body_bytes += node.body_bytes
     } else {
@@ -9954,37 +10011,34 @@ fn analyze_call_graph_summary_raise(
   for body in code_bodies {
     local_body_bytes.push(body.length().reinterpret_as_uint())
     let mut direct_callees : Array[UInt] = []
-    let prefix_result = try? parse_local_decl_prefix_end(body)
-    match prefix_result {
-      Ok(prefix_end) => {
-        let instr_bytes = body[prefix_end:body.length()].to_bytes()
-        match parse_instruction_spans(instr_bytes) {
-          Some(spans) => {
-            let (callees, body_has_indirect) = collect_direct_callees(
-              instr_bytes, spans,
-            )
-            direct_callees = callees
-            if body_has_indirect {
-              has_indirect_calls = true
-            }
-          }
-          None => partial = true
+    let direct_result = try? collect_direct_callees_from_body_raise(body)
+    match direct_result {
+      Ok((callees, body_has_indirect)) => {
+        direct_callees = callees
+        if body_has_indirect {
+          has_indirect_calls = true
         }
       }
       Err(_) => partial = true
     }
     direct_callees_by_local.push(direct_callees)
   }
-  let visited : Map[UInt, Bool] = {}
+  let total_function_count_u = imported_function_count + local_function_count
+  let total_function_count = UInt::reinterpret_as_int(total_function_count_u)
+  if total_function_count < 0 {
+    raise WalyzeError::InvalidFormat(
+      "function count overflow in analyze-call-graph-summary",
+    )
+  }
+  let visited = make_bool_array(total_function_count, false)
   let queue = roots.copy()
   let mut head = 0
   while head < queue.length() {
     let index = queue[head]
     head += 1
-    if visited.get(index) is Some(_) {
+    if not(mark_visited_function_index(visited, index)) {
       continue
     }
-    visited.set(index, true)
     if index < imported_function_count {
       continue
     }
@@ -9994,7 +10048,7 @@ fn analyze_call_graph_summary_raise(
       continue
     }
     for callee in direct_callees_by_local[pos] {
-      if visited.get(callee) is None {
+      if not(is_visited_function_index(visited, callee)) {
         queue.push(callee)
       }
     }
@@ -10004,7 +10058,7 @@ fn analyze_call_graph_summary_raise(
   let mut dead_body_bytes = 0U
   for i in 0..<local_body_bytes.length() {
     let function_index = imported_function_count + i.reinterpret_as_uint()
-    if visited.get(function_index) is Some(_) {
+    if is_visited_function_index(visited, function_index) {
       reachable_function_count += 1U
       reachable_body_bytes += local_body_bytes[i]
     } else {
