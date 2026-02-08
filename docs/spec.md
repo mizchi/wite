@@ -2,6 +2,8 @@
 
 このドキュメントは、`TODO.md` の完了項目（`[x]`）を仕様として固定化したもの。
 
+分析運用の知見と拡張方針は `docs/analyze.md` を参照。
+
 ## 基本方針
 
 - 役割分離: `mwac` は bundler、`walyze` は minifier/optimizer

@@ -136,14 +136,15 @@ parse_section_sizes_to_tsv() {
   local out_tsv="$2"
   moon run src/main --target js -- analyze "$wasm_path" 2>/dev/null |
     awk '
-      /^  .*: [0-9]+ bytes$/ {
+      /^[[:space:]]+[^:][^:]*: [0-9]+ bytes( \([0-9.]+%\))?$/ {
         line = $0
-        sub(/^  /, "", line)
+        sub(/^[[:space:]]+/, "", line)
         bytes = line
         sub(/^.*: /, "", bytes)
+        sub(/ \([0-9.]+%\)$/, "", bytes)
         sub(/ bytes$/, "", bytes)
         key = line
-        sub(/: [0-9]+ bytes$/, "", key)
+        sub(/: [0-9]+ bytes( \([0-9.]+%\))?$/, "", key)
         printf "%s\t%s\n", key, bytes
       }
     ' | sort > "$out_tsv"

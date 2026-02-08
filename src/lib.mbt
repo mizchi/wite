@@ -4623,8 +4623,22 @@ fn rewrite_code_body_calls_for_signature_pruning_raise(
 }
 
 ///|
-fn is_single_i32_val_type(val_type : Bytes) -> Bool {
-  val_type.length() == 1 && val_type[0].to_uint() == 0x7fU
+fn is_single_val_type(val_type : Bytes, expected_code : UInt) -> Bool {
+  val_type.length() == 1 && val_type[0].to_uint() == expected_code
+}
+
+///|
+fn is_const_opcode_compatible_with_result(
+  opcode : UInt,
+  result_type : Bytes,
+) -> Bool {
+  match opcode {
+    0x41U => is_single_val_type(result_type, 0x7fU)
+    0x42U => is_single_val_type(result_type, 0x7eU)
+    0x43U => is_single_val_type(result_type, 0x7dU)
+    0x44U => is_single_val_type(result_type, 0x7cU)
+    _ => false
+  }
 }
 
 ///|
@@ -4632,21 +4646,34 @@ fn extract_inlining_replacement_instr_raise(
   body_bytes : Bytes,
   type_entry : FunctionTypeEntry,
 ) -> Bytes? raise WalyzeError {
-  if type_entry.params.length() > 0 {
-    return None
-  }
   let prefix = parse_local_decl_prefix_raise(body_bytes)
   if prefix.local_types.length() > 0 {
     return None
   }
   let instr_bytes = body_bytes[prefix.prefix_end:body_bytes.length()].to_bytes()
   let spans = parse_instruction_spans_raise(instr_bytes)
-  if type_entry.results.length() == 1 &&
-    is_single_i32_val_type(type_entry.results[0]) &&
-    spans.length() == 2 &&
-    spans[0].opcode == 0x41U &&
-    spans[1].opcode == 0x0bU {
-    return Some(instr_bytes[spans[0].start:spans[0].end_].to_bytes())
+  if type_entry.params.length() == 0 &&
+    type_entry.results.length() == 0 &&
+    spans.length() == 1 &&
+    spans[0].opcode == 0x0bU {
+    return Some(Bytes::from_array([]))
+  }
+  if spans.length() == 2 && spans[1].opcode == 0x0bU {
+    if type_entry.params.length() == 1 &&
+      type_entry.results.length() == 1 &&
+      bytes_equal(type_entry.params[0], type_entry.results[0]) &&
+      spans[0].opcode == 0x20U &&
+      decode_local_index_immediate_from_span(instr_bytes, spans[0]) == Some(0U) {
+      return Some(Bytes::from_array([]))
+    }
+    if type_entry.params.length() == 0 &&
+      type_entry.results.length() == 1 &&
+      is_const_opcode_compatible_with_result(
+        spans[0].opcode,
+        type_entry.results[0],
+      ) {
+      return Some(instr_bytes[spans[0].start:spans[0].end_].to_bytes())
+    }
   }
   None
 }
@@ -13389,9 +13416,83 @@ extern "js" fn js_profile_zero_arg_exports(
   #|       ? bytes
   #|       : (Array.isArray(bytes) ? Uint8Array.from(bytes) : new Uint8Array(bytes));
   #|     const rounds = Math.max(1, iterations | 0);
-  #|     const t0 = process.hrtime.bigint();
   #|     const module = new WebAssembly.Module(raw);
-  #|     const instance = new WebAssembly.Instance(module, {});
+  #|     const importDescs = WebAssembly.Module.imports(module);
+  #|     const imports = {};
+  #|     const ensureBucket = (name) => {
+  #|       if (!imports[name]) imports[name] = {};
+  #|       return imports[name];
+  #|     };
+  #|     let envMemory = null;
+  #|     let sbrkPtr = 1024;
+  #|     const ensureSbrk = () => {
+  #|       if (!envMemory) return;
+  #|       if (envMemory.buffer.byteLength < sbrkPtr + 4) return;
+  #|       new DataView(envMemory.buffer).setInt32(sbrkPtr, 8192, true);
+  #|     };
+  #|     for (const imp of importDescs) {
+  #|       const bucket = ensureBucket(imp.module);
+  #|       if (imp.kind === 'memory') {
+  #|         const fallbackMin = (imp.module === 'env' && imp.name === 'memory') ? 256 : 1;
+  #|         const minimum = Math.max(1, Number(imp.minimum ?? fallbackMin));
+  #|         const maximum = imp.maximum == null ? minimum : Math.max(minimum, Number(imp.maximum));
+  #|         const memory = new WebAssembly.Memory({ initial: minimum, maximum });
+  #|         bucket[imp.name] = memory;
+  #|         if (imp.module === 'env' && imp.name === 'memory') {
+  #|           envMemory = memory;
+  #|         }
+  #|       } else if (imp.kind === 'table') {
+  #|         const fallbackMin = (imp.module === 'env' && imp.name === '__indirect_function_table') ? 32 : 1;
+  #|         const minimum = Math.max(1, Number(imp.minimum ?? fallbackMin));
+  #|         const tableInit = {
+  #|           element: imp.element ?? 'anyfunc',
+  #|           initial: minimum,
+  #|         };
+  #|         if (imp.maximum != null) {
+  #|           tableInit.maximum = Math.max(minimum, Number(imp.maximum));
+  #|         }
+  #|         bucket[imp.name] = new WebAssembly.Table(tableInit);
+  #|       } else if (imp.kind === 'global') {
+  #|         const value = imp.value ?? 'i32';
+  #|         const mutable = !!imp.mutable;
+  #|         const init = value === 'i64' ? 0n : 0;
+  #|         bucket[imp.name] = new WebAssembly.Global({ value, mutable }, init);
+  #|       }
+  #|     }
+  #|     if (!envMemory) {
+  #|       envMemory = new WebAssembly.Memory({ initial: 256, maximum: 256 });
+  #|       ensureBucket('env').memory = envMemory;
+  #|     }
+  #|     ensureSbrk();
+  #|     for (const imp of importDescs) {
+  #|       if (imp.kind !== 'function') continue;
+  #|       const bucket = ensureBucket(imp.module);
+  #|       if (typeof bucket[imp.name] === 'function') continue;
+  #|       const key = imp.module + '.' + imp.name;
+  #|       if (key === 'env.abort') {
+  #|         bucket[imp.name] = () => { throw new Error('abort'); };
+  #|       } else if (key === 'env.exit') {
+  #|         bucket[imp.name] = (code) => code | 0;
+  #|       } else if (key === 'env.emscripten_get_sbrk_ptr') {
+  #|         bucket[imp.name] = () => sbrkPtr;
+  #|       } else if (key === 'env.emscripten_resize_heap') {
+  #|         bucket[imp.name] = () => 0;
+  #|       } else if (key === 'env.emscripten_memcpy_big') {
+  #|         bucket[imp.name] = (dst, src, num) => {
+  #|           if (envMemory) {
+  #|             const view = new Uint8Array(envMemory.buffer);
+  #|             view.copyWithin(dst >>> 0, src >>> 0, (src + num) >>> 0);
+  #|           }
+  #|           return dst | 0;
+  #|         };
+  #|       } else if (imp.module === 'wasi_snapshot_preview1') {
+  #|         bucket[imp.name] = () => 0;
+  #|       } else {
+  #|         bucket[imp.name] = () => 0;
+  #|       }
+  #|     }
+  #|     const t0 = process.hrtime.bigint();
+  #|     const instance = new WebAssembly.Instance(module, imports);
   #|     const t1 = process.hrtime.bigint();
   #|     const instantiateNs = (t1 - t0).toString();
   #|     const profiled = [];
