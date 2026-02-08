@@ -2,6 +2,20 @@
 
 `wite` is a MoonBit toolkit for WebAssembly binaries with a focus on component-model workflows.
 
+## Quickstart
+
+```bash
+just run -- init
+just run -- add dep:a
+just run -- add dep:b
+# edit main.wac
+just run -- build
+# => composed.wasm
+```
+
+`init` は `wite.config.jsonc` と `main.wac` のひな型を生成します。
+`build` は入力省略時に `main.wac`（なければ `main.wasm`）を使います。
+
 ## Positioning (wac + wite)
 
 - `wac` (`mizchi/mwac`): WAC API / composition (bundler role)
@@ -73,6 +87,8 @@ It provides:
 ```bash
 just run -- build path/to/entry.wac --out path/to/output.component.wasm -Oz
 just run -- build path/to/module.wasm --out path/to/module.min.wasm -O2
+just run -- build                 # implicit entry: main.wac | main.wasm
+just run -- build -Oz             # flags only (implicit entry)
 
 just run -- analyze path/to/module.wasm --view=summary
 just run -- analyze path/to/module.wasm --view=deep --limit=20
@@ -80,12 +96,16 @@ just run -- analyze path/to/module.wasm --view=pipeline --opt-level=Oz --diff-li
 just run -- analyze path/to/module.wasm --view=keep --closed-world --closed-world-root=run
 just run -- analyze path/to/module.wasm --view=retain --limit=20 --closed-world --closed-world-root=run
 just run -- analyze path/to/module.wasm --config=./wite.config.jsonc
+just run -- analyze path/to/component.wasm --kind=component --view=summary
 just run -- build path/to/module.wasm --no-config -Oz
+just run -- build path/to/component.wasm --kind=component -Oz
 just run -- profile path/to/module.wasm --config=./wite.config.jsonc
+just run -- profile path/to/component.wasm --kind=component
 just run -- diff path/to/module.wasm --baseline=wasm-opt --view=function --limit=20
 just run -- diff path/to/module.wasm --baseline=wasm-opt --view=section --limit=20
 just run -- diff left.wasm right.wasm --view=block --limit=20
 just run -- add wkg:mizchi/markdown
+just run -- add dep:a
 just run -- add mizchi/markdown@0.1.0
 just run -- add wasi:http@0.2.0 --name=http
 just run -- add https://wa.dev/mizchi:tmgrammar@0.1.1 --name=tmg
@@ -93,6 +113,8 @@ just run -- add wkg:mizchi/markdown --registry=wasi.dev --name=md
 just run -- add wasi:http@0.2.10 --registry=wasi.dev --verify
 just run -- deps verify
 just run -- deps verify --config=./wite.config.jsonc --fail-fast
+just run -- deps sync
+just run -- deps sync --config=./wite.config.jsonc --dir=./deps --verify --fail-fast
 
 # legacy low-level subcommands (still available)
 just run -- analyze path/to/module.wasm
@@ -110,6 +132,7 @@ just run -- dce-report path/to/module.wasm 20
 just run -- runtime-profile path/to/module.wasm 100
 just run -- hot-size path/to/module.wasm 100 20
 just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features --converge --rume-apply --verbose
+just run -- optimize in.component.wasm out.component.wasm --kind=component -Oz --converge
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
 just run -- component-callgraph path/to/component.wasm 20
@@ -121,20 +144,26 @@ just run -- root-policy path/to/component.wasm path/to/wit-dir --exclude=hello
 `optimize` は入力ヘッダから core/component を自動判定し、component では固定点ループ（`--converge` / `--rounds=<n>`）を適用します。
 `runtime-profile` / `hot-size` は JS runtime が必要なため `--target js` でのみ動作し、`native/wasm` ではエラーを返します。
 `build` / `analyze` / `profile` はカレントディレクトリの `wite.config.jsonc` を自動読込します（存在しない場合は無視）。
+`build` は入力省略時に `main.wac`（優先）または `main.wasm` を使います。入力省略かつ `main.wac` を使った場合の既定出力は `composed.wasm` です。
 CLI マージ規則は「config の flags を先に適用し、CLI 引数で後勝ち上書き」です。`--no-config` で自動読込を無効化できます。
+`--kind=auto|core|component` で binary kind を明示できます。`build/analyze/profile` の優先順位は `CLI --kind > wite.config.jsonc の kind > auto` です。`optimize` は config を読まないため `CLI --kind > auto` で決定します。
+`analyze` の `kind=component` は `view=summary|functions|callgraph` のみ対応です（`deep/pipeline/...` は core 専用）。
 `diff --baseline=wasm-opt` は `wasm-opt`（または `--wasm-opt-bin` / `WASM_OPT_BIN`）を実行し、`function/section/block` の差分を直接表示します。
 `add` は `wite.config.jsonc` の `deps` を更新し、`https://<registry>/<namespace>:<name>[@version]` を保存します。
 `dep-spec` は `wkg:mizchi/markdown` / `mizchi/markdown` / `wasi:http` / `https://wa.dev/mizchi:tmgrammar@0.1.1` を受け付けます。
 `--protocol` は入力形式のヒントとして扱い、保存形式は常に HTTPS URL です。
 `--verify` を付けると `https://<host>/.well-known/wasm-pkg/registry.json` を解決し、`oci` backend では OCI API、`warg` backend では `wkg get --registry` を使って package/version 実在確認まで行います（`wkg` コマンドが必要）。
 `deps verify` は `wite.config.jsonc` の `deps` 全件を同じ検証ロジックで再確認します。`--fail-fast` で最初の失敗で停止します。
+`deps sync` は `wite.config.jsonc` の `deps` 全件を `wkg get` でローカル展開します。既定は `deps/<dep-name>/` で、`dep-name` は安全なファイル名へ正規化されます（`/` は `_` へ変換）。
+`build` / `analyze` / `profile` は config 読み込み時に `deps` が存在すれば自動で `deps sync --fail-fast` を実行します（`--no-config` 指定時は無効）。
+最小設定例は `examplesl/minimal/` を参照してください。`just example-minimal` で実行できます。
 
 ```jsonc
 {
   // build/analyze/profile は array 直書きか { "flags": [...] } の両方を許可
-  "build": { "flags": ["-Oz", "--strip-debug", "--closed-world"] },
-  "analyze": ["--view=deep", "--limit=30"],
-  "profile": { "flags": [] },
+  "build": { "kind": "auto", "flags": ["-Oz", "--strip-debug", "--closed-world"] },
+  "analyze": { "kind": "core", "flags": ["--view=deep", "--limit=30"] },
+  "profile": { "kind": "auto", "flags": [] },
   "deps": {
     "http": "https://wa.dev/wasi:http@0.2.0",
     "tmg": "https://wa.dev/mizchi:tmgrammar@0.1.1"
@@ -190,6 +219,9 @@ just fmt       # format code
 just check     # type check
 just test      # run tests
 just bench     # run benchmark suite
+just deps-verify # verify deps in wite.config.jsonc
+just deps-sync # sync deps in wite.config.jsonc to deps/
+just example-minimal # run minimal config example under examplesl/minimal
 just bench-sync # sync benchmark corpus fixtures from upstream
 just kpi       # collect KPI report (size first, runtime second, wasm-opt ref + heatmap/waterfall/no-change diagnostics)
 just run       # run CLI (src/main)

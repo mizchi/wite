@@ -33,10 +33,167 @@ test "parse analyze view supports canonical and alias names" {
 }
 
 ///|
+test "parse binary kind supports auto core component" {
+  assert_true(parse_binary_kind("auto") is Some(BinaryKind::Auto))
+  assert_true(parse_binary_kind("core") is Some(BinaryKind::Core))
+  assert_true(parse_binary_kind("component") is Some(BinaryKind::Component))
+  assert_true(parse_binary_kind("unknown") is None)
+}
+
+///|
+test "extract binary kind flag keeps non-kind flags and default kind" {
+  let parsed = extract_binary_kind_flags(["-Oz", "--strip-debug"], BinaryKind::Auto, "optimize kind")
+  assert_true(parsed.kind is BinaryKind::Auto)
+  assert_eq(parsed.flags, ["-Oz", "--strip-debug"])
+}
+
+///|
+test "extract binary kind flag supports equals and separate forms" {
+  let parsed1 = extract_binary_kind_flags([
+    "--kind=component", "-Oz", "--closed-world",
+  ], BinaryKind::Auto, "optimize kind")
+  assert_true(parsed1.kind is BinaryKind::Component)
+  assert_eq(parsed1.flags, ["-Oz", "--closed-world"])
+  let parsed2 = extract_binary_kind_flags([
+    "--kind", "core", "--strip-debug",
+  ], BinaryKind::Auto, "optimize kind")
+  assert_true(parsed2.kind is BinaryKind::Core)
+  assert_eq(parsed2.flags, ["--strip-debug"])
+}
+
+///|
+test "analyze view support matrix distinguishes component compatible views" {
+  assert_true(
+    analyze_view_supports_kind(AnalyzeView::Summary, BinaryKind::Component),
+  )
+  assert_true(
+    analyze_view_supports_kind(AnalyzeView::Functions, BinaryKind::Component),
+  )
+  assert_true(
+    analyze_view_supports_kind(AnalyzeView::Callgraph, BinaryKind::Component),
+  )
+  assert_true(
+    not(analyze_view_supports_kind(AnalyzeView::Deep, BinaryKind::Component)),
+  )
+  assert_true(analyze_view_supports_kind(AnalyzeView::Deep, BinaryKind::Core))
+}
+
+///|
 test "derive build output path from input extension" {
   assert_eq(derive_build_output_path("foo.wac"), "foo.wasm")
   assert_eq(derive_build_output_path("foo.wasm"), "foo.min.wasm")
   assert_eq(derive_build_output_path("foo.bar"), "foo.bar.wasm")
+}
+
+///|
+test "derive implicit build output path prefers composed.wasm for main.wac" {
+  assert_eq(derive_implicit_build_output_path("main.wac"), "composed.wasm")
+  assert_eq(derive_implicit_build_output_path("main.wasm"), "main.min.wasm")
+}
+
+///|
+test "pick default build input prefers main.wac then main.wasm" {
+  assert_eq(pick_default_build_input_path(true, true), Some("main.wac"))
+  assert_eq(pick_default_build_input_path(false, true), Some("main.wasm"))
+  assert_eq(pick_default_build_input_path(false, false), None)
+}
+
+///|
+test "resolve build input accepts omitted entry with default" {
+  guard
+    resolve_build_input_from_args(["wite", "build"], Some("main.wac")) is Ok(
+      resolved,
+    ) else {
+    fail("expected default build input resolution")
+  }
+  assert_eq(resolved.input_path, "main.wac")
+  assert_eq(resolved.raw_flags, [])
+  assert_true(not(resolved.explicit_input))
+}
+
+///|
+test "resolve build input accepts flags-only invocation with default" {
+  guard
+    resolve_build_input_from_args(["wite", "build", "-Oz"], Some("main.wac")) is Ok(
+      resolved,
+    ) else {
+    fail("expected flags-only build input resolution")
+  }
+  assert_eq(resolved.input_path, "main.wac")
+  assert_eq(resolved.raw_flags, ["-Oz"])
+  assert_true(not(resolved.explicit_input))
+}
+
+///|
+test "resolve build input keeps explicit entry and trailing flags" {
+  guard
+    resolve_build_input_from_args([
+      "wite", "build", "app.wac", "-Oz", "--best-effort",
+    ], Some("main.wac")) is Ok(resolved) else {
+    fail("expected explicit build input resolution")
+  }
+  assert_eq(resolved.input_path, "app.wac")
+  assert_eq(resolved.raw_flags, ["-Oz", "--best-effort"])
+  assert_true(resolved.explicit_input)
+}
+
+///|
+test "resolve build input fails without explicit entry or default" {
+  assert_true(resolve_build_input_from_args(["wite", "build"], None) is Err(_))
+  assert_true(resolve_build_input_from_args(["wite", "build", "-Oz"], None) is Err(_))
+}
+
+///|
+test "path dirname handles root and relative paths" {
+  assert_eq(path_dirname("foo.wac"), ".")
+  assert_eq(path_dirname("examples/compose/app.wac"), "examples/compose")
+  assert_eq(path_dirname("/tmp/app.wac"), "/tmp")
+}
+
+///|
+test "build wac dep target path follows mwac deps layout" {
+  let spec : WasmDependencySpec = {
+    ns: "example",
+    name: "hello",
+    version: "latest",
+  }
+  assert_eq(
+    build_wac_dep_target_path("examples/compose", spec),
+    "examples/compose/deps/example/hello.wasm",
+  )
+}
+
+///|
+test "collect wac new package names extracts instantiated packages" {
+  let source =
+    #|package example:composition;
+    #|let hello = new example:hello {};
+    #|let greeter = new example:greeter { hello: hello.hello };
+    #|export greeter.greet;
+    #|
+  guard collect_wac_new_package_names(source) is Ok(packages) else {
+    fail("expected valid wac package extraction")
+  }
+  assert_eq(packages, ["example:hello", "example:greeter"])
+}
+
+///|
+test "init templates include quickstart defaults" {
+  let config = init_wite_config_template_text()
+  assert_true(config.contains("\"build\""))
+  assert_true(config.contains("\"deps\""))
+  let wac = init_main_wac_template_text()
+  assert_true(wac.contains("wite add dep:a"))
+  assert_true(wac.contains("let a = new dep:a {}"))
+}
+
+///|
+test "build wac dependency lookup detects package url conflicts" {
+  let entries : Array[DepConfigEntry] = [
+    { name: "a", url: "https://wa.dev/example:hello@0.1.0" },
+    { name: "b", url: "https://wasi.dev/example:hello@0.2.0" },
+  ]
+  assert_true(build_wac_dependency_lookup(entries) is Err(_))
 }
 
 ///|
@@ -62,6 +219,9 @@ test "parse wite config text supports jsonc style sections" {
   assert_eq(config.build_flags, ["-Oz", "--strip-debug"])
   assert_eq(config.analyze_flags, ["--view=deep", "--limit=5"])
   assert_eq(config.profile_flags, ["--view=runtime", "--iterations=120"])
+  assert_true(config.build_kind is BinaryKind::Auto)
+  assert_true(config.analyze_kind is BinaryKind::Auto)
+  assert_true(config.profile_kind is BinaryKind::Auto)
 }
 
 ///|
@@ -69,6 +229,31 @@ test "parse wite config text rejects invalid command section type" {
   let config_text =
     #|{
     #|  "build": true
+    #|}
+  assert_true(parse_wite_config_text(config_text) is Err(_))
+}
+
+///|
+test "parse wite config text supports command kind override" {
+  let config_text =
+    #|{
+    #|  "build": { "kind": "component", "flags": ["-Oz"] },
+    #|  "analyze": { "kind": "core" },
+    #|  "profile": { "kind": "component", "flags": [] }
+    #|}
+  guard parse_wite_config_text(config_text) is Ok(config) else {
+    fail("expected valid config with kind")
+  }
+  assert_true(config.build_kind is BinaryKind::Component)
+  assert_true(config.analyze_kind is BinaryKind::Core)
+  assert_true(config.profile_kind is BinaryKind::Component)
+}
+
+///|
+test "parse wite config text rejects unknown command kind" {
+  let config_text =
+    #|{
+    #|  "build": { "kind": "unknown" }
     #|}
   assert_true(parse_wite_config_text(config_text) is Err(_))
 }
@@ -119,6 +304,22 @@ test "merge command flags applies config defaults before cli flags" {
 }
 
 ///|
+test "should auto sync deps requires config enabled and existing" {
+  assert_true(should_auto_sync_deps(false, false) == false)
+  assert_true(should_auto_sync_deps(false, true) == false)
+  assert_true(should_auto_sync_deps(true, false) == false)
+  assert_true(should_auto_sync_deps(true, true))
+}
+
+///|
+test "build auto sync deps command args pins config and fail-fast" {
+  assert_eq(
+    build_auto_sync_deps_command_args("./wite.config.jsonc"),
+    ["wite", "deps", "sync", "--config=./wite.config.jsonc", "--fail-fast"],
+  )
+}
+
+///|
 test "parse diff view supports canonical names" {
   assert_true(parse_diff_view("function") is Some(DiffView::Function))
   assert_true(parse_diff_view("section") is Some(DiffView::Section))
@@ -152,17 +353,20 @@ test "parse wasm dependency spec supports slash and colon forms" {
 ///|
 test "parse dependency protocol supports wkg warg and oci" {
   assert_true(parse_dependency_protocol("wkg") is Some(DependencyProtocol::Wkg))
-  assert_true(parse_dependency_protocol("warg") is Some(DependencyProtocol::Warg))
+  assert_true(
+    parse_dependency_protocol("warg") is Some(DependencyProtocol::Warg),
+  )
   assert_true(parse_dependency_protocol("oci") is Some(DependencyProtocol::Oci))
   assert_true(parse_dependency_protocol("unknown") is None)
 }
 
 ///|
 test "parse dependency input supports jsr-like wkg prefix" {
-  guard
-    parse_dependency_input("wkg:mizchi/markdown@0.1.0", DependencyProtocol::Wkg)
-    is Some(parsed)
-  else {
+  guard parse_dependency_input(
+      "wkg:mizchi/markdown@0.1.0",
+      DependencyProtocol::Wkg,
+    )
+    is Some(parsed) else {
     fail("expected valid prefixed dep input")
   }
   assert_true(parsed.protocol is DependencyProtocol::Wkg)
@@ -174,10 +378,8 @@ test "parse dependency input supports jsr-like wkg prefix" {
 
 ///|
 test "parse https dependency url supports wa.dev canonical path" {
-  guard
-    parse_https_dependency_url("https://wa.dev/mizchi:tmgrammar@0.1.1")
-    is Some((host, spec))
-  else {
+  guard parse_https_dependency_url("https://wa.dev/mizchi:tmgrammar@0.1.1")
+    is Some((host, spec)) else {
     fail("expected valid https dep url")
   }
   assert_eq(host, "wa.dev")
@@ -192,9 +394,7 @@ test "upsert dependency config keeps existing sections and writes deps url" {
     Map::of([("build", Json::array([Json::string("-Oz")]))]),
   )
   guard upsert_wasm_dependency_config_json(
-      base,
-      "mizchi/markdown",
-      "https://wa.dev/mizchi:markdown",
+      base, "mizchi/markdown", "https://wa.dev/mizchi:markdown",
     )
     is Ok(updated) else {
     fail("expected config update success")
@@ -218,17 +418,17 @@ test "upsert dependency config keeps existing sections and writes deps url" {
 ///|
 test "upsert dependency config overwrites existing deps entry" {
   let base = Json::object(
-    Map::of([(
-      "deps",
-      Json::object(
-        Map::of([("http", Json::string("https://wa.dev/wasi:http@0.2.0"))]),
+    Map::of([
+      (
+        "deps",
+        Json::object(
+          Map::of([("http", Json::string("https://wa.dev/wasi:http@0.2.0"))]),
+        ),
       ),
-    )]),
+    ]),
   )
   guard upsert_wasm_dependency_config_json(
-      base,
-      "http",
-      "https://wa.dev/wasi:http@0.2.3",
+      base, "http", "https://wa.dev/wasi:http@0.2.3",
     )
     is Ok(updated) else {
     fail("expected config update success")
@@ -239,7 +439,10 @@ test "upsert dependency config overwrites existing deps entry" {
   guard updated_obj.get("deps") is Some(Json::Object(deps)) else {
     fail("missing deps section")
   }
-  assert_eq(deps.get("http"), Some(Json::string("https://wa.dev/wasi:http@0.2.3")))
+  assert_eq(
+    deps.get("http"),
+    Some(Json::string("https://wa.dev/wasi:http@0.2.3")),
+  )
 }
 
 ///|
@@ -257,8 +460,7 @@ test "parse add command options resolves wkg prefix to https url" {
 ///|
 test "parse add command options accepts https spec directly" {
   guard parse_add_command_options([
-      "wite", "add", "https://wa.dev/mizchi:tmgrammar@0.1.1", "--name=tmg",
-      "--config=./custom.config.jsonc",
+      "wite", "add", "https://wa.dev/mizchi:tmgrammar@0.1.1", "--name=tmg", "--config=./custom.config.jsonc",
     ])
     is Ok(opts) else {
     fail("expected valid add options")
@@ -271,8 +473,7 @@ test "parse add command options accepts https spec directly" {
 ///|
 test "parse add command options supports registry override" {
   guard parse_add_command_options([
-      "wite", "add", "wkg:mizchi/markdown@0.1.0", "--registry=wasi.dev",
-      "--name=md",
+      "wite", "add", "wkg:mizchi/markdown@0.1.0", "--registry=wasi.dev", "--name=md",
     ])
     is Ok(opts) else {
     fail("expected valid add options")
@@ -388,7 +589,8 @@ test "parse wkg verify cli result handles ok and error records" {
 
 ///|
 test "parse deps verify command options supports defaults and config override" {
-  guard parse_deps_verify_command_options(["wite", "deps", "verify"]) is Ok(opts1) else {
+  guard parse_deps_verify_command_options(["wite", "deps", "verify"])
+    is Ok(opts1) else {
     fail("expected default deps verify options")
   }
   assert_eq(opts1.config_path, "wite.config.jsonc")
@@ -406,15 +608,56 @@ test "parse deps verify command options supports defaults and config override" {
 ///|
 test "parse deps verify command options rejects unknown or positional args" {
   assert_true(
-    parse_deps_verify_command_options([
-      "wite", "deps", "verify", "--unknown",
-    ]) is Err(_),
+    parse_deps_verify_command_options(["wite", "deps", "verify", "--unknown"])
+    is Err(_),
   )
   assert_true(
-    parse_deps_verify_command_options([
-      "wite", "deps", "verify", "extra",
-    ]) is Err(_),
+    parse_deps_verify_command_options(["wite", "deps", "verify", "extra"])
+    is Err(_),
   )
+}
+
+///|
+test "parse deps sync command options supports defaults and overrides" {
+  guard parse_deps_sync_command_options(["wite", "deps", "sync"]) is Ok(opts1) else {
+    fail("expected default deps sync options")
+  }
+  assert_eq(opts1.config_path, "wite.config.jsonc")
+  assert_eq(opts1.output_dir, "deps")
+  assert_true(not(opts1.fail_fast))
+  assert_true(not(opts1.verify))
+  guard parse_deps_sync_command_options([
+      "wite", "deps", "sync", "--config=./custom.jsonc", "--dir=./vendor/deps", "--verify",
+      "--fail-fast",
+    ])
+    is Ok(opts2) else {
+    fail("expected deps sync options with overrides")
+  }
+  assert_eq(opts2.config_path, "./custom.jsonc")
+  assert_eq(opts2.output_dir, "./vendor/deps")
+  assert_true(opts2.fail_fast)
+  assert_true(opts2.verify)
+}
+
+///|
+test "parse deps sync command options rejects unknown and positional args" {
+  assert_true(
+    parse_deps_sync_command_options(["wite", "deps", "sync", "--unknown"])
+    is Err(_),
+  )
+  assert_true(
+    parse_deps_sync_command_options(["wite", "deps", "sync", "extra"]) is Err(_),
+  )
+}
+
+///|
+test "build deps sync target dir sanitizes dependency key" {
+  assert_eq(
+    build_dep_sync_target_dir("deps", "mizchi/markdown"),
+    "deps/mizchi_markdown",
+  )
+  assert_eq(build_dep_sync_target_dir("./deps", "http"), "./deps/http")
+  assert_eq(build_dep_sync_target_dir("deps/", "../escape"), "deps/escape")
 }
 
 ///|

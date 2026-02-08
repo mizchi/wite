@@ -1,11 +1,12 @@
 ///|
 fn print_usage() -> Unit {
   println("wite commands:")
+  println("  init [--force]")
   println(
-    "  analyze <core.wasm> [--config=<path>|--config <path>|--no-config] [--view=summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain] [--limit=<n>] [--diff-limit=<n>] [--opt-level=O1] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
+    "  analyze <core.wasm> [--config=<path>|--config <path>|--no-config] [--kind=auto|core|component] [--view=summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain] [--limit=<n>] [--diff-limit=<n>] [--opt-level=O1] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
   )
   println(
-    "  build <entry.(wac|wasm)> [--config=<path>|--config <path>|--no-config] [--out=<path>|-o <path>] [--best-effort] [--no-compose-dce] [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
+    "  build [entry.(wac|wasm)] [--config=<path>|--config <path>|--no-config] [--kind=auto|core|component] [--out=<path>|-o <path>] [--best-effort] [--no-compose-dce] [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
   )
   println(
     "  diff <left.wasm> [right.wasm] [--view=function|section|block] [--limit=<n>] [--baseline=wasm-opt] [--wasm-opt-bin=<path>] [--baseline-opt-level=Oz]",
@@ -13,13 +14,16 @@ fn print_usage() -> Unit {
   println(
     "  add <dep-spec> [--protocol=wkg|warg|oci] [--registry=<host>] [--name=<id>] [--config=<path>] [--verify]  # dep-spec: wkg:mizchi/markdown | mizchi/markdown | wasi:http | https://wa.dev/mizchi:tmgrammar",
   )
+  println("  deps verify [--config=<path>|--config <path>] [--fail-fast]")
   println(
-    "  deps verify [--config=<path>|--config <path>] [--fail-fast]",
+    "  deps sync [--config=<path>|--config <path>] [--dir=<path>|--dir <path>] [--verify] [--fail-fast]",
   )
   println("  analyze-host <core.wasm> [limit]")
   println("  analyze-opt <core.wasm> [opt-level] [diff-limit]")
   println("  deep-analyze <core.wasm> [limit]")
-  println("  profile <core.wasm> [--config=<path>|--config <path>|--no-config]")
+  println(
+    "  profile <core.wasm> [--config=<path>|--config <path>|--no-config] [--kind=auto|core|component]",
+  )
   println("  top-functions <core.wasm> [limit]")
   println("  function-gap <left.wasm> <right.wasm> [limit]")
   println("  block-sizes <core.wasm> [limit]")
@@ -38,7 +42,7 @@ fn print_usage() -> Unit {
     "  hot-size <core.wasm> [iterations] [limit] [--scenario=<export>[:arg1,arg2,...]]",
   )
   println(
-    "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
+    "  optimize <input.wasm> <output.wasm> [--kind=auto|core|component] [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
   )
   println("  component-profile <component.wasm>")
   println("  component-top-functions <component.wasm> [limit]")
@@ -62,6 +66,97 @@ priv enum AnalyzeView {
   Dce
   Keep
   Retain
+}
+
+///|
+priv enum BinaryKind {
+  Auto
+  Core
+  Component
+}
+
+///|
+fn parse_binary_kind(name : String) -> BinaryKind? {
+  match name.to_lower() {
+    "auto" => Some(BinaryKind::Auto)
+    "core" => Some(BinaryKind::Core)
+    "component" => Some(BinaryKind::Component)
+    _ => None
+  }
+}
+
+///|
+fn binary_kind_name(kind : BinaryKind) -> String {
+  match kind {
+    BinaryKind::Auto => "auto"
+    BinaryKind::Core => "core"
+    BinaryKind::Component => "component"
+  }
+}
+
+///|
+fn parse_binary_kind_or_exit(value : String, label : String) -> BinaryKind {
+  match parse_binary_kind(value) {
+    Some(kind) => kind
+    None => {
+      println("invalid " + label + ": " + value)
+      @sys.exit(1)
+      BinaryKind::Auto
+    }
+  }
+}
+
+///|
+priv struct BinaryKindFlagParseResult {
+  kind : BinaryKind
+  flags : Array[String]
+}
+
+///|
+fn extract_binary_kind_flags(
+  flags : Array[String],
+  default_kind : BinaryKind,
+  label : String,
+) -> BinaryKindFlagParseResult {
+  let out : Array[String] = []
+  let mut kind = default_kind
+  let mut i = 0
+  while i < flags.length() {
+    let flag = flags[i]
+    if flag == "--kind" {
+      if i + 1 >= flags.length() {
+        println("missing value after --kind")
+        @sys.exit(1)
+      }
+      kind = parse_binary_kind_or_exit(flags[i + 1], label)
+      i += 2
+      continue
+    }
+    match flag.strip_prefix("--kind=") {
+      Some(value) => {
+        kind = parse_binary_kind_or_exit(value.to_string(), label)
+        i += 1
+        continue
+      }
+      None => ()
+    }
+    out.push(flag)
+    i += 1
+  }
+  { kind, flags: out }
+}
+
+///|
+fn analyze_view_supports_kind(view : AnalyzeView, kind : BinaryKind) -> Bool {
+  match kind {
+    BinaryKind::Auto | BinaryKind::Core => true
+    BinaryKind::Component =>
+      match view {
+        AnalyzeView::Summary | AnalyzeView::Functions | AnalyzeView::Callgraph =>
+          true
+        _ => false
+      }
+  }
 }
 
 ///|
@@ -160,15 +255,362 @@ fn derive_build_output_path(input_path : String) -> String {
 }
 
 ///|
+fn derive_implicit_build_output_path(input_path : String) -> String {
+  if input_path == "main.wac" {
+    "composed.wasm"
+  } else {
+    derive_build_output_path(input_path)
+  }
+}
+
+///|
+fn path_dirname(path : String) -> String {
+  match path.rev_find("/") {
+    Some(index) =>
+      if index == 0 {
+        "/"
+      } else {
+        path[:index].to_string() catch { _ => "." }
+      }
+    None => "."
+  }
+}
+
+///|
+priv struct BuildInputResolution {
+  input_path : String
+  raw_flags : Array[String]
+  explicit_input : Bool
+}
+
+///|
+fn pick_default_build_input_path(
+  has_main_wac : Bool,
+  has_main_wasm : Bool,
+) -> String? {
+  if has_main_wac {
+    Some("main.wac")
+  } else if has_main_wasm {
+    Some("main.wasm")
+  } else {
+    None
+  }
+}
+
+///|
+fn resolve_build_input_from_args(
+  args : Array[String],
+  default_input : String?,
+) -> Result[BuildInputResolution, String] {
+  if args.length() < 3 {
+    return match default_input {
+      Some(input_path) => Ok({ input_path, raw_flags: [], explicit_input: false })
+      None => Err("build requires entry.(wac|wasm) or main.wac/main.wasm in cwd")
+    }
+  }
+  let token = args[2]
+  if token.has_prefix("-") {
+    return match default_input {
+      Some(input_path) => {
+        let raw_flags : Array[String] = []
+        for i in 2..<args.length() {
+          raw_flags.push(args[i])
+        }
+        Ok({ input_path, raw_flags, explicit_input: false })
+      }
+      None => Err("build requires entry.(wac|wasm) or main.wac/main.wasm in cwd")
+    }
+  }
+  let raw_flags : Array[String] = []
+  for i in 3..<args.length() {
+    raw_flags.push(args[i])
+  }
+  Ok({ input_path: token, raw_flags, explicit_input: true })
+}
+
+///|
+fn init_wite_config_template_text() -> String {
+  let template =
+    #|{
+    #|  "build": { "kind": "auto", "flags": ["-Oz"] },
+    #|  "analyze": { "kind": "core", "flags": ["--view=summary"] },
+    #|  "profile": { "kind": "auto", "flags": [] },
+    #|  "deps": {}
+    #|}
+    #|
+  template
+}
+
+///|
+fn init_main_wac_template_text() -> String {
+  let template =
+    #|package app:composition;
+    #|
+    #|// Add dependencies:
+    #|//   wite add dep:a
+    #|//   wite add dep:b
+    #|// Then edit this file and wire imports/exports for your components.
+    #|let a = new dep:a {};
+    #|let b = new dep:b {};
+    #|
+    #|export a;
+    #|export b;
+    #|
+  template
+}
+
+///|
+fn write_init_file(path : String, content : String, force : Bool) -> Bool {
+  if @fs.path_exists(path) && not(force) {
+    return false
+  }
+  @fs.write_string_to_file(path, content) catch {
+    e => {
+      println("failed to write file: " + path + " (" + e.to_string() + ")")
+      @sys.exit(1)
+    }
+  }
+  true
+}
+
+///|
+fn run_init_command(args : Array[String]) -> Unit {
+  let mut force = false
+  for i in 2..<args.length() {
+    let arg = args[i]
+    if arg == "--force" {
+      force = true
+      continue
+    }
+    println("unknown init option: " + arg)
+    print_usage()
+    @sys.exit(1)
+  }
+
+  let config_path = "wite.config.jsonc"
+  let wac_path = "main.wac"
+  let config_written = write_init_file(
+    config_path,
+    init_wite_config_template_text(),
+    force,
+  )
+  let wac_written = write_init_file(wac_path, init_main_wac_template_text(), force)
+
+  if config_written {
+    println("created: " + config_path)
+  } else {
+    println("kept: " + config_path)
+  }
+  if wac_written {
+    println("created: " + wac_path)
+  } else {
+    println("kept: " + wac_path)
+  }
+  println("next:")
+  println("  wite add dep:a")
+  println("  wite add dep:b")
+  println("  # edit main.wac")
+  println("  wite build")
+}
+
+///|
+fn build_wac_dep_target_path(
+  base_dir : String,
+  spec : WasmDependencySpec,
+) -> String {
+  base_dir + "/deps/" + spec.ns + "/" + spec.name + ".wasm"
+}
+
+///|
+fn collect_wac_new_packages_from_expr(
+  expr : @wac.WacExpr,
+  packages : Array[String],
+) -> Unit {
+  match expr {
+    @wac.WacExpr::New(new_expr) => packages.push(new_expr.pkg)
+    @wac.WacExpr::Access(base, _) => collect_wac_new_packages_from_expr(base, packages)
+    @wac.WacExpr::Name(_) => ()
+  }
+}
+
+///|
+fn collect_wac_new_package_names(source : String) -> Result[Array[String], String] {
+  let doc = match @wac.parse_wac(source) {
+    Ok(v) => v
+    Err(e) => return Err("failed to parse wac source: " + e.to_string())
+  }
+  let packages : Array[String] = []
+  for stmt in doc.stmts {
+    match stmt {
+      @wac.WacStmt::Let(_, expr) => collect_wac_new_packages_from_expr(expr, packages)
+      @wac.WacStmt::Export(exp) => collect_wac_new_packages_from_expr(exp.expr, packages)
+      @wac.WacStmt::Import(_) => ()
+    }
+  }
+  packages.sort()
+  packages.dedup()
+  Ok(packages)
+}
+
+///|
+fn parse_wac_package_name(pkg_name : String) -> WasmDependencySpec? {
+  let parsed = @oci_types.PackageName::parse(pkg_name)
+  match parsed {
+    Some(pkg) => Some({ ns: pkg.ns, name: pkg.name, version: "latest" })
+    None => None
+  }
+}
+
+///|
+priv struct WacConfiguredDependency {
+  url : String
+  host : String
+  spec : WasmDependencySpec
+}
+
+///|
+fn build_wac_dependency_lookup(
+  entries : Array[DepConfigEntry],
+) -> Result[Map[String, WacConfiguredDependency], String] {
+  let lookup : Map[String, WacConfiguredDependency] = {}
+  for entry in entries {
+    let (host, spec) = match parse_https_dependency_url(entry.url) {
+      Some(v) => v
+      None => return Err("invalid dependency url: " + entry.url)
+    }
+    let pkg_name = spec.ns + ":" + spec.name
+    match lookup.get(pkg_name) {
+      Some(prev) =>
+        if prev.url != entry.url {
+          return Err(
+            "duplicate dependency package with different urls: " +
+            pkg_name +
+            " (" +
+            prev.url +
+            " vs " +
+            entry.url +
+            ")",
+          )
+        }
+      None =>
+        lookup.set(pkg_name, { url: entry.url, host, spec })
+    }
+  }
+  Ok(lookup)
+}
+
+///|
+fn materialize_wac_dependencies_from_config(
+  config_path : String,
+  wac_path : String,
+  best_effort : Bool,
+) -> Result[UInt, String] {
+  let config_json = load_config_json_for_add(config_path)
+  let entries = match collect_dep_entries_from_config_json(config_json) {
+    Ok(v) => v
+    Err(msg) => return Err("failed to read deps: " + msg)
+  }
+  if entries.length() == 0 {
+    return Ok(0U)
+  }
+  let source = @fs.read_file_to_string(wac_path) catch {
+    e => return Err("failed to read wac file: " + wac_path + " (" + e.to_string() + ")")
+  }
+  let required_packages = match collect_wac_new_package_names(source) {
+    Ok(v) => v
+    Err(msg) => return Err(msg)
+  }
+  if required_packages.length() == 0 {
+    return Ok(0U)
+  }
+  let lookup = match build_wac_dependency_lookup(entries) {
+    Ok(v) => v
+    Err(msg) => return Err(msg)
+  }
+  let base_dir = path_dirname(wac_path)
+  let mut synced = 0U
+  for pkg_name in required_packages {
+    let dep = lookup.get(pkg_name)
+    match dep {
+      Some(value) => {
+        let target_path = build_wac_dep_target_path(base_dir, value.spec)
+        let synced_path = sync_dep_spec_to_file_with_wkg_cli(
+          value.host,
+          value.spec,
+          target_path,
+        )
+        match synced_path {
+          Ok(path) => {
+            synced += 1U
+            println("materialized wac dep: " + pkg_name)
+            println("  source: " + value.url)
+            println("  output: " + path)
+          }
+          Err(msg) =>
+            if best_effort {
+              println("warn: failed to materialize wac dep: " + pkg_name)
+              println("  reason: " + msg)
+            } else {
+              return Err(
+                "failed to materialize wac dep " + pkg_name + ": " + msg,
+              )
+            }
+        }
+      }
+      None => {
+        let spec = parse_wac_package_name(pkg_name)
+        match spec {
+          Some(parsed) => {
+            let target_path = build_wac_dep_target_path(base_dir, parsed)
+            if @fs.path_exists(target_path) {
+              println("use local wac dep: " + pkg_name)
+              println("  path: " + target_path)
+            } else if best_effort {
+              println("warn: missing wac dep in config: " + pkg_name)
+              println("  expected: " + target_path)
+            } else {
+              return Err(
+                "missing wac dep in config: " +
+                pkg_name +
+                " (expected " +
+                target_path +
+                ")",
+              )
+            }
+          }
+          None =>
+            if best_effort {
+              println("warn: invalid wac package name: " + pkg_name)
+            } else {
+              return Err("invalid wac package name: " + pkg_name)
+            }
+        }
+      }
+    }
+  }
+  Ok(synced)
+}
+
+///|
 priv struct WiteConfigFile {
   build_flags : Array[String]
   analyze_flags : Array[String]
   profile_flags : Array[String]
+  build_kind : BinaryKind
+  analyze_kind : BinaryKind
+  profile_kind : BinaryKind
 }
 
 ///|
 fn empty_wite_config_file() -> WiteConfigFile {
-  { build_flags: [], analyze_flags: [], profile_flags: [] }
+  {
+    build_flags: [],
+    analyze_flags: [],
+    profile_flags: [],
+    build_kind: BinaryKind::Auto,
+    analyze_kind: BinaryKind::Auto,
+    profile_kind: BinaryKind::Auto,
+  }
 }
 
 ///|
@@ -198,15 +640,38 @@ fn parse_json_string_array(
 fn parse_wite_config_section(
   json_value : Json,
   label : String,
-) -> Result[Array[String], String] {
+) -> Result[(Array[String], BinaryKind), String] {
   match json_value {
-    Array(_) => parse_json_string_array(json_value, label)
-    Object(object) =>
+    Array(_) =>
+      match parse_json_string_array(json_value, label) {
+        Ok(flags) => Ok((flags, BinaryKind::Auto))
+        Err(msg) => Err(msg)
+      }
+    Object(object) => {
+      let mut flags : Array[String] = []
+      let mut kind = BinaryKind::Auto
       match object.get("flags") {
         Some(flags_value) =>
-          parse_json_string_array(flags_value, label + ".flags")
-        None => Ok([])
+          match parse_json_string_array(flags_value, label + ".flags") {
+            Ok(parsed) => flags = parsed
+            Err(msg) => return Err(msg)
+          }
+        None => ()
       }
+      match object.get("kind") {
+        Some(String(raw_kind)) =>
+          match parse_binary_kind(raw_kind) {
+            Some(parsed_kind) => kind = parsed_kind
+            None =>
+              return Err(
+                "invalid config " + label + ".kind: " + raw_kind,
+              )
+          }
+        Some(_) => return Err("config " + label + ".kind must be string")
+        None => ()
+      }
+      Ok((flags, kind))
+    }
     _ => Err("config " + label + " must be array or object")
   }
 }
@@ -218,10 +683,16 @@ fn parse_wite_config_json(json_value : Json) -> Result[WiteConfigFile, String] {
       let mut build_flags : Array[String] = []
       let mut analyze_flags : Array[String] = []
       let mut profile_flags : Array[String] = []
+      let mut build_kind = BinaryKind::Auto
+      let mut analyze_kind = BinaryKind::Auto
+      let mut profile_kind = BinaryKind::Auto
       match object.get("build") {
         Some(value) =>
           match parse_wite_config_section(value, "build") {
-            Ok(parsed) => build_flags = parsed
+            Ok((flags, kind)) => {
+              build_flags = flags
+              build_kind = kind
+            }
             Err(msg) => return Err(msg)
           }
         None => ()
@@ -229,7 +700,10 @@ fn parse_wite_config_json(json_value : Json) -> Result[WiteConfigFile, String] {
       match object.get("analyze") {
         Some(value) =>
           match parse_wite_config_section(value, "analyze") {
-            Ok(parsed) => analyze_flags = parsed
+            Ok((flags, kind)) => {
+              analyze_flags = flags
+              analyze_kind = kind
+            }
             Err(msg) => return Err(msg)
           }
         None => ()
@@ -237,12 +711,22 @@ fn parse_wite_config_json(json_value : Json) -> Result[WiteConfigFile, String] {
       match object.get("profile") {
         Some(value) =>
           match parse_wite_config_section(value, "profile") {
-            Ok(parsed) => profile_flags = parsed
+            Ok((flags, kind)) => {
+              profile_flags = flags
+              profile_kind = kind
+            }
             Err(msg) => return Err(msg)
           }
         None => ()
       }
-      Ok({ build_flags, analyze_flags, profile_flags })
+      Ok({
+        build_flags,
+        analyze_flags,
+        profile_flags,
+        build_kind,
+        analyze_kind,
+        profile_kind,
+      })
     }
     _ => Err("config root must be object")
   }
@@ -322,6 +806,46 @@ fn merge_command_flags(
   let merged = defaults.copy()
   merged.append(cli_flags[:])
   merged
+}
+
+///|
+fn should_auto_sync_deps(use_config : Bool, config_exists : Bool) -> Bool {
+  use_config && config_exists
+}
+
+///|
+fn build_auto_sync_deps_command_args(config_path : String) -> Array[String] {
+  ["wite", "deps", "sync", "--config=" + config_path, "--fail-fast"]
+}
+
+///|
+fn config_has_dep_entries_or_exit(config_path : String) -> Bool {
+  let config_json = load_config_json_for_add(config_path)
+  let entries = match collect_dep_entries_from_config_json(config_json) {
+    Ok(value) => value
+    Err(msg) => {
+      println("failed to read deps: " + msg)
+      @sys.exit(1)
+      []
+    }
+  }
+  entries.length() > 0
+}
+
+///|
+async fn auto_sync_deps_from_config_if_needed(
+  selection : ConfigSelectionFlags,
+) -> Unit {
+  let config_exists = @fs.path_exists(selection.config_path)
+  if not(should_auto_sync_deps(selection.use_config, config_exists)) {
+    return
+  }
+  if not(config_has_dep_entries_or_exit(selection.config_path)) {
+    return
+  }
+  let sync_args = build_auto_sync_deps_command_args(selection.config_path)
+  println("auto deps sync: " + selection.config_path + " -> deps/")
+  run_deps_sync_command(sync_args)
 }
 
 ///|
@@ -831,7 +1355,15 @@ fn run_profile(path : String) -> Unit {
 }
 
 ///|
-fn run_profile_command(args : Array[String]) -> Unit {
+fn run_profile_with_kind(path : String, kind : BinaryKind) -> Unit {
+  match kind {
+    BinaryKind::Auto | BinaryKind::Core => run_profile(path)
+    BinaryKind::Component => run_component_profile(path)
+  }
+}
+
+///|
+async fn run_profile_command(args : Array[String]) -> Unit {
   if args.length() < 3 {
     print_usage()
     @sys.exit(1)
@@ -842,16 +1374,37 @@ fn run_profile_command(args : Array[String]) -> Unit {
     raw_flags.push(args[i])
   }
   let config_selection = parse_config_selection_flags(raw_flags)
+  auto_sync_deps_from_config_if_needed(config_selection)
   let config_file = resolve_wite_config_or_default(config_selection)
   let merged_flags = merge_command_flags(
     config_file.profile_flags,
     config_selection.remaining_flags,
   )
-  if merged_flags.length() > 0 {
-    println("unknown profile option: " + merged_flags[0])
+  let mut kind = config_file.profile_kind
+  let mut i = 0
+  while i < merged_flags.length() {
+    let arg = merged_flags[i]
+    if arg == "--kind" {
+      if i + 1 >= merged_flags.length() {
+        println("missing value after --kind")
+        @sys.exit(1)
+      }
+      kind = parse_binary_kind_or_exit(merged_flags[i + 1], "profile kind")
+      i += 2
+      continue
+    }
+    match arg.strip_prefix("--kind=") {
+      Some(value) => {
+        kind = parse_binary_kind_or_exit(value.to_string(), "profile kind")
+        i += 1
+        continue
+      }
+      None => ()
+    }
+    println("unknown profile option: " + arg)
     @sys.exit(1)
   }
-  run_profile(path)
+  run_profile_with_kind(path, kind)
 }
 
 ///|
@@ -1255,14 +1808,15 @@ fn run_optimize(args : Array[String]) -> Unit {
   for i in 4..<args.length() {
     flags.push(args[i])
   }
-  let options = parse_optimize_cli_options(flags)
+  let kind_flags = extract_binary_kind_flags(flags, BinaryKind::Auto, "optimize kind")
+  let options = parse_optimize_cli_options(kind_flags.flags)
   let bytes = read_bytes_or_exit(input_path)
-  match
-    @wite.optimize_binary_for_size(
-      bytes,
-      config=options.config,
-      exclude=options.excluded_roots,
-    ) {
+  match optimize_with_kind(
+    bytes,
+    kind_flags.kind,
+    options.config,
+    options.excluded_roots,
+  ) {
     Ok(result) => {
       write_output_or_exit(output_path, result.bytes)
       println(
@@ -1278,6 +1832,7 @@ fn run_optimize(args : Array[String]) -> Unit {
       if options.verbose && result.no_change_reasons.length() > 0 {
         println("no-change reasons: " + result.no_change_reasons.join(", "))
       }
+      println("kind: " + binary_kind_name(kind_flags.kind))
     }
     Err(msg) => {
       println("optimize failed: " + msg)
@@ -1287,17 +1842,54 @@ fn run_optimize(args : Array[String]) -> Unit {
 }
 
 ///|
-fn run_build(args : Array[String]) -> Unit {
-  if args.length() < 3 {
-    print_usage()
-    @sys.exit(1)
+fn optimize_with_kind(
+  bytes : Bytes,
+  kind : BinaryKind,
+  config : @wite.OptimizeConfig,
+  excluded_roots : Array[String],
+) -> Result[@wite.OptimizeResult, String] {
+  match kind {
+    BinaryKind::Auto =>
+      @wite.optimize_binary_for_size(
+        bytes,
+        config~,
+        exclude=excluded_roots,
+      )
+    BinaryKind::Core => match @wite.optimize_for_size(bytes, config~) {
+        Ok(result) => Ok(result)
+        Err(e) => Err(@wite.error_to_string(e))
+      }
+    BinaryKind::Component =>
+      @wite.optimize_component_for_size(
+        bytes,
+        config~,
+        exclude=excluded_roots,
+      )
   }
-  let input_path = args[2]
-  let raw_flags : Array[String] = []
-  for i in 3..<args.length() {
-    raw_flags.push(args[i])
+}
+
+///|
+async fn run_build(args : Array[String]) -> Unit {
+  let default_input = pick_default_build_input_path(
+    @fs.path_exists("main.wac"),
+    @fs.path_exists("main.wasm"),
+  )
+  let resolved = match resolve_build_input_from_args(args, default_input) {
+    Ok(value) => value
+    Err(msg) => {
+      println(msg)
+      print_usage()
+      @sys.exit(1)
+      { input_path: "", raw_flags: [], explicit_input: false }
+    }
   }
+  let input_path = resolved.input_path
+  let is_wac_input = input_path.has_suffix(".wac")
+  let raw_flags = resolved.raw_flags
   let config_selection = parse_config_selection_flags(raw_flags)
+  if not(is_wac_input) {
+    auto_sync_deps_from_config_if_needed(config_selection)
+  }
   let config_file = resolve_wite_config_or_default(config_selection)
   let merged_flags = merge_command_flags(
     config_file.build_flags,
@@ -1306,6 +1898,7 @@ fn run_build(args : Array[String]) -> Unit {
   let mut output_path : String? = None
   let mut best_effort = false
   let mut compose_dce = true
+  let mut kind = config_file.build_kind
   let optimize_flags : Array[String] = []
   let mut i = 0
   while i < merged_flags.length() {
@@ -1337,14 +1930,58 @@ fn run_build(args : Array[String]) -> Unit {
       i += 1
       continue
     }
+    if arg == "--kind" {
+      if i + 1 >= merged_flags.length() {
+        println("missing value after --kind")
+        @sys.exit(1)
+      }
+      kind = parse_binary_kind_or_exit(merged_flags[i + 1], "build kind")
+      i += 2
+      continue
+    }
+    match arg.strip_prefix("--kind=") {
+      Some(value) => {
+        kind = parse_binary_kind_or_exit(value.to_string(), "build kind")
+        i += 1
+        continue
+      }
+      None => ()
+    }
     optimize_flags.push(arg)
     i += 1
   }
   let out = match output_path {
     Some(path) => path
-    None => derive_build_output_path(input_path)
+    None =>
+      if resolved.explicit_input {
+        derive_build_output_path(input_path)
+      } else {
+        derive_implicit_build_output_path(input_path)
+      }
   }
-  let built = if input_path.has_suffix(".wac") {
+  if is_wac_input && config_selection.use_config &&
+    @fs.path_exists(config_selection.config_path) {
+    match
+      materialize_wac_dependencies_from_config(
+        config_selection.config_path,
+        input_path,
+        best_effort,
+      ) {
+      Ok(synced) =>
+        if synced > 0U {
+          println(
+            "materialized wac deps: " +
+            synced.to_string() +
+            " entries",
+          )
+        }
+      Err(msg) => {
+        println("build failed: " + msg)
+        @sys.exit(1)
+      }
+    }
+  }
+  let built = if is_wac_input {
     match @wac.compose_wac_file(input_path, best_effort~, dce=compose_dce) {
       Ok(bytes) => bytes
       Err(msg) => {
@@ -1357,12 +1994,12 @@ fn run_build(args : Array[String]) -> Unit {
     read_bytes_or_exit(input_path)
   }
   let options = parse_optimize_cli_options(optimize_flags)
-  match
-    @wite.optimize_binary_for_size(
-      built,
-      config=options.config,
-      exclude=options.excluded_roots,
-    ) {
+  match optimize_with_kind(
+    built,
+    kind,
+    options.config,
+    options.excluded_roots,
+  ) {
     Ok(result) => {
       write_output_or_exit(out, result.bytes)
       println(
@@ -1378,6 +2015,7 @@ fn run_build(args : Array[String]) -> Unit {
       if options.verbose && result.no_change_reasons.length() > 0 {
         println("no-change reasons: " + result.no_change_reasons.join(", "))
       }
+      println("kind: " + binary_kind_name(kind))
       println("output: " + out)
     }
     Err(msg) => {
@@ -2828,7 +3466,23 @@ fn run_diff_command(args : Array[String]) -> Unit {
 }
 
 ///|
-fn run_analyze_command(args : Array[String]) -> Unit {
+fn analyze_view_name(view : AnalyzeView) -> String {
+  match view {
+    AnalyzeView::Summary => "summary"
+    AnalyzeView::Deep => "deep"
+    AnalyzeView::Functions => "functions"
+    AnalyzeView::Blocks => "blocks"
+    AnalyzeView::Callgraph => "callgraph"
+    AnalyzeView::Host => "host"
+    AnalyzeView::Pipeline => "pipeline"
+    AnalyzeView::Dce => "dce"
+    AnalyzeView::Keep => "keep"
+    AnalyzeView::Retain => "retain"
+  }
+}
+
+///|
+async fn run_analyze_command(args : Array[String]) -> Unit {
   if args.length() < 3 {
     print_usage()
     @sys.exit(1)
@@ -2839,12 +3493,14 @@ fn run_analyze_command(args : Array[String]) -> Unit {
     raw_flags.push(args[i])
   }
   let config_selection = parse_config_selection_flags(raw_flags)
+  auto_sync_deps_from_config_if_needed(config_selection)
   let config_file = resolve_wite_config_or_default(config_selection)
   let merged_flags = merge_command_flags(
     config_file.analyze_flags,
     config_selection.remaining_flags,
   )
   let mut view = AnalyzeView::Summary
+  let mut kind = config_file.analyze_kind
   let mut limit = 20U
   let mut diff_limit = 20U
   let mut config = @wite.OptimizeConfig::o1()
@@ -2852,8 +3508,26 @@ fn run_analyze_command(args : Array[String]) -> Unit {
   let mut safe_mode = false
   let closed_world_root_exports : Array[String] = []
   let positional : Array[String] = []
-  for i in 0..<merged_flags.length() {
+  let mut i = 0
+  while i < merged_flags.length() {
     let arg = merged_flags[i]
+    if arg == "--kind" {
+      if i + 1 >= merged_flags.length() {
+        println("missing value after --kind")
+        @sys.exit(1)
+      }
+      kind = parse_binary_kind_or_exit(merged_flags[i + 1], "analyze kind")
+      i += 2
+      continue
+    }
+    match arg.strip_prefix("--kind=") {
+      Some(value) => {
+        kind = parse_binary_kind_or_exit(value.to_string(), "analyze kind")
+        i += 1
+        continue
+      }
+      None => ()
+    }
     match arg.strip_prefix("--view=") {
       Some(name) =>
         match parse_analyze_view(name.to_string()) {
@@ -2895,6 +3569,19 @@ fn run_analyze_command(args : Array[String]) -> Unit {
             }
         }
     }
+    i += 1
+  }
+  if not(analyze_view_supports_kind(view, kind)) {
+    println(
+      "analyze view '" +
+      analyze_view_name(view) +
+      "' is not supported for kind=" +
+      binary_kind_name(kind),
+    )
+    if kind is BinaryKind::Component {
+      println("supported component analyze views: summary|functions|callgraph")
+    }
+    @sys.exit(1)
   }
   match view {
     AnalyzeView::Summary =>
@@ -2957,23 +3644,40 @@ fn run_analyze_command(args : Array[String]) -> Unit {
       }
     }
   }
-  match view {
-    AnalyzeView::Summary => run_analyze(path)
-    AnalyzeView::Deep => run_deep_analyze(path, limit)
-    AnalyzeView::Functions => run_top_functions(path, limit)
-    AnalyzeView::Blocks => run_block_sizes(path, limit)
-    AnalyzeView::Callgraph => run_callgraph(path, limit)
-    AnalyzeView::Host => run_analyze_host(path, limit)
-    AnalyzeView::Pipeline => run_analyze_opt(path, config, diff_limit)
-    AnalyzeView::Dce => run_dce_report(path, limit)
-    AnalyzeView::Keep =>
-      run_keep_reasons_with_options(
-        path, closed_world, safe_mode, closed_world_root_exports,
-      )
-    AnalyzeView::Retain =>
-      run_retain_path_with_options(
-        path, limit, closed_world, safe_mode, closed_world_root_exports,
-      )
+  match kind {
+    BinaryKind::Component =>
+      match view {
+        AnalyzeView::Summary => run_component_profile(path)
+        AnalyzeView::Functions => run_component_top_functions(path, limit)
+        AnalyzeView::Callgraph => run_component_callgraph(path, limit)
+        _ => {
+          println(
+            "analyze view '" +
+            analyze_view_name(view) +
+            "' is not supported for kind=component",
+          )
+          @sys.exit(1)
+        }
+      }
+    BinaryKind::Auto | BinaryKind::Core =>
+      match view {
+        AnalyzeView::Summary => run_analyze(path)
+        AnalyzeView::Deep => run_deep_analyze(path, limit)
+        AnalyzeView::Functions => run_top_functions(path, limit)
+        AnalyzeView::Blocks => run_block_sizes(path, limit)
+        AnalyzeView::Callgraph => run_callgraph(path, limit)
+        AnalyzeView::Host => run_analyze_host(path, limit)
+        AnalyzeView::Pipeline => run_analyze_opt(path, config, diff_limit)
+        AnalyzeView::Dce => run_dce_report(path, limit)
+        AnalyzeView::Keep =>
+          run_keep_reasons_with_options(
+            path, closed_world, safe_mode, closed_world_root_exports,
+          )
+        AnalyzeView::Retain =>
+          run_retain_path_with_options(
+            path, limit, closed_world, safe_mode, closed_world_root_exports,
+          )
+      }
   }
 }
 
@@ -2985,6 +3689,7 @@ async fn main {
     @sys.exit(1)
   }
   match args[1] {
+    "init" => run_init_command(args)
     "add" => run_add_command(args)
     "analyze" => run_analyze_command(args)
     "build" => run_build(args)

@@ -16,19 +16,29 @@
 
 - Canonical CLI は `build` / `analyze` / `profile` / `diff` / `add` / `deps` / `component` とする
 - `build` は「bundle + optimize + emit」を 1 コマンドで実行する
+- `init` は quickstart 用の `wite.config.jsonc` / `main.wac` ひな型を生成する
+- `build` は入力省略時に `main.wac`（優先）または `main.wasm` を自動選択する
+- `build` が入力省略で `main.wac` を使う場合、既定出力は `composed.wasm` とする
 - `analyze` は `--view` で `summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain` を切り替える
 - `profile` は `--view runtime|hot-size` と `--scenario=<export>[:arg1,arg2,...]` を標準化する
+- `build/analyze/profile/optimize` は `--kind=auto|core|component` を受け付ける
+- `build/analyze/profile` の kind は `CLI --kind > config.kind > auto` で決定し、`optimize` の kind は `CLI --kind > auto` で決定する
+- `analyze kind=component` は `summary|functions|callgraph` をサポートし、それ以外の view は明示エラーにする
 - `diff` は `--view function|section|block` を提供し、`wite` vs `wasm-opt` 比較を標準運用にする
 - `diff --baseline=wasm-opt` は `wasm-opt` を直接実行して baseline を生成し、`function/section/block` を同一導線で比較する
 - `add` は `wite.config.jsonc` の `deps` を更新し、`https://<registry>/<namespace>:<name>[@version]` を保存する
 - `add` の `dep-spec` は `wkg:mizchi/markdown` / `mizchi/markdown` / `wasi:http` / `https://wa.dev/mizchi:tmgrammar@0.1.1` を受け付ける
 - `add --verify` は `https://<host>/.well-known/wasm-pkg/registry.json` を解決し、`oci` backend は OCI API、`warg` backend は `wkg get --registry` で package/version 実在確認まで行う
 - `deps verify` は `wite.config.jsonc` の `deps` 全件を `add --verify` と同じ検証ロジックで再確認する（`--fail-fast` あり）
+- `deps sync` は `wite.config.jsonc` の `deps` 全件を `wkg get` で `deps/<dep-name>/` に実体化する（`--dir` / `--verify` / `--fail-fast` あり）
 - `component` は `roots|contract|kpi` を提供し、component-model closed-world 運用を集約する
 - 設定ファイルは `wite.config.jsonc` を標準とし、`build/analyze/profile` を単一設定で扱う
 - `wite.config.jsonc` は `build/analyze/profile` それぞれで `["..."]` または `{ "flags": ["..."] }` の両形式を受け付ける
 - `build/analyze/profile` は `wite.config.jsonc` を自動読込し、マージ規則は「config flags -> CLI flags（後勝ち）」とする
 - `wite.config.jsonc` は `deps`（object）を受け付け、`add` で URL を upsert する
+- `build/analyze/profile` は `deps` が存在する場合に `deps sync --fail-fast` を自動実行して `deps/` を最新化する（`--no-config` では無効）
+- リポジトリ root に `wite.config.jsonc` テンプレートを置き、`just deps-verify` / `just deps-sync` で運用できるようにする
+- `examplesl/minimal` に最小設定例を置き、`just example-minimal` で動作確認できるようにする
 - 互換エイリアスは提供せず、`wite` の canonical CLI へ集約する
 
 
@@ -40,6 +50,15 @@
 - W3 (Done): `wite.config.jsonc` ローダーを実装し、CLI 引数とのマージ規則を定義する
 - W4 (Done): `wite diff --baseline=wasm-opt` を実装し、KPI と直結する比較導線を用意する
 - W5 (Done): `wite add` を実装し、依存を `wite.config.jsonc` の `deps`（HTTPS URL）へ追加できるようにする
+- W6 (Done): `wite deps verify` を実装し、`deps` 全件の `.well-known` + backend 検証を再実行可能にする
+- W7 (Done): `wite deps sync` を実装し、`deps` 全件をローカル `deps/` へ実体化できるようにする
+- W8 (Done): `build/analyze/profile` 実行時に `deps` 自動同期（`deps sync --fail-fast`）を追加する
+- W9 (Done): root `wite.config.jsonc` テンプレートと `just deps-verify` / `just deps-sync` タスクを追加する
+- W10 (Done): `examplesl/minimal` 最小設定例と `just example-minimal` タスクを追加する
+- W11 (Done): `build/analyze/profile` に `kind`（auto/core/component）を導入し、config/CLI で指定可能にする
+- W12 (Done): `optimize` に `--kind`（auto/core/component）を追加し、core/component 経路を明示可能にする
+- W13 (Done): `wite init` を追加し、quickstart ひな型（`wite.config.jsonc` / `main.wac`）を生成可能にする
+- W14 (Done): `wite build` の入力省略を許可し、`main.wac` / `main.wasm` 自動選択を追加する
 - P2 (P1): `cfp` phase1（forward call 伝播）を導入し、DCE の callgraph 精度を上げる
 - P5 (P1): `precompute` を拡張（`eqz(eqz(x))+br_if`）して code セクション gap を削る
 - P2 (P1): `cfp` phase2（param-forwarding thunk 伝播）を導入し、DCE の callgraph 精度を上げる
