@@ -14,7 +14,7 @@
 
 ## wite API 体系（合意）
 
-- Canonical CLI は `build` / `analyze` / `profile` / `diff` / `add` / `component` とする
+- Canonical CLI は `build` / `analyze` / `profile` / `diff` / `add` / `deps` / `component` とする
 - `build` は「bundle + optimize + emit」を 1 コマンドで実行する
 - `analyze` は `--view` で `summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain` を切り替える
 - `profile` は `--view runtime|hot-size` と `--scenario=<export>[:arg1,arg2,...]` を標準化する
@@ -23,6 +23,7 @@
 - `add` は `wite.config.jsonc` の `deps` を更新し、`https://<registry>/<namespace>:<name>[@version]` を保存する
 - `add` の `dep-spec` は `wkg:mizchi/markdown` / `mizchi/markdown` / `wasi:http` / `https://wa.dev/mizchi:tmgrammar@0.1.1` を受け付ける
 - `add --verify` は `https://<host>/.well-known/wasm-pkg/registry.json` を解決し、`oci` backend は OCI API、`warg` backend は `wkg get --registry` で package/version 実在確認まで行う
+- `deps verify` は `wite.config.jsonc` の `deps` 全件を `add --verify` と同じ検証ロジックで再確認する（`--fail-fast` あり）
 - `component` は `roots|contract|kpi` を提供し、component-model closed-world 運用を集約する
 - 設定ファイルは `wite.config.jsonc` を標準とし、`build/analyze/profile` を単一設定で扱う
 - `wite.config.jsonc` は `build/analyze/profile` それぞれで `["..."]` または `{ "flags": ["..."] }` の両形式を受け付ける

@@ -35,6 +35,7 @@
 - [x] W3: `wite.config.jsonc` ローダーを追加し、`build/analyze/profile` の flags を `config -> CLI` 後勝ちでマージ
 - [x] W4: `wite diff --baseline=wasm-opt` を追加し、`--view=function|section|block` で baseline 比較を統合
 - [x] W5: `wite add` を追加し、`dep-spec`（`wkg:mizchi/markdown` など）を `wite.config.jsonc` の `deps`（HTTPS URL）へ upsert 可能にした
+- [x] W6: `wite deps verify` を追加し、`wite.config.jsonc` の `deps` 全件を `.well-known` + backend 検証（oci/warg）で再確認可能にした
 - [x] テスト追加: `parse_diff_view` / `parse_diff_baseline` の回帰テスト
 - [x] テスト追加: `parse_wite_config_text` / `parse_config_selection_flags` / `merge_command_flags` の回帰テスト
 - [x] テスト追加: `parse_wasm_dependency_spec` / `parse_dependency_protocol` / `parse_add_command_options` / `upsert_wasm_dependency_config_json` の回帰テスト

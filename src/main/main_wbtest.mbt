@@ -385,3 +385,69 @@ test "parse wkg verify cli result handles ok and error records" {
   assert_true(msg.contains("exit:1"))
   assert_true(msg.contains("not found"))
 }
+
+///|
+test "parse deps verify command options supports defaults and config override" {
+  guard parse_deps_verify_command_options(["wite", "deps", "verify"]) is Ok(opts1) else {
+    fail("expected default deps verify options")
+  }
+  assert_eq(opts1.config_path, "wite.config.jsonc")
+  assert_true(not(opts1.fail_fast))
+  guard parse_deps_verify_command_options([
+      "wite", "deps", "verify", "--config=./custom.jsonc", "--fail-fast",
+    ])
+    is Ok(opts2) else {
+    fail("expected deps verify options with overrides")
+  }
+  assert_eq(opts2.config_path, "./custom.jsonc")
+  assert_true(opts2.fail_fast)
+}
+
+///|
+test "parse deps verify command options rejects unknown or positional args" {
+  assert_true(
+    parse_deps_verify_command_options([
+      "wite", "deps", "verify", "--unknown",
+    ]) is Err(_),
+  )
+  assert_true(
+    parse_deps_verify_command_options([
+      "wite", "deps", "verify", "extra",
+    ]) is Err(_),
+  )
+}
+
+///|
+test "collect dep entries from config json reads and sorts deps" {
+  let config = Json::object(
+    Map::of([
+      (
+        "deps",
+        Json::object(
+          Map::of([
+            ("b", Json::string("https://wa.dev/wasi:http")),
+            ("a", Json::string("https://wa.dev/mizchi:tmgrammar@0.1.1")),
+          ]),
+        ),
+      ),
+    ]),
+  )
+  guard collect_dep_entries_from_config_json(config) is Ok(entries) else {
+    fail("expected dep entries")
+  }
+  assert_eq(entries.length(), 2)
+  assert_eq(entries[0].name, "a")
+  assert_eq(entries[0].url, "https://wa.dev/mizchi:tmgrammar@0.1.1")
+  assert_eq(entries[1].name, "b")
+  assert_eq(entries[1].url, "https://wa.dev/wasi:http")
+}
+
+///|
+test "collect dep entries from config json validates deps section type" {
+  let invalid_deps = Json::object(Map::of([("deps", Json::array([]))]))
+  assert_true(collect_dep_entries_from_config_json(invalid_deps) is Err(_))
+  let invalid_value = Json::object(
+    Map::of([("deps", Json::object(Map::of([("a", Json::number(1))])))]),
+  )
+  assert_true(collect_dep_entries_from_config_json(invalid_value) is Err(_))
+}

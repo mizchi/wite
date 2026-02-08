@@ -91,6 +91,8 @@ just run -- add wasi:http@0.2.0 --name=http
 just run -- add https://wa.dev/mizchi:tmgrammar@0.1.1 --name=tmg
 just run -- add wkg:mizchi/markdown --registry=wasi.dev --name=md
 just run -- add wasi:http@0.2.10 --registry=wasi.dev --verify
+just run -- deps verify
+just run -- deps verify --config=./wite.config.jsonc --fail-fast
 
 # legacy low-level subcommands (still available)
 just run -- analyze path/to/module.wasm
@@ -125,6 +127,7 @@ CLI マージ規則は「config の flags を先に適用し、CLI 引数で後�
 `dep-spec` は `wkg:mizchi/markdown` / `mizchi/markdown` / `wasi:http` / `https://wa.dev/mizchi:tmgrammar@0.1.1` を受け付けます。
 `--protocol` は入力形式のヒントとして扱い、保存形式は常に HTTPS URL です。
 `--verify` を付けると `https://<host>/.well-known/wasm-pkg/registry.json` を解決し、`oci` backend では OCI API、`warg` backend では `wkg get --registry` を使って package/version 実在確認まで行います（`wkg` コマンドが必要）。
+`deps verify` は `wite.config.jsonc` の `deps` 全件を同じ検証ロジックで再確認します。`--fail-fast` で最初の失敗で停止します。
 
 ```jsonc
 {

@@ -20,6 +20,12 @@ struct ParsedDependencyInput {
 }
 
 ///|
+struct DepConfigEntry {
+  name : String
+  url : String
+}
+
+///|
 enum VerifyBackend {
   Oci(@oci_types.OciConfig)
   Warg(@oci_types.WargConfig)
@@ -303,6 +309,29 @@ extern "js" fn js_verify_wkg_package_cli(
   #| }
 
 ///|
+extern "js" fn js_set_process_exit_code(code : Int) -> Unit =
+  #| (code) => {
+  #|   if (typeof process !== 'undefined' && process) {
+  #|     process.exitCode = (code | 0);
+  #|   }
+  #| }
+
+///|
+extern "js" fn js_force_process_exit(code : Int) -> Unit =
+  #| (code) => {
+  #|   if (typeof process !== 'undefined' && process && typeof process.exit === 'function') {
+  #|     process.exit(code | 0);
+  #|   }
+  #| }
+
+///|
+fn exit_process(code : Int) -> Unit {
+  js_set_process_exit_code(code)
+  js_force_process_exit(code)
+  @sys.exit(code)
+}
+
+///|
 fn parse_wkg_verify_cli_result(raw : String) -> Result[Unit, String] {
   let parts : Array[String] = []
   for part in raw.split("\t") {
@@ -349,6 +378,12 @@ priv struct AddCommandOptions {
   resolved_url : String
   parsed : ParsedDependencyInput
   verify : Bool
+}
+
+///|
+priv struct DepsVerifyCommandOptions {
+  config_path : String
+  fail_fast : Bool
 }
 
 ///|
@@ -615,11 +650,19 @@ fn verify_dependency_on_warg_backend(
 
 ///|
 async fn verify_add_dependency(options : AddCommandOptions) -> Result[String, String] {
-  let (host, spec) = match parse_https_dependency_url(options.resolved_url) {
+  verify_dependency_url(options.resolved_url, options.parsed.protocol)
+}
+
+///|
+async fn verify_dependency_url(
+  resolved_url : String,
+  protocol : DependencyProtocol,
+) -> Result[String, String] {
+  let (host, spec) = match parse_https_dependency_url(resolved_url) {
     Some(value) => value
     None =>
       return Err(
-        "invalid resolved dependency url: " + options.resolved_url,
+        "invalid resolved dependency url: " + resolved_url,
       )
   }
   let registry_config = @oci_discovery.fetch_registry_config(host) catch {
@@ -628,7 +671,7 @@ async fn verify_add_dependency(options : AddCommandOptions) -> Result[String, St
         "registry discovery failed for " + host + ": " + e.to_string(),
       )
   }
-  let backend = match resolve_verify_backend(options.parsed.protocol, registry_config) {
+  let backend = match resolve_verify_backend(protocol, registry_config) {
     Ok(value) => value
     Err(msg) =>
       return Err(
@@ -636,13 +679,97 @@ async fn verify_add_dependency(options : AddCommandOptions) -> Result[String, St
         " (host=" +
         host +
         ", protocol=" +
-        dependency_protocol_name(options.parsed.protocol) +
+        dependency_protocol_name(protocol) +
         ")",
       )
   }
   match backend {
     VerifyBackend::Oci(oci) => verify_dependency_on_oci_backend(oci, spec)
     VerifyBackend::Warg(warg) => verify_dependency_on_warg_backend(warg, host, spec)
+  }
+}
+
+///|
+fn parse_deps_verify_command_options(
+  args : Array[String],
+) -> Result[DepsVerifyCommandOptions, String] {
+  if args.length() < 3 || args[2] != "verify" {
+    return Err("deps requires subcommand 'verify'")
+  }
+  let mut config_path = "wite.config.jsonc"
+  let mut fail_fast = false
+  let mut i = 3
+  while i < args.length() {
+    let arg = args[i]
+    if arg == "--config" {
+      if i + 1 >= args.length() {
+        return Err("missing path after --config")
+      }
+      config_path = args[i + 1]
+      i += 2
+      continue
+    }
+    if arg == "--fail-fast" {
+      fail_fast = true
+      i += 1
+      continue
+    }
+    if arg == "--no-fail-fast" {
+      fail_fast = false
+      i += 1
+      continue
+    }
+    match arg.strip_prefix("--config=") {
+      Some(value) => {
+        config_path = value.to_string()
+        i += 1
+        continue
+      }
+      None => ()
+    }
+    if arg.has_prefix("--") {
+      return Err("unknown deps verify option: " + arg)
+    }
+    return Err("unexpected deps verify argument: " + arg)
+  }
+  Ok({ config_path, fail_fast })
+}
+
+///|
+fn compare_dep_config_entry(a : DepConfigEntry, b : DepConfigEntry) -> Int {
+  a.name.compare(b.name)
+}
+
+///|
+fn collect_dep_entries_from_config_json(
+  root : Json,
+) -> Result[Array[DepConfigEntry], String] {
+  let root_object = match root {
+    Json::Object(object) => object
+    _ => return Err("config root must be object")
+  }
+  let deps = match root_object.get("deps") {
+    Some(Json::Object(object)) => object
+    Some(_) => return Err("config deps must be object")
+    None => return Ok([])
+  }
+  let out : Array[DepConfigEntry] = []
+  let mut invalid_key : String? = None
+  deps.each((name, value) => {
+    match value {
+      Json::String(url) => out.push({ name, url, })
+      _ =>
+        if invalid_key is None {
+          invalid_key = Some(name)
+        }
+    }
+  })
+  match invalid_key {
+    Some(name) => Err("config deps entry must be string: " + name)
+    None => {
+      out.sort_by(compare_dep_config_entry)
+      Ok(out)
+    }
   }
 }
 
@@ -654,14 +781,14 @@ fn load_config_json_for_add(path : String) -> Json {
   let text = @fs.read_file_to_string(path) catch {
     e => {
       println("failed to read config file: " + path + " (" + e.to_string() + ")")
-      @sys.exit(1)
+      exit_process(1)
       "{}"
     }
   }
   @json5.parse(text) catch {
     e => {
       println("failed to parse config file: " + path + " (" + e.to_string() + ")")
-      @sys.exit(1)
+      exit_process(1)
       Json::object({})
     }
   }
@@ -673,7 +800,7 @@ fn write_config_json_for_add(path : String, config : Json) -> Unit {
   @fs.write_string_to_file(path, text) catch {
     e => {
       println("failed to write config file: " + path + " (" + e.to_string() + ")")
-      @sys.exit(1)
+      exit_process(1)
     }
   }
 }
@@ -685,7 +812,7 @@ async fn run_add_command(args : Array[String]) -> Unit {
     Err(msg) => {
       println(msg)
       print_usage()
-      @sys.exit(1)
+      exit_process(1)
       AddCommandOptions::{
         config_path: "wite.config.jsonc",
         dependency_name: "example/example",
@@ -704,7 +831,7 @@ async fn run_add_command(args : Array[String]) -> Unit {
       Ok(msg) => msg
       Err(msg) => {
         println("verify failed: " + msg)
-        @sys.exit(1)
+        exit_process(1)
         ""
       }
     }
@@ -720,7 +847,7 @@ async fn run_add_command(args : Array[String]) -> Unit {
     Ok(value) => value
     Err(msg) => {
       println("failed to update deps: " + msg)
-      @sys.exit(1)
+      exit_process(1)
       Json::object({})
     }
   }
@@ -732,4 +859,82 @@ async fn run_add_command(args : Array[String]) -> Unit {
   println("  protocol: " + dependency_protocol_name(options.parsed.protocol))
   println("  url: " + options.resolved_url)
   println("  config: " + options.config_path)
+}
+
+///|
+async fn run_deps_verify_command(args : Array[String]) -> Unit {
+  let options = match parse_deps_verify_command_options(args) {
+    Ok(value) => value
+    Err(msg) => {
+      println(msg)
+      print_usage()
+      exit_process(1)
+      { config_path: "wite.config.jsonc", fail_fast: false }
+    }
+  }
+  let config = load_config_json_for_add(options.config_path)
+  let entries = match collect_dep_entries_from_config_json(config) {
+    Ok(value) => value
+    Err(msg) => {
+      println("failed to read deps: " + msg)
+      exit_process(1)
+      []
+    }
+  }
+  if entries.length() == 0 {
+    println("no deps found in " + options.config_path)
+    return
+  }
+  println("deps verify: " + entries.length().to_string() + " entries")
+  let failures : Array[String] = []
+  for entry in entries {
+    let verified = verify_dependency_url(entry.url, DependencyProtocol::Wkg)
+    match verified {
+      Ok(msg) => {
+        println("ok: " + entry.name)
+        println("  url: " + entry.url)
+        println("  verify: " + msg)
+      }
+      Err(msg) => {
+        println("fail: " + entry.name)
+        println("  url: " + entry.url)
+        println("  reason: " + msg)
+        failures.push(entry.name + ": " + msg)
+        if options.fail_fast {
+          break
+        }
+      }
+    }
+  }
+  if failures.length() > 0 {
+    println(
+      "deps verify failed: " +
+      failures.length().to_string() +
+      "/" +
+      entries.length().to_string(),
+    )
+    for failure in failures {
+      println("  - " + failure)
+    }
+    exit_process(1)
+  }
+  println("deps verify succeeded: " + entries.length().to_string() + "/" + entries.length().to_string())
+}
+
+///|
+async fn run_deps_command(args : Array[String]) -> Unit {
+  if args.length() < 3 {
+    println("deps requires subcommand")
+    print_usage()
+    exit_process(1)
+    return
+  }
+  match args[2] {
+    "verify" => run_deps_verify_command(args)
+    _ => {
+      println("unknown deps subcommand: " + args[2])
+      print_usage()
+      exit_process(1)
+    }
+  }
 }

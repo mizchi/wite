@@ -13,6 +13,9 @@ fn print_usage() -> Unit {
   println(
     "  add <dep-spec> [--protocol=wkg|warg|oci] [--registry=<host>] [--name=<id>] [--config=<path>] [--verify]  # dep-spec: wkg:mizchi/markdown | mizchi/markdown | wasi:http | https://wa.dev/mizchi:tmgrammar",
   )
+  println(
+    "  deps verify [--config=<path>|--config <path>] [--fail-fast]",
+  )
   println("  analyze-host <core.wasm> [limit]")
   println("  analyze-opt <core.wasm> [opt-level] [diff-limit]")
   println("  deep-analyze <core.wasm> [limit]")
@@ -2985,6 +2988,7 @@ async fn main {
     "add" => run_add_command(args)
     "analyze" => run_analyze_command(args)
     "build" => run_build(args)
+    "deps" => run_deps_command(args)
     "diff" => run_diff_command(args)
     "analyze-host" => {
       if args.length() < 3 {
