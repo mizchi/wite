@@ -2346,6 +2346,32 @@ fn find_opcode_stat(stats : Array[OpcodeStat], key : String) -> OpcodeStat? {
 }
 
 ///|
+fn find_host_code_hint(
+  hints : Array[HostCodeHint],
+  kind : String,
+) -> HostCodeHint? {
+  for hint in hints {
+    if hint.kind == kind {
+      return Some(hint)
+    }
+  }
+  None
+}
+
+///|
+fn find_optimize_stage(
+  stages : Array[OptimizeStageMetadata],
+  stage : String,
+) -> OptimizeStageMetadata? {
+  for item in stages {
+    if item.stage == stage {
+      return Some(item)
+    }
+  }
+  None
+}
+
+///|
 test "analyze section sizes for core module" {
   let bytes = sample_module_bytes()
   guard analyze_section_sizes(bytes) is Ok(sections) else {
@@ -2704,6 +2730,86 @@ test "analyze call graph summary marks indirect calls" {
   assert_true(not(summary.partial))
   assert_eq(summary.reachable_function_count, 1U)
   assert_eq(summary.dead_function_count, 0U)
+}
+
+///|
+test "analyze host-generated code detects forwarding thunks" {
+  let bytes = sample_module_with_const_forwarding_thunk_bytes()
+  guard analyze_host_generated_code(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.imported_function_count, 0U)
+  assert_eq(report.local_function_count, 3U)
+  assert_eq(report.param_forwarding_thunk_count, 1U)
+  assert_eq(report.const_forwarding_thunk_count, 1U)
+  assert_eq(report.signature_refinable_thunk_count, 0U)
+  guard find_host_code_hint(report.hints, "const-forward") is Some(const_hint) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(const_hint.function_index, 1U)
+  assert_eq(const_hint.target_function_index, 2U)
+  assert_eq(const_hint.appended_i32_const_count, 1U)
+}
+
+///|
+test "analyze host-generated code detects signature-refine thunk" {
+  let bytes = sample_module_with_gc_signature_refining_thunk_bytes()
+  guard analyze_host_generated_code(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.signature_refinable_thunk_count, 1U)
+  guard find_host_code_hint(report.hints, "signature-refine") is Some(sig_hint) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(sig_hint.function_index, 1U)
+  assert_eq(sig_hint.target_function_index, 2U)
+  assert_eq(sig_hint.dropped_param_count, 1U)
+}
+
+///|
+test "analyze host-generated code reports directize and dce metadata" {
+  let directize_bytes = sample_module_with_call_indirect_type_gap_bytes()
+  guard analyze_host_generated_code(directize_bytes) is Ok(directize_report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(directize_report.directize_candidate_call_count, 1U)
+  let dead_bytes = sample_module_with_dead_function_bytes()
+  guard analyze_host_generated_code(dead_bytes) is Ok(dead_report) else {
+    assert_true(false)
+    return
+  }
+  assert_true(not(dead_report.dce_partial))
+  assert_eq(dead_report.dce_removable_function_count, 1U)
+  assert_eq(dead_report.dce_removable_body_bytes, 5U)
+}
+
+///|
+test "analyze optimize metadata reports stage waterfall" {
+  let bytes = sample_module_with_dead_function_bytes()
+  guard analyze_optimize_metadata(bytes, config=OptimizeConfig::o1())
+    is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.before_size, bytes.length().reinterpret_as_uint())
+  assert_true(report.after_size <= report.before_size)
+  assert_eq(report.stages.length(), 4)
+  guard find_optimize_stage(report.stages, "dce") is Some(dce_stage) else {
+    assert_true(false)
+    return
+  }
+  assert_true(dce_stage.gain_bytes > 0U)
+  assert_true(dce_stage.after_size <= dce_stage.before_size)
+  guard find_optimize_stage(report.stages, "rume") is Some(rume_stage) else {
+    assert_true(false)
+    return
+  }
+  assert_true(rume_stage.after_size <= rume_stage.before_size)
 }
 
 ///|

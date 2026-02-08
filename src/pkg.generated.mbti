@@ -26,7 +26,11 @@ pub fn analyze_dce_report(Bytes) -> Result[DceReport, WalyzeError]
 
 pub fn analyze_function_sizes(Bytes) -> Result[Array[FunctionSize], WalyzeError]
 
+pub fn analyze_host_generated_code(Bytes) -> Result[HostGeneratedCodeReport, WalyzeError]
+
 pub fn analyze_keep_reasons(Bytes, config? : OptimizeConfig) -> Result[KeepReasonReport, WalyzeError]
+
+pub fn analyze_optimize_metadata(Bytes, config? : OptimizeConfig) -> Result[OptimizeMetadataReport, WalyzeError]
 
 pub fn analyze_section_sizes(Bytes) -> Result[Array[SectionSize], WalyzeError]
 
@@ -194,6 +198,30 @@ pub struct FunctionSize {
   export_names : Array[String]
 }
 
+pub struct HostCodeHint {
+  kind : String
+  function_index : UInt
+  function_name : String?
+  target_function_index : UInt
+  target_function_name : String?
+  export_names : Array[String]
+  appended_i32_const_count : UInt
+  dropped_param_count : UInt
+}
+
+pub struct HostGeneratedCodeReport {
+  imported_function_count : UInt
+  local_function_count : UInt
+  param_forwarding_thunk_count : UInt
+  const_forwarding_thunk_count : UInt
+  signature_refinable_thunk_count : UInt
+  directize_candidate_call_count : UInt
+  dce_removable_function_count : UInt
+  dce_removable_body_bytes : UInt
+  dce_partial : Bool
+  hints : Array[HostCodeHint]
+}
+
 pub struct KeepReasonEntry {
   function_index : UInt
   name : String?
@@ -255,10 +283,28 @@ pub fn OptimizeConfig::o3() -> Self
 pub fn OptimizeConfig::os() -> Self
 pub fn OptimizeConfig::oz() -> Self
 
+pub struct OptimizeMetadataReport {
+  before_size : UInt
+  after_size : UInt
+  total_gain_bytes : UInt
+  total_regression_bytes : UInt
+  stages : Array[OptimizeStageMetadata]
+}
+
 pub struct OptimizeResult {
   bytes : Bytes
   before_size : UInt
   after_size : UInt
+  removed_sections : Array[String]
+  no_change_reasons : Array[String]
+}
+
+pub struct OptimizeStageMetadata {
+  stage : String
+  before_size : UInt
+  after_size : UInt
+  gain_bytes : UInt
+  regression_bytes : UInt
   removed_sections : Array[String]
   no_change_reasons : Array[String]
 }

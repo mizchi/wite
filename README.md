@@ -38,6 +38,8 @@ It provides:
 - core wasm code-block size analysis (`function/block/loop/if` bytes + instruction counts)
 - core wasm call graph + dead-body analysis (export/start roots)
 - core wasm call graph roots from global/element `ref.func`
+- host/generated code analysis (forwarding-thunk/sig-refine/directize-candidate/dce-removable hints)
+- optimize metadata analysis (`strip -> code -> dce -> rume` stage waterfall for optimizer input)
 - core wasm DCE report + apply (callgraph-based function-level pruning)
 - core wasm duplicate function elimination apply (body+type based index remap)
 - core wasm merge-similar-functions apply (forwarding thunk merge + index remap)
@@ -67,6 +69,8 @@ It provides:
 
 ```bash
 just run -- analyze path/to/module.wasm
+just run -- analyze-host path/to/module.wasm 20
+just run -- analyze-opt path/to/module.wasm -O1
 just run -- deep-analyze path/to/module.wasm 20
 just run -- profile path/to/module.wasm
 just run -- top-functions path/to/module.wasm 20
@@ -106,6 +110,8 @@ Main APIs are in `src/lib.mbt`:
 - `analyze_code_block_sizes(bytes)`
 - `analyze_call_graph(bytes)`
 - `analyze_call_graph_summary(bytes)`
+- `analyze_host_generated_code(bytes)`
+- `analyze_optimize_metadata(bytes, config=...)`
 - `analyze_keep_reasons(bytes, config=...)`
 - `analyze_dce_report(bytes)`
 - `optimize_for_size(bytes, config=...)`

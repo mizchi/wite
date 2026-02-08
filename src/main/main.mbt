@@ -2,6 +2,8 @@
 fn print_usage() -> Unit {
   println("walyze commands:")
   println("  analyze <core.wasm>")
+  println("  analyze-host <core.wasm> [limit]")
+  println("  analyze-opt <core.wasm> [opt-level]")
   println("  deep-analyze <core.wasm> [limit]")
   println("  profile <core.wasm>")
   println("  top-functions <core.wasm> [limit]")
@@ -206,6 +208,142 @@ fn print_call_graph_summary(summary : @walyze.CallGraphSummary) -> Unit {
     format_percent(summary.dead_body_bytes, total_local_body_bytes) +
     ")",
   )
+}
+
+///|
+fn print_host_code_hints(
+  hints : Array[@walyze.HostCodeHint],
+  limit : UInt,
+) -> Unit {
+  if hints.length() == 0 {
+    println("  hints: (none)")
+    return
+  }
+  println("  hints:")
+  let mut printed = 0U
+  for hint in hints {
+    if printed >= limit {
+      break
+    }
+    let label = match hint.function_name {
+      Some(name) => name
+      None => "#\{hint.function_index.to_string()}"
+    }
+    let target_label = match hint.target_function_name {
+      Some(name) => name
+      None => "#\{hint.target_function_index.to_string()}"
+    }
+    let export_part = if hint.export_names.length() == 0 {
+      ""
+    } else {
+      " exports=" + hint.export_names.join(",")
+    }
+    println(
+      "    " +
+      hint.kind +
+      " " +
+      label +
+      " -> " +
+      target_label +
+      " consts=" +
+      hint.appended_i32_const_count.to_string() +
+      " drops=" +
+      hint.dropped_param_count.to_string() +
+      export_part,
+    )
+    printed += 1U
+  }
+}
+
+///|
+fn run_analyze_host(path : String, limit : UInt) -> Unit {
+  let bytes = read_bytes_or_exit(path)
+  match @walyze.analyze_host_generated_code(bytes) {
+    Ok(report) => {
+      println("host/generated code analysis:")
+      println(
+        "  functions: imported=" +
+        report.imported_function_count.to_string() +
+        " local=" +
+        report.local_function_count.to_string(),
+      )
+      println(
+        "  forwarding_thunks: param=" +
+        report.param_forwarding_thunk_count.to_string() +
+        " const=" +
+        report.const_forwarding_thunk_count.to_string() +
+        " signature-refine=" +
+        report.signature_refinable_thunk_count.to_string(),
+      )
+      println(
+        "  directize_candidate_calls: " +
+        report.directize_candidate_call_count.to_string(),
+      )
+      println(
+        "  dce_removable: functions=" +
+        report.dce_removable_function_count.to_string() +
+        " bytes=" +
+        report.dce_removable_body_bytes.to_string() +
+        " partial=" +
+        report.dce_partial.to_string(),
+      )
+      print_host_code_hints(report.hints, limit)
+    }
+    Err(e) => {
+      println("analyze-host failed: " + @walyze.error_to_string(e))
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
+fn print_optimize_metadata_stage(stage : @walyze.OptimizeStageMetadata) -> Unit {
+  println(
+    "    " +
+    stage.stage +
+    ": " +
+    stage.before_size.to_string() +
+    " -> " +
+    stage.after_size.to_string() +
+    " gain=" +
+    stage.gain_bytes.to_string() +
+    " regression=" +
+    stage.regression_bytes.to_string(),
+  )
+  if stage.removed_sections.length() > 0 {
+    println("      pass markers: " + stage.removed_sections.join(", "))
+  }
+  if stage.no_change_reasons.length() > 0 {
+    println("      no-change: " + stage.no_change_reasons.join(", "))
+  }
+}
+
+///|
+fn run_analyze_opt(path : String, config : @walyze.OptimizeConfig) -> Unit {
+  let bytes = read_bytes_or_exit(path)
+  match @walyze.analyze_optimize_metadata(bytes, config~) {
+    Ok(report) => {
+      println("optimize metadata analysis:")
+      println(
+        "  total: " +
+        report.before_size.to_string() +
+        " -> " +
+        report.after_size.to_string() +
+        " gain=" +
+        report.total_gain_bytes.to_string() +
+        " regression=" +
+        report.total_regression_bytes.to_string(),
+      )
+      println("  stages:")
+      for stage in report.stages {
+        print_optimize_metadata_stage(stage)
+      }
+    }
+    Err(e) => {
+      println("analyze-opt failed: " + @walyze.error_to_string(e))
+      @sys.exit(1)
+    }
+  }
 }
 
 ///|
@@ -1153,6 +1291,37 @@ fn main {
         @sys.exit(1)
       }
       run_analyze(args[2])
+    }
+    "analyze-host" => {
+      if args.length() < 3 {
+        print_usage()
+        @sys.exit(1)
+      }
+      let limit = if args.length() >= 4 {
+        parse_uint_or_exit(args[3], "limit")
+      } else {
+        20U
+      }
+      run_analyze_host(args[2], limit)
+    }
+    "analyze-opt" => {
+      if args.length() < 3 {
+        print_usage()
+        @sys.exit(1)
+      }
+      let config = if args.length() >= 4 {
+        match @walyze.optimize_config_from_opt_level(args[3]) {
+          Some(v) => v
+          None => {
+            println("invalid opt-level: " + args[3])
+            @sys.exit(1)
+            @walyze.OptimizeConfig::o1()
+          }
+        }
+      } else {
+        @walyze.OptimizeConfig::o1()
+      }
+      run_analyze_opt(args[2], config)
     }
     "deep-analyze" => {
       if args.length() < 3 {

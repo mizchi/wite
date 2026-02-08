@@ -21,6 +21,9 @@
 
 ## Recent Progress
 
+- [x] Analyze: `analyze_host_generated_code` API と `analyze-host` CLI を追加（forwarding/sig-refine/directize候補/DCE除去余地を可視化）
+- [x] Analyze: `analyze_optimize_metadata` API と `analyze-opt` CLI を追加（`strip -> code -> dce -> rume` 段階ウォーターフォール）
+- [x] テスト追加: host-generated report / optimize metadata report の Red/Green カバレッジを追加
 - [x] Analyze: `analyze_call_graph_summary` API を追加し、`analyze` CLI で到達/未到達関数と body bytes 要約を表示
 - [x] テスト追加: callgraph summary の dead-function / indirect-call カバレッジを追加
 - [x] P2/P5: forwarding thunk の終端パターン `call; return; end` を `cfp/cfp-const/signature-refine` で検出可能に拡張

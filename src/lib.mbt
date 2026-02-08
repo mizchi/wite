@@ -436,6 +436,52 @@ pub struct CallGraphSummary {
 }
 
 ///|
+pub struct HostCodeHint {
+  kind : String
+  function_index : UInt
+  function_name : String?
+  target_function_index : UInt
+  target_function_name : String?
+  export_names : Array[String]
+  appended_i32_const_count : UInt
+  dropped_param_count : UInt
+}
+
+///|
+pub struct HostGeneratedCodeReport {
+  imported_function_count : UInt
+  local_function_count : UInt
+  param_forwarding_thunk_count : UInt
+  const_forwarding_thunk_count : UInt
+  signature_refinable_thunk_count : UInt
+  directize_candidate_call_count : UInt
+  dce_removable_function_count : UInt
+  dce_removable_body_bytes : UInt
+  dce_partial : Bool
+  hints : Array[HostCodeHint]
+}
+
+///|
+pub struct OptimizeStageMetadata {
+  stage : String
+  before_size : UInt
+  after_size : UInt
+  gain_bytes : UInt
+  regression_bytes : UInt
+  removed_sections : Array[String]
+  no_change_reasons : Array[String]
+}
+
+///|
+pub struct OptimizeMetadataReport {
+  before_size : UInt
+  after_size : UInt
+  total_gain_bytes : UInt
+  total_regression_bytes : UInt
+  stages : Array[OptimizeStageMetadata]
+}
+
+///|
 pub struct DceReport {
   roots : Array[UInt]
   partial : Bool
@@ -9327,6 +9373,367 @@ pub fn analyze_call_graph_summary(
       })
     }
     Err(err) => Err(err)
+  }
+}
+
+///|
+fn compare_host_code_hint(a : HostCodeHint, b : HostCodeHint) -> Int {
+  if a.function_index < b.function_index {
+    -1
+  } else if a.function_index > b.function_index {
+    1
+  } else {
+    a.kind.compare(b.kind)
+  }
+}
+
+///|
+fn size_gain_bytes(before_size : UInt, after_size : UInt) -> UInt {
+  if before_size > after_size {
+    before_size - after_size
+  } else {
+    0U
+  }
+}
+
+///|
+fn size_regression_bytes(before_size : UInt, after_size : UInt) -> UInt {
+  if after_size > before_size {
+    after_size - before_size
+  } else {
+    0U
+  }
+}
+
+///|
+pub fn analyze_host_generated_code(
+  bytes : Bytes,
+) -> Result[HostGeneratedCodeReport, WalyzeError] {
+  try? {
+    let sections = parse_core_sections_raise(bytes)
+    let mut type_payload : Bytes? = None
+    let mut import_payload : Bytes? = None
+    let mut function_payload : Bytes? = None
+    let mut code_payload : Bytes? = None
+    let export_names : Map[UInt, Array[String]] = {}
+    let function_names : Map[UInt, String] = {}
+    for section in sections {
+      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      match section.section_id {
+        1U => type_payload = Some(payload)
+        2U => import_payload = Some(payload)
+        3U => function_payload = Some(payload)
+        7U => {
+          let parsed = parse_export_function_names(payload)
+          merge_export_function_names(export_names, parsed)
+        }
+        10U => code_payload = Some(payload)
+        0U =>
+          match section.custom_name {
+            Some(name) =>
+              if name == "name" {
+                parse_name_section_function_names(payload).each((
+                  index,
+                  function_name,
+                ) => function_names.set(index, function_name))
+              }
+            None => ()
+          }
+        _ => ()
+      }
+    }
+    let imported_function_type_indices = match import_payload {
+      Some(payload) => parse_import_function_type_indices(payload)
+      None => []
+    }
+    let imported_function_count = imported_function_type_indices
+      .length()
+      .reinterpret_as_uint()
+    let mut local_function_count = 0U
+    let mut param_forwarding_thunk_count = 0U
+    let mut const_forwarding_thunk_count = 0U
+    let mut signature_refinable_thunk_count = 0U
+    let hints : Array[HostCodeHint] = []
+    match (type_payload, function_payload, code_payload) {
+      (Some(type_payload), Some(function_payload), Some(code_payload)) => {
+        let local_function_type_indices = parse_function_type_indices(
+          function_payload,
+        )
+        local_function_count = local_function_type_indices
+          .length()
+          .reinterpret_as_uint()
+        let code_bodies = parse_code_bodies(code_payload)
+        if local_function_type_indices.length() != code_bodies.length() {
+          raise WalyzeError::InvalidFormat(
+            "function/code section count mismatch for analyze-host: function=" +
+            local_function_type_indices.length().to_string() +
+            " code=" +
+            code_bodies.length().to_string(),
+          )
+        }
+        let function_type_by_index = imported_function_type_indices.copy()
+        function_type_by_index.append(local_function_type_indices[:])
+        let parsed_type_entries = parse_type_section_entries_with_refs_raise(
+          type_payload, "analyze-host",
+        )
+        let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
+        let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+        for i in 0..<parsed_type_entries.length() {
+          if parsed_type_entries[i].form == 0x60U {
+            function_type_entry_by_type_index.set(
+              i.reinterpret_as_uint(),
+              parse_function_type_entry_from_raw_raise(
+                parsed_type_entries[i].raw,
+                "analyze-host",
+              ),
+            )
+          }
+        }
+        let function_param_count_by_index : Array[UInt] = []
+        for type_index in function_type_by_index {
+          if type_index >= type_count_u {
+            raise WalyzeError::InvalidFormat(
+              "type index out of range in analyze-host: " +
+              type_index.to_string(),
+            )
+          }
+          let type_pos = UInt::reinterpret_as_int(type_index)
+          if type_pos < 0 || type_pos >= parsed_type_entries.length() {
+            raise WalyzeError::InvalidFormat(
+              "type index position out of range in analyze-host: " +
+              type_index.to_string(),
+            )
+          }
+          if parsed_type_entries[type_pos].form != 0x60U {
+            raise WalyzeError::InvalidFormat(
+              "non-function type index used by function in analyze-host: " +
+              type_index.to_string(),
+            )
+          }
+          function_param_count_by_index.push(
+            parse_function_type_param_count_from_raw_raise(
+              parsed_type_entries[type_pos].raw,
+              "analyze-host",
+            ),
+          )
+        }
+        let param_alias_map = collect_call_forwarding_alias_map(
+          code_bodies, imported_function_count, function_type_by_index, function_param_count_by_index,
+        )
+        param_alias_map.each((function_index, target_function_index) => {
+          param_forwarding_thunk_count += 1U
+          hints.push({
+            kind: "param-forward",
+            function_index,
+            function_name: function_names.get(function_index),
+            target_function_index,
+            target_function_name: function_names.get(target_function_index),
+            export_names: match export_names.get(function_index) {
+              Some(v) => v
+              None => []
+            },
+            appended_i32_const_count: 0U,
+            dropped_param_count: 0U,
+          })
+        })
+        let const_alias_map = collect_const_call_forwarding_alias_map(
+          code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+        )
+        const_alias_map.each((function_index, alias_info) => {
+          const_forwarding_thunk_count += 1U
+          hints.push({
+            kind: "const-forward",
+            function_index,
+            function_name: function_names.get(function_index),
+            target_function_index: alias_info.target,
+            target_function_name: function_names.get(alias_info.target),
+            export_names: match export_names.get(function_index) {
+              Some(v) => v
+              None => []
+            },
+            appended_i32_const_count: alias_info.appended_i32_const_instrs
+            .length()
+            .reinterpret_as_uint(),
+            dropped_param_count: 0U,
+          })
+        })
+        let signature_alias_map = collect_signature_refine_alias_map(
+          code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+        )
+        signature_alias_map.each((function_index, alias_info) => {
+          signature_refinable_thunk_count += 1U
+          hints.push({
+            kind: "signature-refine",
+            function_index,
+            function_name: function_names.get(function_index),
+            target_function_index: alias_info.target,
+            target_function_name: function_names.get(alias_info.target),
+            export_names: match export_names.get(function_index) {
+              Some(v) => v
+              None => []
+            },
+            appended_i32_const_count: 0U,
+            dropped_param_count: alias_info.dropped_param_count,
+          })
+        })
+      }
+      _ => ()
+    }
+    hints.sort_by(compare_host_code_hint)
+    let directize_result = apply_directize_raise(bytes)
+    let dce_report = match analyze_dce_report(bytes) {
+      Ok(v) => v
+      Err(e) => raise e
+    }
+    {
+      imported_function_count,
+      local_function_count,
+      param_forwarding_thunk_count,
+      const_forwarding_thunk_count,
+      signature_refinable_thunk_count,
+      directize_candidate_call_count: directize_result.rewritten_call_count,
+      dce_removable_function_count: dce_report.removable_function_count,
+      dce_removable_body_bytes: dce_report.removable_body_bytes,
+      dce_partial: dce_report.partial,
+      hints,
+    }
+  }
+}
+
+///|
+fn make_optimize_stage_config(
+  base : OptimizeConfig,
+  strip_only : Bool,
+  include_dce_group : Bool,
+  include_rume : Bool,
+) -> OptimizeConfig {
+  let pass_rounds = if strip_only {
+    1U
+  } else if base.pass_rounds == 0U {
+    1U
+  } else {
+    base.pass_rounds
+  }
+  make_optimize_config(
+    strip_all_custom=base.strip_all_custom,
+    strip_name_section=base.strip_name_section,
+    strip_producers_section=base.strip_producers_section,
+    strip_debug_sections=base.strip_debug_sections,
+    strip_dwarf_sections=base.strip_dwarf_sections,
+    strip_target_features_section=base.strip_target_features_section,
+    keep_custom_sections=base.keep_custom_sections,
+    pass_rounds~,
+    enable_peephole=if strip_only { false } else { base.enable_peephole },
+    peephole_remove_nop=if strip_only {
+      false
+    } else {
+      base.peephole_remove_nop
+    },
+    peephole_remove_const_drop=if strip_only {
+      false
+    } else {
+      base.peephole_remove_const_drop
+    },
+    enable_vacuum=if strip_only { false } else { base.enable_vacuum },
+    enable_merge_blocks=if strip_only {
+      false
+    } else {
+      base.enable_merge_blocks
+    },
+    enable_remove_unused_brs=if strip_only {
+      false
+    } else {
+      base.enable_remove_unused_brs
+    },
+    enable_dce=if include_dce_group { base.enable_dce } else { false },
+    enable_dfe=if include_dce_group { base.enable_dfe } else { false },
+    enable_merge_similar_functions=if include_dce_group {
+      base.enable_merge_similar_functions
+    } else {
+      false
+    },
+    enable_remove_unused_module_elements=if include_rume {
+      base.enable_remove_unused_module_elements
+    } else {
+      false
+    },
+    closed_world=base.closed_world,
+    closed_world_root_exports=base.closed_world_root_exports,
+    safe_mode=base.safe_mode,
+  )
+}
+
+///|
+priv struct OptimizeStageRunResult {
+  bytes : Bytes
+  stage : OptimizeStageMetadata
+}
+
+///|
+fn run_optimize_stage_raise(
+  stage_name : String,
+  bytes : Bytes,
+  config : OptimizeConfig,
+) -> OptimizeStageRunResult raise WalyzeError {
+  let optimized = match optimize_for_size(bytes, config~) {
+    Ok(v) => v
+    Err(err) => raise err
+  }
+  let stage = {
+    stage: stage_name,
+    before_size: optimized.before_size,
+    after_size: optimized.after_size,
+    gain_bytes: size_gain_bytes(optimized.before_size, optimized.after_size),
+    regression_bytes: size_regression_bytes(
+      optimized.before_size,
+      optimized.after_size,
+    ),
+    removed_sections: optimized.removed_sections,
+    no_change_reasons: optimized.no_change_reasons,
+  }
+  { bytes: optimized.bytes, stage }
+}
+
+///|
+pub fn analyze_optimize_metadata(
+  bytes : Bytes,
+  config? : OptimizeConfig = OptimizeConfig::o1(),
+) -> Result[OptimizeMetadataReport, WalyzeError] {
+  try? {
+    let strip_stage = run_optimize_stage_raise(
+      "strip",
+      bytes,
+      make_optimize_stage_config(config, true, false, false),
+    )
+    let code_stage = run_optimize_stage_raise(
+      "code",
+      strip_stage.bytes,
+      make_optimize_stage_config(config, false, false, false),
+    )
+    let dce_stage = run_optimize_stage_raise(
+      "dce",
+      code_stage.bytes,
+      make_optimize_stage_config(config, false, true, false),
+    )
+    let rume_stage = run_optimize_stage_raise(
+      "rume",
+      dce_stage.bytes,
+      make_optimize_stage_config(config, false, true, true),
+    )
+    let before_size = bytes.length().reinterpret_as_uint()
+    let after_size = rume_stage.bytes.length().reinterpret_as_uint()
+    {
+      before_size,
+      after_size,
+      total_gain_bytes: size_gain_bytes(before_size, after_size),
+      total_regression_bytes: size_regression_bytes(before_size, after_size),
+      stages: [
+        strip_stage.stage,
+        code_stage.stage,
+        dce_stage.stage,
+        rume_stage.stage,
+      ],
+    }
   }
 }
 
