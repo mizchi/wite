@@ -2760,12 +2760,7 @@ fn rewrite_code_body_for_module_index_map_raise(
   let instr_bytes = body[prefix_end:body.length()].to_bytes()
   let spans = parse_instruction_spans_raise(instr_bytes)
   let rewritten_instr = rewrite_instruction_module_indices_raise(
-    instr_bytes,
-    spans,
-    table_index_map,
-    memory_index_map,
-    global_index_map,
-    element_index_map,
+    instr_bytes, spans, table_index_map, memory_index_map, global_index_map, element_index_map,
     data_index_map,
   )
   let out : Array[Byte] = body[0:prefix_end].to_array()
@@ -2787,11 +2782,7 @@ fn rewrite_code_section_payload_for_module_index_map_raise(
   out.append(encode_u32_leb128(bodies.length().reinterpret_as_uint())[:])
   for body in bodies {
     let rewritten = rewrite_code_body_for_module_index_map_raise(
-      body,
-      table_index_map,
-      memory_index_map,
-      global_index_map,
-      element_index_map,
+      body, table_index_map, memory_index_map, global_index_map, element_index_map,
       data_index_map,
     )
     out.append(encode_u32_leb128(rewritten.length().reinterpret_as_uint())[:])
@@ -3443,7 +3434,6 @@ fn parse_type_section_entries_raise(
 priv struct FunctionTypeEntry {
   params : Array[Bytes]
   results : Array[Bytes]
-  raw : Bytes
 }
 
 ///|
@@ -3455,7 +3445,6 @@ fn parse_function_type_entries_raise(
   let count = parser.read_u32_leb128()
   let out : Array[FunctionTypeEntry] = []
   for _ in 0U..<count {
-    let start = parser.get_pos()
     let form = parser.read_byte().to_uint()
     if form != 0x60U {
       raise WalyzeError::InvalidFormat(
@@ -3472,10 +3461,39 @@ fn parse_function_type_entries_raise(
     for _ in 0U..<result_count {
       results.push(read_val_type_bytes_raise(parser))
     }
-    let end_ = parser.get_pos()
-    out.push({ params, results, raw: payload[start:end_].to_bytes() })
+    out.push({ params, results })
   }
   out
+}
+
+///|
+fn parse_function_type_entry_from_raw_raise(
+  raw : Bytes,
+  context : String,
+) -> FunctionTypeEntry raise WalyzeError {
+  let parser = Cursor::new(raw)
+  let form = parser.read_byte().to_uint()
+  if form != 0x60U {
+    raise WalyzeError::InvalidFormat(
+      "unsupported type form in " + context + ": " + form.to_string(),
+    )
+  }
+  let param_count = parser.read_u32_leb128()
+  let params : Array[Bytes] = []
+  for _ in 0U..<param_count {
+    params.push(read_val_type_bytes_raise(parser))
+  }
+  let result_count = parser.read_u32_leb128()
+  let results : Array[Bytes] = []
+  for _ in 0U..<result_count {
+    results.push(read_val_type_bytes_raise(parser))
+  }
+  if not(parser.eof()) {
+    raise WalyzeError::InvalidFormat(
+      "trailing bytes in function type raw entry in " + context,
+    )
+  }
+  { params, results }
 }
 
 ///|
@@ -6277,6 +6295,14 @@ fn optimize_for_size_round_raise(
     if cfp.rewritten_call_count > 0U {
       removed_sections.push("cfp:calls:" + cfp.rewritten_call_count.to_string())
     }
+    let signature_refine = apply_signature_refining_raise(optimized_bytes)
+    optimized_bytes = signature_refine.bytes
+    if signature_refine.rewritten_call_count > 0U {
+      removed_sections.push(
+        "signature-refine:calls:" +
+        signature_refine.rewritten_call_count.to_string(),
+      )
+    }
     let dce = apply_dce_raise(optimized_bytes, config)
     optimized_bytes = dce.bytes
     if dce.removed_function_count > 0U {
@@ -7745,6 +7771,12 @@ priv struct CfpApplyResult {
 }
 
 ///|
+priv struct SignatureRefineApplyResult {
+  bytes : Bytes
+  rewritten_call_count : UInt
+}
+
+///|
 priv struct MsfApplyResult {
   bytes : Bytes
   removed_function_count : UInt
@@ -7849,6 +7881,102 @@ fn parse_forward_call_target_with_param_count(
     }
   }
   decode_span_u32_immediate(instr_bytes, spans[call_pos])
+}
+
+///|
+priv struct SignatureRefineAlias {
+  target : UInt
+  dropped_param_count : UInt
+}
+
+///|
+fn parse_forward_call_target_with_prefix_param_count(
+  body_bytes : Bytes,
+) -> (UInt, UInt)? {
+  let prefix_result = try? parse_local_decl_prefix_raise(body_bytes)
+  let prefix = match prefix_result {
+    Ok(v) => v
+    Err(_) => return None
+  }
+  if prefix.local_types.length() > 0 {
+    return None
+  }
+  let prefix_end = prefix.prefix_end
+  let prefix_end_result = try? parse_local_decl_prefix_end(body_bytes)
+  match prefix_end_result {
+    Ok(v) => if v != prefix_end { return None }
+    Err(_) => return None
+  }
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return None
+  }
+  if spans.length() < 2 {
+    return None
+  }
+  let call_pos = spans.length() - 2
+  if spans[call_pos].opcode != 0x10U || spans[call_pos + 1].opcode != 0x0bU {
+    return None
+  }
+  for i in 0..<call_pos {
+    if spans[i].opcode != 0x20U {
+      return None
+    }
+    match decode_span_u32_immediate(instr_bytes, spans[i]) {
+      Some(local_index) =>
+        if local_index != i.reinterpret_as_uint() {
+          return None
+        }
+      None => return None
+    }
+  }
+  match decode_span_u32_immediate(instr_bytes, spans[call_pos]) {
+    Some(target) => Some((target, call_pos.reinterpret_as_uint()))
+    None => None
+  }
+}
+
+///|
+fn function_type_results_equal(
+  a : FunctionTypeEntry,
+  b : FunctionTypeEntry,
+) -> Bool {
+  if a.results.length() != b.results.length() {
+    return false
+  }
+  for i in 0..<a.results.length() {
+    if not(bytes_equal(a.results[i], b.results[i])) {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn can_signature_refine_forward_to_target(
+  wrapper_type : FunctionTypeEntry,
+  target_type : FunctionTypeEntry,
+  forwarded_param_count : UInt,
+) -> UInt? {
+  let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
+  let target_param_count = target_type.params.length().reinterpret_as_uint()
+  if forwarded_param_count != target_param_count {
+    return None
+  }
+  if wrapper_param_count <= target_param_count {
+    return None
+  }
+  if not(function_type_results_equal(wrapper_type, target_type)) {
+    return None
+  }
+  let target_param_count_i = UInt::reinterpret_as_int(target_param_count)
+  for i in 0..<target_param_count_i {
+    if not(bytes_equal(wrapper_type.params[i], target_type.params[i])) {
+      return None
+    }
+  }
+  Some(wrapper_param_count - target_param_count)
 }
 
 ///|
@@ -8074,6 +8202,277 @@ fn apply_call_forwarding_propagation_raise(
     return { bytes, rewritten_call_count: 0U }
   }
   let (rewritten_code_payload, rewritten_call_count) = rewrite_code_section_payload_for_call_forwarding_raise(
+    code_payload, alias_map,
+  )
+  if rewritten_call_count == 0U {
+    return { bytes, rewritten_call_count: 0U }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    if section.section_id == 10U {
+      append_encoded_section(out, 10U, rewritten_code_payload)
+    } else {
+      out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), rewritten_call_count }
+}
+
+///|
+fn collect_signature_refine_alias_map(
+  code_bodies : Array[Bytes],
+  imported_function_count : UInt,
+  function_type_by_index : Array[UInt],
+  function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+) -> Map[UInt, SignatureRefineAlias] {
+  let alias_candidate : Map[UInt, SignatureRefineAlias] = {}
+  for i in 0..<code_bodies.length() {
+    let old_index = imported_function_count + i.reinterpret_as_uint()
+    let old_pos = UInt::reinterpret_as_int(old_index)
+    if old_pos < 0 || old_pos >= function_type_by_index.length() {
+      continue
+    }
+    let wrapper_type_index = function_type_by_index[old_pos]
+    let wrapper_type = match
+      function_type_entry_by_type_index.get(wrapper_type_index) {
+      Some(v) => v
+      None => continue
+    }
+    match parse_forward_call_target_with_prefix_param_count(code_bodies[i]) {
+      Some((target, forwarded_param_count)) =>
+        if target != old_index {
+          let target_pos = UInt::reinterpret_as_int(target)
+          if target_pos >= 0 && target_pos < function_type_by_index.length() {
+            let target_type_index = function_type_by_index[target_pos]
+            match function_type_entry_by_type_index.get(target_type_index) {
+              Some(target_type) =>
+                match
+                  can_signature_refine_forward_to_target(
+                    wrapper_type, target_type, forwarded_param_count,
+                  ) {
+                  Some(dropped_param_count) =>
+                    alias_candidate.set(old_index, {
+                      target,
+                      dropped_param_count,
+                    })
+                  None => ()
+                }
+              None => ()
+            }
+          }
+        }
+      None => ()
+    }
+  }
+  let resolved_alias : Map[UInt, SignatureRefineAlias] = {}
+  for i in 0..<code_bodies.length() {
+    let old_index = imported_function_count + i.reinterpret_as_uint()
+    match alias_candidate.get(old_index) {
+      Some(initial_alias) => {
+        let seen : Map[UInt, Bool] = {}
+        let mut current_target = initial_alias.target
+        let mut dropped_param_count = initial_alias.dropped_param_count
+        let mut valid = true
+        while true {
+          if current_target == old_index {
+            valid = false
+            break
+          }
+          if seen.get(current_target) is Some(_) {
+            valid = false
+            break
+          }
+          seen.set(current_target, true)
+          match alias_candidate.get(current_target) {
+            Some(next_alias) => {
+              dropped_param_count += next_alias.dropped_param_count
+              current_target = next_alias.target
+            }
+            None => break
+          }
+        }
+        if valid {
+          resolved_alias.set(old_index, {
+            target: current_target,
+            dropped_param_count,
+          })
+        }
+      }
+      None => ()
+    }
+  }
+  resolved_alias
+}
+
+///|
+fn rewrite_instruction_calls_for_signature_refining_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  alias_map : Map[UInt, SignatureRefineAlias],
+) -> (Bytes, UInt) raise WalyzeError {
+  let out : Array[Byte] = []
+  let mut rewritten_call_count = 0U
+  for span in spans {
+    if span.opcode == 0x10U {
+      if span.end_ <= span.start + 1 {
+        raise WalyzeError::InvalidFormat(
+          "invalid call immediate in signature-refine",
+        )
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let target = match decode_u32_leb128_bytes(imm) {
+        Some(v) => v
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode call immediate in signature-refine",
+          )
+      }
+      match alias_map.get(target) {
+        Some(alias_info) => {
+          for _ in 0U..<alias_info.dropped_param_count {
+            out.push(0x1aU.to_byte())
+          }
+          out.push(0x10U.to_byte())
+          out.append(encode_u32_leb128(alias_info.target)[:])
+          rewritten_call_count += 1U
+        }
+        None => out.append(instr_bytes[span.start:span.end_].to_array())
+      }
+    } else {
+      out.append(instr_bytes[span.start:span.end_].to_array())
+    }
+  }
+  (Bytes::from_array(out[:]), rewritten_call_count)
+}
+
+///|
+fn rewrite_code_section_payload_for_signature_refining_raise(
+  payload : Bytes,
+  alias_map : Map[UInt, SignatureRefineAlias],
+) -> (Bytes, UInt) raise WalyzeError {
+  let bodies = parse_code_bodies(payload)
+  let rewritten_bodies : Array[Bytes] = []
+  let mut rewritten_call_count = 0U
+  for body in bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    let (rewritten_instr, rewritten_count) = rewrite_instruction_calls_for_signature_refining_raise(
+      instr_bytes, spans, alias_map,
+    )
+    rewritten_call_count += rewritten_count
+    if rewritten_count > 0U {
+      let rewritten_body : Array[Byte] = body[0:prefix_end].to_array()
+      rewritten_body.append(rewritten_instr[:].to_array())
+      rewritten_bodies.push(Bytes::from_array(rewritten_body[:]))
+    } else {
+      rewritten_bodies.push(body)
+    }
+  }
+  (
+    encode_code_section_payload_from_bodies(rewritten_bodies),
+    rewritten_call_count,
+  )
+}
+
+///|
+fn apply_signature_refining_raise(
+  bytes : Bytes,
+) -> SignatureRefineApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut type_payload : Bytes? = None
+  let mut import_payload : Bytes? = None
+  let mut function_payload : Bytes? = None
+  let mut code_payload : Bytes? = None
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      1U => type_payload = Some(payload)
+      2U => import_payload = Some(payload)
+      3U => function_payload = Some(payload)
+      10U => code_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let type_payload = match type_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let function_payload = match function_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let code_payload = match code_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let local_function_type_indices = parse_function_type_indices(
+    function_payload,
+  )
+  let code_bodies = parse_code_bodies(code_payload)
+  if local_function_type_indices.length() != code_bodies.length() {
+    raise WalyzeError::InvalidFormat(
+      "function/code section count mismatch for signature-refine: function=" +
+      local_function_type_indices.length().to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let imported_function_type_indices = match import_payload {
+    Some(payload) => parse_import_function_type_indices(payload)
+    None => []
+  }
+  let parsed_type_entries = parse_type_section_entries_with_refs_raise(
+    type_payload, "signature-refine",
+  )
+  let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  for i in 0..<parsed_type_entries.length() {
+    if parsed_type_entries[i].form == 0x60U {
+      let type_index = i.reinterpret_as_uint()
+      function_type_entry_by_type_index.set(
+        type_index,
+        parse_function_type_entry_from_raw_raise(
+          parsed_type_entries[i].raw,
+          "signature-refine",
+        ),
+      )
+    }
+  }
+  let function_type_by_index = imported_function_type_indices.copy()
+  function_type_by_index.append(local_function_type_indices[:])
+  for type_index in function_type_by_index {
+    if type_index >= type_count_u {
+      raise WalyzeError::InvalidFormat(
+        "type index out of range in signature-refine: " + type_index.to_string(),
+      )
+    }
+    let type_pos = UInt::reinterpret_as_int(type_index)
+    if type_pos < 0 || type_pos >= parsed_type_entries.length() {
+      raise WalyzeError::InvalidFormat(
+        "type index position out of range in signature-refine: " +
+        type_index.to_string(),
+      )
+    }
+    if parsed_type_entries[type_pos].form != 0x60U {
+      raise WalyzeError::InvalidFormat(
+        "non-function type index used by function in signature-refine: " +
+        type_index.to_string(),
+      )
+    }
+  }
+  let imported_function_count = imported_function_type_indices
+    .length()
+    .reinterpret_as_uint()
+  let alias_map = collect_signature_refine_alias_map(
+    code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+  )
+  let mut has_alias = false
+  alias_map.each((_index, _alias) => has_alias = true)
+  if not(has_alias) {
+    return { bytes, rewritten_call_count: 0U }
+  }
+  let (rewritten_code_payload, rewritten_call_count) = rewrite_code_section_payload_for_signature_refining_raise(
     code_payload, alias_map,
   )
   if rewritten_call_count == 0U {
@@ -8374,9 +8773,7 @@ fn apply_remove_unused_module_elements_raise(
   match element_section_payload {
     Some(payload) => {
       let (rewritten, removed_segments, segment_index_map) = rewrite_element_section_payload_for_table_index_map_raise(
-        payload,
-        table_index_map,
-        global_index_map,
+        payload, table_index_map, global_index_map,
       )
       rewritten_element_payload = Some(rewritten)
       removed_element_count = removed_segments
@@ -8390,9 +8787,7 @@ fn apply_remove_unused_module_elements_raise(
   match data_section_payload {
     Some(payload) => {
       let (rewritten, removed_segments, segment_index_map) = rewrite_data_section_payload_for_memory_global_index_map_raise(
-        payload,
-        memory_index_map,
-        global_index_map,
+        payload, memory_index_map, global_index_map,
       )
       rewritten_data_payload = Some(rewritten)
       removed_data_count = removed_segments
@@ -8490,11 +8885,7 @@ fn apply_remove_unused_module_elements_raise(
           out,
           10U,
           rewrite_code_section_payload_for_module_index_map_raise(
-            payload,
-            table_index_map,
-            memory_index_map,
-            global_index_map,
-            element_index_map,
+            payload, table_index_map, memory_index_map, global_index_map, element_index_map,
             data_index_map,
           ),
         )
@@ -8560,53 +8951,54 @@ fn apply_type_refining_raise(
   let parsed_type_entries = parse_type_section_entries_with_refs_raise(
     type_payload, "type-refine",
   )
-  for entry in parsed_type_entries {
-    // type-refine currently rewrites only function/import/code type indices.
-    if entry.form != 0x60U {
-      return { bytes, refined_type_count: 0U }
-    }
-  }
-  let type_entries : Array[Bytes] = []
-  for entry in parsed_type_entries {
-    type_entries.push(entry.raw)
-  }
-  if type_entries.length() <= 1 {
+  if parsed_type_entries.length() <= 1 {
     return { bytes, refined_type_count: 0U }
   }
-  let canonical_for_old : Array[UInt] = []
-  for i in 0..<type_entries.length() {
-    let mut canonical = i.reinterpret_as_uint()
+  let keep_types : Array[Bool] = []
+  let canonical_function_type_for_old : Map[UInt, UInt] = {}
+  let mut refined_type_count = 0U
+  for i in 0..<parsed_type_entries.length() {
+    let old_type_index = i.reinterpret_as_uint()
+    let entry = parsed_type_entries[i]
+    if entry.form != 0x60U {
+      keep_types.push(true)
+      continue
+    }
+    let mut canonical = old_type_index
     for j in 0..<i {
-      if bytes_equal(type_entries[i], type_entries[j]) {
+      if parsed_type_entries[j].form == 0x60U &&
+        bytes_equal(entry.raw, parsed_type_entries[j].raw) {
         canonical = j.reinterpret_as_uint()
         break
       }
     }
-    canonical_for_old.push(canonical)
-  }
-  let keep_types : Array[Bool] = []
-  for i in 0..<type_entries.length() {
-    let old_type_index = i.reinterpret_as_uint()
-    keep_types.push(canonical_for_old.contains(old_type_index))
-  }
-  let type_index_map : Map[UInt, UInt] = {}
-  let mut kept_type_count = 0U
-  for i in 0..<keep_types.length() {
-    if keep_types[i] {
-      type_index_map.set(i.reinterpret_as_uint(), kept_type_count)
-      kept_type_count += 1U
+    if canonical == old_type_index {
+      keep_types.push(true)
+    } else {
+      keep_types.push(false)
+      canonical_function_type_for_old.set(old_type_index, canonical)
+      refined_type_count += 1U
     }
   }
-  for i in 0..<canonical_for_old.length() {
-    let old_type_index = i.reinterpret_as_uint()
-    let canonical = canonical_for_old[i]
-    type_index_map.set(
-      old_type_index,
-      remap_type_index_raise(canonical, type_index_map),
-    )
+  let type_index_map : Map[UInt, UInt] = {}
+  let mut new_type_count = 0U
+  for i in 0..<keep_types.length() {
+    if keep_types[i] {
+      type_index_map.set(i.reinterpret_as_uint(), new_type_count)
+      new_type_count += 1U
+    }
   }
-  let refined_type_count = type_entries.length().reinterpret_as_uint() -
-    kept_type_count
+  for i in 0..<parsed_type_entries.length() {
+    let old_type_index = i.reinterpret_as_uint()
+    match canonical_function_type_for_old.get(old_type_index) {
+      Some(canonical) =>
+        type_index_map.set(
+          old_type_index,
+          remap_type_index_raise(canonical, type_index_map),
+        )
+      None => ()
+    }
+  }
   if refined_type_count == 0U {
     return { bytes, refined_type_count: 0U }
   }
@@ -8727,14 +9119,39 @@ fn apply_signature_pruning_raise(
       code_bodies.length().to_string(),
     )
   }
-  let type_entries = parse_function_type_entries_raise(
+  let parsed_type_entries = parse_type_section_entries_with_refs_raise(
     type_payload, "signature-prune",
   )
-  let type_count_u = type_entries.length().reinterpret_as_uint()
+  let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  for i in 0..<parsed_type_entries.length() {
+    if parsed_type_entries[i].form == 0x60U {
+      function_type_entry_by_type_index.set(
+        i.reinterpret_as_uint(),
+        parse_function_type_entry_from_raw_raise(
+          parsed_type_entries[i].raw,
+          "signature-prune",
+        ),
+      )
+    }
+  }
   for type_index in function_type_indices {
     if type_index >= type_count_u {
       raise WalyzeError::InvalidFormat(
         "type index out of range in signature-prune: " + type_index.to_string(),
+      )
+    }
+    let type_pos = UInt::reinterpret_as_int(type_index)
+    if type_pos < 0 || type_pos >= parsed_type_entries.length() {
+      raise WalyzeError::InvalidFormat(
+        "type index position out of range in signature-prune: " +
+        type_index.to_string(),
+      )
+    }
+    if parsed_type_entries[type_pos].form != 0x60U {
+      raise WalyzeError::InvalidFormat(
+        "non-function type index used by function in signature-prune: " +
+        type_index.to_string(),
       )
     }
   }
@@ -8742,7 +9159,7 @@ fn apply_signature_pruning_raise(
     push_unique_u32(protected_function_indices, index)
   }
   let rewritten_type_entries : Array[Bytes] = []
-  for entry in type_entries {
+  for entry in parsed_type_entries {
     rewritten_type_entries.push(entry.raw)
   }
   let rewritten_function_type_indices = function_type_indices.copy()
@@ -8758,14 +9175,14 @@ fn apply_signature_pruning_raise(
       continue
     }
     let type_index = function_type_indices[i]
-    let type_pos = UInt::reinterpret_as_int(type_index)
-    if type_pos < 0 || type_pos >= type_entries.length() {
-      raise WalyzeError::InvalidFormat(
-        "type index position out of range in signature-prune: " +
-        type_index.to_string(),
-      )
+    let type_entry = match function_type_entry_by_type_index.get(type_index) {
+      Some(v) => v
+      None =>
+        raise WalyzeError::InvalidFormat(
+          "non-function type index used by function in signature-prune: " +
+          type_index.to_string(),
+        )
     }
-    let type_entry = type_entries[type_pos]
     let old_param_count = type_entry.params.length().reinterpret_as_uint()
     if old_param_count == 0U {
       continue

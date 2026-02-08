@@ -16,7 +16,7 @@
 - [x] P2 (P1): `cfp` phase1（forward call 伝播）を導入し、DCE の callgraph 精度を上げる
 - [x] P5 (P1): `precompute` を拡張（`eqz(eqz(x))+br_if`）して code セクション gap を削る
 - [x] P2 (P1): `cfp` phase2（param-forwarding thunk 伝播）を導入し、DCE の callgraph 精度を上げる
-- [ ] P2 (P1): `signature-refining` phase3 を導入し、closed-world/GC 文脈の callgraph 精度を上げる
+- [x] P2 (P1): `signature-refining` phase3 を導入し、closed-world/GC 文脈の callgraph 精度を上げる
 - [ ] N5 (P2): GC hierarchy を考慮した `type-refining` に着手し、closed-world と組み合わせた差分を測る
 - [x] N8 (P1): `remove-unused-module-elements` と index rewrite の境界テストを拡充する
 - [ ] N9 (Guardrails): `mwac` 連携点の bytes I/O 契約（入出力）を文書化する
@@ -88,13 +88,14 @@
 ## P2: GC / Closed-World 最適化（差別化の本丸）
 
 - [x] `type-refining` の基盤を実装する（重複 function type の正規化）
+- [x] `type-refining` を GC 混在 type section でも適用可能にする（function type のみ正規化）
 - [ ] GC hierarchy を考慮した `type-refining` へ拡張する
 - [x] `signature-pruning` の基盤を実装する（末尾 unused param の削減 + call site drop 挿入）
 - [x] `remove-unused-types` の基盤を実装する（core func type pruning）
 - [x] private GC type まで `remove-unused-types` を拡張する
 - [x] `cfp` phase1: forward call 伝播（`call thunk -> call target`）を導入する
 - [x] `cfp` phase2: param-forwarding thunk 伝播（`local.get 0..N; call -> call target`）を導入する
-- [ ] `signature-refining` phase3: GC/closed-world 文脈での型特化を導入する
+- [x] `signature-refining` phase3: GC/closed-world 文脈での型特化を導入する
 - [ ] component root policy と GC 最適化の整合テストを追加する
 
 ## P3: 呼び出し経路の削減

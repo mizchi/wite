@@ -821,6 +821,35 @@ fn sample_module_with_duplicate_functions_but_split_types_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_duplicate_functions_but_split_types_and_gc_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 struct(i32)
+  //   #1 () -> ()
+  //   #2 () -> ()  (duplicate of #1)
+  append_section(
+    out,
+    1U,
+    bytes_of([0x03, 0x5f, 0x01, 0x7f, 0x00, 0x60, 0x00, 0x00, 0x60, 0x00, 0x00]),
+  )
+  // function section: 2 local functions with split type indices [1,2]
+  append_section(out, 3U, bytes_of([0x02, 0x01, 0x02]))
+  // export section: export both functions
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x02, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00, 0x05, 0x61, 0x6c, 0x69, 0x61,
+      0x73, 0x00, 0x01,
+    ]),
+  )
+  // code section: identical bodies
+  append_section(out, 10U, bytes_of([0x02, 0x02, 0x00, 0x0b, 0x02, 0x00, 0x0b]))
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_signature_pruning_candidate_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1544,6 +1573,41 @@ fn sample_module_with_param_forwarding_thunk_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_gc_signature_refining_thunk_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 (struct (field i32))   // gc type (non-func)
+  //   #1 (func (param i32) (result i32))
+  //   #2 (func (param i32 i32) (result i32))
+  append_section(
+    out,
+    1U,
+    bytes_of([
+      0x03, 0x5f, 0x01, 0x7f, 0x00, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x02, 0x7f,
+      0x7f, 0x01, 0x7f,
+    ]),
+  )
+  // function section: 3 local functions (indices 0..2) with type idx [2,2,1]
+  append_section(out, 3U, bytes_of([0x03, 0x02, 0x02, 0x01]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0; local.get 1; call 1; end
+  // #1: local.get 0; call 2; end  (signature-refining candidate)
+  // #2: local.get 0; i32.const 1; i32.add; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x06, 0x00, 0x20,
+      0x00, 0x10, 0x02, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_global_and_element_refs_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1658,14 +1722,19 @@ fn sample_module_with_table_init_elem_reindex_bytes() -> Bytes {
   append_section(
     out,
     9U,
-    bytes_of([0x02, 0x02, 0x00, 0x41, 0x00, 0x0b, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00]),
+    bytes_of([
+      0x02, 0x02, 0x00, 0x41, 0x00, 0x0b, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00,
+    ]),
   )
   // code section:
   // #0: i32.const 0; i32.const 0; i32.const 1; table.init elem=1 table=1; end
   append_section(
     out,
     10U,
-    bytes_of([0x01, 0x0c, 0x00, 0x41, 0x00, 0x41, 0x00, 0x41, 0x01, 0xfc, 0x0c, 0x01, 0x01, 0x0b]),
+    bytes_of([
+      0x01, 0x0c, 0x00, 0x41, 0x00, 0x41, 0x00, 0x41, 0x01, 0xfc, 0x0c, 0x01, 0x01,
+      0x0b,
+    ]),
   )
   Bytes::from_array(out[:])
 }
@@ -2528,7 +2597,9 @@ test "optimize with rume apply rewrites table.init elem index after element remo
   assert_true(optimized.removed_sections.any(s => s.contains("tables:1")))
   assert_true(optimized.removed_sections.any(s => s.contains("elements:1")))
   assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x0c, 0x00, 0x00]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0xfc, 0x0c, 0x01, 0x00])))
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0xfc, 0x0c, 0x01, 0x00])),
+  )
   assert_true(runtime_zero_arg_export_behaviors_equal(bytes, optimized.bytes))
 }
 
@@ -2839,6 +2910,38 @@ test "optimize type refining unlocks dfe across duplicated type entries" {
     return
   }
   assert_eq(after_profile.function_count, 1U)
+}
+
+///|
+test "optimize type refining works on gc-mixed type section and unlocks dfe" {
+  let bytes = sample_module_with_duplicate_functions_but_split_types_and_gc_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("type-refine:types:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dfe:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 1U)
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "main", []))
 }
 
 ///|
@@ -3229,6 +3332,51 @@ test "optimize cfp phase2 rewrites param-forwarding thunk and enables dce" {
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
       -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
+test "optimize signature-refining phase3 rewrites mismatched forwarding thunk in gc mixed module" {
+  let bytes = sample_module_with_gc_signature_refining_thunk_bytes()
+  guard profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 3U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=1U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    closed_world=true,
+    closed_world_root_exports=["run"],
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("signature-refine:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -9, -1, 0, 1, 7, 123456,
     ]),
   )
 }
