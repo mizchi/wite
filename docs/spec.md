@@ -19,8 +19,11 @@
 - `analyze` は `--view` で `summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain` を切り替える
 - `profile` は `--view runtime|hot-size` と `--scenario=<export>[:arg1,arg2,...]` を標準化する
 - `diff` は `--view function|section|block` を提供し、`wite` vs `wasm-opt` 比較を標準運用にする
+- `diff --baseline=wasm-opt` は `wasm-opt` を直接実行して baseline を生成し、`function/section/block` を同一導線で比較する
 - `component` は `roots|contract|kpi` を提供し、component-model closed-world 運用を集約する
 - 設定ファイルは `wite.config.jsonc` を標準とし、`build/analyze/profile` を単一設定で扱う
+- `wite.config.jsonc` は `build/analyze/profile` それぞれで `["..."]` または `{ "flags": ["..."] }` の両形式を受け付ける
+- `build/analyze/profile` は `wite.config.jsonc` を自動読込し、マージ規則は「config flags -> CLI flags（後勝ち）」とする
 - 互換エイリアスは提供せず、`wite` の canonical CLI へ集約する
 
 
@@ -29,8 +32,8 @@
 - W0 (P0): `wite` 名での CLI エントリを追加し、公開名を `wite` に統一する
 - W1 (Done): `wite build` を実装し、`wac` compose + `wite` optimize を単一導線で実行可能
 - W2 (Done): `wite analyze --view` へ既存 analyze サブコマンド群を統合
-- W3 (P1): `wite.config.jsonc` ローダーを実装し、CLI 引数とのマージ規則を定義する
-- W4 (P1): `wite diff --baseline wasm-opt` を実装し、KPI と直結する比較導線を用意する
+- W3 (Done): `wite.config.jsonc` ローダーを実装し、CLI 引数とのマージ規則を定義する
+- W4 (Done): `wite diff --baseline=wasm-opt` を実装し、KPI と直結する比較導線を用意する
 - P2 (P1): `cfp` phase1（forward call 伝播）を導入し、DCE の callgraph 精度を上げる
 - P5 (P1): `precompute` を拡張（`eqz(eqz(x))+br_if`）して code セクション gap を削る
 - P2 (P1): `cfp` phase2（param-forwarding thunk 伝播）を導入し、DCE の callgraph 精度を上げる

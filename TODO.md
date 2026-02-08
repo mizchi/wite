@@ -32,6 +32,10 @@
 
 - [x] W1: `wite build` を追加し、`.wac` 入力（`mizchi/mwac` compose）と `.wasm` 入力の両方で optimize+emit を単一導線化
 - [x] W2: `wite analyze --view` を追加し、`summary/deep/functions/blocks/callgraph/host/pipeline/dce/keep/retain` を統合
+- [x] W3: `wite.config.jsonc` ローダーを追加し、`build/analyze/profile` の flags を `config -> CLI` 後勝ちでマージ
+- [x] W4: `wite diff --baseline=wasm-opt` を追加し、`--view=function|section|block` で baseline 比較を統合
+- [x] テスト追加: `parse_diff_view` / `parse_diff_baseline` の回帰テスト
+- [x] テスト追加: `parse_wite_config_text` / `parse_config_selection_flags` / `merge_command_flags` の回帰テスト
 - [x] テスト追加: `parse_analyze_view` / `derive_build_output_path` / `normalize_opt_level_token` の回帰テスト
 - [x] Perf: `analyze_call_graph` / `analyze_call_graph_summary` を body 直走査 (`collect_direct_callees_from_body_raise`) + bitmap visited に置換し、`parse_instruction_spans` 依存を除去
 - [x] Bench: `moon bench` 内部 driver 計測で `analyze summary` が改善（`pglite mean: 110527us -> 73258us`, `duckdb mean: 801982us -> 546504us`）

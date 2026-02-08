@@ -3,6 +3,7 @@ import {
   "mizchi/wite" as @wite,
   "mizchi/wit" as @wit,
   "moonbitlang/x/fs" as @fs,
+  "moonbitlang/x/json5" as @json5,
   "moonbitlang/x/sys" as @sys,
 }
 

@@ -79,6 +79,12 @@ just run -- analyze path/to/module.wasm --view=deep --limit=20
 just run -- analyze path/to/module.wasm --view=pipeline --opt-level=Oz --diff-limit=20
 just run -- analyze path/to/module.wasm --view=keep --closed-world --closed-world-root=run
 just run -- analyze path/to/module.wasm --view=retain --limit=20 --closed-world --closed-world-root=run
+just run -- analyze path/to/module.wasm --config=./wite.config.jsonc
+just run -- build path/to/module.wasm --no-config -Oz
+just run -- profile path/to/module.wasm --config=./wite.config.jsonc
+just run -- diff path/to/module.wasm --baseline=wasm-opt --view=function --limit=20
+just run -- diff path/to/module.wasm --baseline=wasm-opt --view=section --limit=20
+just run -- diff left.wasm right.wasm --view=block --limit=20
 
 # legacy low-level subcommands (still available)
 just run -- analyze path/to/module.wasm
@@ -106,6 +112,18 @@ just run -- root-policy path/to/component.wasm path/to/wit-dir --exclude=hello
 
 `optimize` は入力ヘッダから core/component を自動判定し、component では固定点ループ（`--converge` / `--rounds=<n>`）を適用します。
 `runtime-profile` / `hot-size` は JS runtime が必要なため `--target js` でのみ動作し、`native/wasm` ではエラーを返します。
+`build` / `analyze` / `profile` はカレントディレクトリの `wite.config.jsonc` を自動読込します（存在しない場合は無視）。
+CLI マージ規則は「config の flags を先に適用し、CLI 引数で後勝ち上書き」です。`--no-config` で自動読込を無効化できます。
+`diff --baseline=wasm-opt` は `wasm-opt`（または `--wasm-opt-bin` / `WASM_OPT_BIN`）を実行し、`function/section/block` の差分を直接表示します。
+
+```jsonc
+{
+  // build/analyze/profile は array 直書きか { "flags": [...] } の両方を許可
+  "build": { "flags": ["-Oz", "--strip-debug", "--closed-world"] },
+  "analyze": ["--view=deep", "--limit=30"],
+  "profile": { "flags": [] }
+}
+```
 
 連携例（bundler + minifier）:
 
