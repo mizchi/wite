@@ -95,6 +95,7 @@ just run -- root-policy path/to/component.wasm path/to/wit-dir --exclude=hello
 ```
 
 `optimize` は入力ヘッダから core/component を自動判定し、component では固定点ループ（`--converge` / `--rounds=<n>`）を適用します。
+`runtime-profile` / `hot-size` は JS runtime が必要なため `--target js` でのみ動作し、`native/wasm` ではエラーを返します。
 
 連携例（bundler + minifier）:
 

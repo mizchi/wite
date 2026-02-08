@@ -30,7 +30,7 @@ pub fn analyze_function_sizes(Bytes) -> Result[Array[FunctionSize], WalyzeError]
 
 pub fn analyze_host_generated_code(Bytes) -> Result[HostGeneratedCodeReport, WalyzeError]
 
-pub fn analyze_hotness_size_matrix(Bytes, iterations? : UInt) -> Result[HotnessSizeMatrixReport, String]
+pub fn analyze_hotness_size_matrix(Bytes, iterations? : UInt, scenarios? : Array[RuntimeProfileScenario]) -> Result[HotnessSizeMatrixReport, String]
 
 pub fn analyze_keep_reasons(Bytes, config? : OptimizeConfig) -> Result[KeepReasonReport, WalyzeError]
 
@@ -48,6 +48,8 @@ pub fn make_component_optimize_config(base? : OptimizeConfig, root_name_candidat
 
 pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> OptimizeConfig
 
+pub fn make_runtime_profile_scenario(String, args? : Array[Int]) -> RuntimeProfileScenario
+
 pub fn optimize_binary_for_size(Bytes, config? : OptimizeConfig, exclude? : Array[String]) -> Result[OptimizeResult, String]
 
 pub fn optimize_component_for_size(Bytes, config? : OptimizeConfig, exclude? : Array[String]) -> Result[OptimizeResult, String]
@@ -59,6 +61,8 @@ pub fn optimize_for_size(Bytes, config? : OptimizeConfig) -> Result[OptimizeResu
 pub fn profile_component(Bytes) -> Result[ComponentProfile, String]
 
 pub fn profile_module(Bytes) -> Result[ModuleProfile, WalyzeError]
+
+pub fn profile_runtime_exports(Bytes, iterations? : UInt, scenarios? : Array[RuntimeProfileScenario]) -> Result[RuntimeProfile, String]
 
 pub fn profile_runtime_zero_arg_exports(Bytes, iterations? : UInt) -> Result[RuntimeProfile, String]
 
@@ -417,6 +421,11 @@ pub struct RuntimeProfile {
   functions : Array[RuntimeFunctionProfile]
   skipped_exports : Array[String]
   unresolved_exports : Array[RuntimeUnresolvedExport]
+}
+
+pub struct RuntimeProfileScenario {
+  export_name : String
+  args : Array[Int]
 }
 
 pub struct RuntimeUnresolvedExport {
