@@ -14,16 +14,20 @@
 
 ## wite API 体系（合意）
 
-- Canonical CLI は `build` / `analyze` / `profile` / `diff` / `component` とする
+- Canonical CLI は `build` / `analyze` / `profile` / `diff` / `add` / `component` とする
 - `build` は「bundle + optimize + emit」を 1 コマンドで実行する
 - `analyze` は `--view` で `summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain` を切り替える
 - `profile` は `--view runtime|hot-size` と `--scenario=<export>[:arg1,arg2,...]` を標準化する
 - `diff` は `--view function|section|block` を提供し、`wite` vs `wasm-opt` 比較を標準運用にする
 - `diff --baseline=wasm-opt` は `wasm-opt` を直接実行して baseline を生成し、`function/section/block` を同一導線で比較する
+- `add` は `wite.config.jsonc` の `deps` を更新し、`https://<registry>/<namespace>:<name>[@version]` を保存する
+- `add` の `dep-spec` は `wkg:mizchi/markdown` / `mizchi/markdown` / `wasi:http` / `https://wa.dev/mizchi:tmgrammar@0.1.1` を受け付ける
+- `add --verify` は `https://<host>/.well-known/wasm-pkg/registry.json` を解決し、`oci` backend は OCI API、`warg` backend は `wkg get --registry` で package/version 実在確認まで行う
 - `component` は `roots|contract|kpi` を提供し、component-model closed-world 運用を集約する
 - 設定ファイルは `wite.config.jsonc` を標準とし、`build/analyze/profile` を単一設定で扱う
 - `wite.config.jsonc` は `build/analyze/profile` それぞれで `["..."]` または `{ "flags": ["..."] }` の両形式を受け付ける
 - `build/analyze/profile` は `wite.config.jsonc` を自動読込し、マージ規則は「config flags -> CLI flags（後勝ち）」とする
+- `wite.config.jsonc` は `deps`（object）を受け付け、`add` で URL を upsert する
 - 互換エイリアスは提供せず、`wite` の canonical CLI へ集約する
 
 
@@ -34,6 +38,7 @@
 - W2 (Done): `wite analyze --view` へ既存 analyze サブコマンド群を統合
 - W3 (Done): `wite.config.jsonc` ローダーを実装し、CLI 引数とのマージ規則を定義する
 - W4 (Done): `wite diff --baseline=wasm-opt` を実装し、KPI と直結する比較導線を用意する
+- W5 (Done): `wite add` を実装し、依存を `wite.config.jsonc` の `deps`（HTTPS URL）へ追加できるようにする
 - P2 (P1): `cfp` phase1（forward call 伝播）を導入し、DCE の callgraph 精度を上げる
 - P5 (P1): `precompute` を拡張（`eqz(eqz(x))+br_if`）して code セクション gap を削る
 - P2 (P1): `cfp` phase2（param-forwarding thunk 伝播）を導入し、DCE の callgraph 精度を上げる

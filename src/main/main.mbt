@@ -10,6 +10,9 @@ fn print_usage() -> Unit {
   println(
     "  diff <left.wasm> [right.wasm] [--view=function|section|block] [--limit=<n>] [--baseline=wasm-opt] [--wasm-opt-bin=<path>] [--baseline-opt-level=Oz]",
   )
+  println(
+    "  add <dep-spec> [--protocol=wkg|warg|oci] [--registry=<host>] [--name=<id>] [--config=<path>] [--verify]  # dep-spec: wkg:mizchi/markdown | mizchi/markdown | wasi:http | https://wa.dev/mizchi:tmgrammar",
+  )
   println("  analyze-host <core.wasm> [limit]")
   println("  analyze-opt <core.wasm> [opt-level] [diff-limit]")
   println("  deep-analyze <core.wasm> [limit]")
@@ -926,11 +929,7 @@ fn run_wasm_opt_baseline_or_exit(
   extra_args : Array[String],
 ) -> Unit {
   let args = [
-    baseline_opt_level,
-    "--all-features",
-    "--strip-debug",
-    "--strip-dwarf",
-    "--strip-target-features",
+    baseline_opt_level, "--all-features", "--strip-debug", "--strip-dwarf", "--strip-target-features",
   ]
   args.append(extra_args[:])
   let result = js_run_wasm_opt_cli(
@@ -1862,7 +1861,7 @@ fn diff_uint(left : UInt, right : UInt) -> Int {
   if left >= right {
     (left - right).reinterpret_as_int()
   } else {
-    -((right - left).reinterpret_as_int())
+    -(right - left).reinterpret_as_int()
   }
 }
 
@@ -1876,10 +1875,7 @@ priv struct SectionGapEntry {
 }
 
 ///|
-fn compare_section_gap_entry(
-  a : SectionGapEntry,
-  b : SectionGapEntry,
-) -> Int {
+fn compare_section_gap_entry(a : SectionGapEntry, b : SectionGapEntry) -> Int {
   if a.abs_gap_bytes > b.abs_gap_bytes {
     -1
   } else if a.abs_gap_bytes < b.abs_gap_bytes {
@@ -2008,10 +2004,7 @@ priv struct BlockGapEntry {
 }
 
 ///|
-fn compare_block_gap_entry(
-  a : BlockGapEntry,
-  b : BlockGapEntry,
-) -> Int {
+fn compare_block_gap_entry(a : BlockGapEntry, b : BlockGapEntry) -> Int {
   if a.abs_gap_bytes > b.abs_gap_bytes {
     -1
   } else if a.abs_gap_bytes < b.abs_gap_bytes {
@@ -2090,11 +2083,7 @@ fn collect_block_gap_entries(
 }
 
 ///|
-fn run_block_gap(
-  left_path : String,
-  right_path : String,
-  limit : UInt,
-) -> Unit {
+fn run_block_gap(left_path : String, right_path : String, limit : UInt) -> Unit {
   let left_bytes = read_bytes_or_exit(left_path)
   let right_bytes = read_bytes_or_exit(right_path)
   let left_report = match @wite.analyze_code_block_sizes(left_bytes) {
@@ -2113,7 +2102,10 @@ fn run_block_gap(
       panic()
     }
   }
-  let entries = collect_block_gap_entries(left_report.blocks, right_report.blocks)
+  let entries = collect_block_gap_entries(
+    left_report.blocks,
+    right_report.blocks,
+  )
   println("block-gap:")
   println(
     "  left_total_instruction_bytes: " +
@@ -2774,9 +2766,10 @@ fn run_diff_command(args : Array[String]) -> Unit {
                         )
                       None =>
                         match arg.strip_prefix("--baseline-arg=") {
-                          Some(v) => if not(v.is_empty()) {
-                            wasm_opt_extra_args.push(v.to_string())
-                          }
+                          Some(v) =>
+                            if not(v.is_empty()) {
+                              wasm_opt_extra_args.push(v.to_string())
+                            }
                           None =>
                             if arg.has_prefix("--") {
                               println("unknown diff option: " + arg)
@@ -2808,11 +2801,7 @@ fn run_diff_command(args : Array[String]) -> Unit {
         let wasm_opt_bin = resolve_wasm_opt_bin(wasm_opt_bin_override)
         let output_path = js_make_temp_wasm_path("wite-diff-wasm-opt")
         run_wasm_opt_baseline_or_exit(
-          left_path,
-          output_path,
-          wasm_opt_bin,
-          baseline_opt_level,
-          wasm_opt_extra_args,
+          left_path, output_path, wasm_opt_bin, baseline_opt_level, wasm_opt_extra_args,
         )
         generated_baseline_path = Some(output_path)
         output_path
@@ -2830,10 +2819,7 @@ fn run_diff_command(args : Array[String]) -> Unit {
     DiffView::Block => run_block_gap(left_path, right_path, limit)
   }
   match generated_baseline_path {
-    Some(path) =>
-      @fs.remove_file(path) catch {
-        _ => ()
-      }
+    Some(path) => @fs.remove_file(path) catch { _ => () }
     None => ()
   }
 }
@@ -2989,13 +2975,14 @@ fn run_analyze_command(args : Array[String]) -> Unit {
 }
 
 ///|
-fn main {
+async fn main {
   let args = @sys.get_cli_args()
   if args.length() < 2 {
     print_usage()
     @sys.exit(1)
   }
   match args[1] {
+    "add" => run_add_command(args)
     "analyze" => run_analyze_command(args)
     "build" => run_build(args)
     "diff" => run_diff_command(args)

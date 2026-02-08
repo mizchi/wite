@@ -1,7 +1,11 @@
 import {
+  "mizchi/oci_wasm/discovery" as @oci_discovery,
+  "mizchi/oci_wasm/oci" as @oci_client,
   "mizchi/mwac/composer" as @wac,
+  "mizchi/oci_wasm/types" as @oci_types,
   "mizchi/wite" as @wite,
   "mizchi/wit" as @wit,
+  "moonbitlang/async",
   "moonbitlang/x/fs" as @fs,
   "moonbitlang/x/json5" as @json5,
   "moonbitlang/x/sys" as @sys,

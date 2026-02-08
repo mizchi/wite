@@ -85,6 +85,12 @@ just run -- profile path/to/module.wasm --config=./wite.config.jsonc
 just run -- diff path/to/module.wasm --baseline=wasm-opt --view=function --limit=20
 just run -- diff path/to/module.wasm --baseline=wasm-opt --view=section --limit=20
 just run -- diff left.wasm right.wasm --view=block --limit=20
+just run -- add wkg:mizchi/markdown
+just run -- add mizchi/markdown@0.1.0
+just run -- add wasi:http@0.2.0 --name=http
+just run -- add https://wa.dev/mizchi:tmgrammar@0.1.1 --name=tmg
+just run -- add wkg:mizchi/markdown --registry=wasi.dev --name=md
+just run -- add wasi:http@0.2.10 --registry=wasi.dev --verify
 
 # legacy low-level subcommands (still available)
 just run -- analyze path/to/module.wasm
@@ -115,13 +121,21 @@ just run -- root-policy path/to/component.wasm path/to/wit-dir --exclude=hello
 `build` / `analyze` / `profile` はカレントディレクトリの `wite.config.jsonc` を自動読込します（存在しない場合は無視）。
 CLI マージ規則は「config の flags を先に適用し、CLI 引数で後勝ち上書き」です。`--no-config` で自動読込を無効化できます。
 `diff --baseline=wasm-opt` は `wasm-opt`（または `--wasm-opt-bin` / `WASM_OPT_BIN`）を実行し、`function/section/block` の差分を直接表示します。
+`add` は `wite.config.jsonc` の `deps` を更新し、`https://<registry>/<namespace>:<name>[@version]` を保存します。
+`dep-spec` は `wkg:mizchi/markdown` / `mizchi/markdown` / `wasi:http` / `https://wa.dev/mizchi:tmgrammar@0.1.1` を受け付けます。
+`--protocol` は入力形式のヒントとして扱い、保存形式は常に HTTPS URL です。
+`--verify` を付けると `https://<host>/.well-known/wasm-pkg/registry.json` を解決し、`oci` backend では OCI API、`warg` backend では `wkg get --registry` を使って package/version 実在確認まで行います（`wkg` コマンドが必要）。
 
 ```jsonc
 {
   // build/analyze/profile は array 直書きか { "flags": [...] } の両方を許可
   "build": { "flags": ["-Oz", "--strip-debug", "--closed-world"] },
   "analyze": ["--view=deep", "--limit=30"],
-  "profile": { "flags": [] }
+  "profile": { "flags": [] },
+  "deps": {
+    "http": "https://wa.dev/wasi:http@0.2.0",
+    "tmg": "https://wa.dev/mizchi:tmgrammar@0.1.1"
+  }
 }
 ```
 
