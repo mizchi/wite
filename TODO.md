@@ -21,11 +21,11 @@
 
 ## Analyze 拡張方針 (2026-02-08)
 
-- [ ] A4 (P0): pass ごとの function 差分レポートを追加する（before/after を function index で対応付け、削減 bytes をランキング表示）
+- [x] A4 (P0): pass ごとの function 差分レポートを追加する（before/after を function index で対応付け、削減 bytes をランキング表示）
 - [ ] A5 (P0): runtime profile をシナリオ化する（zero-arg 依存を減らし、引数付き export と複数ケース計測を追加）
-- [ ] A6 (P1): `walyze` vs `wasm-opt` の function 対応差分レポートを追加する（gap の支配関数を TopK で特定）
-- [ ] A7 (P1): `hot-size` の unresolved 理由を分類する（import 不足 / signature 不一致 / 実行時例外）
-- [ ] A8 (P1): analyze で得た示唆を TODO 優先度へ自動接続する（`migration_top3` と function 差分の統合スコア）
+- [x] A6 (P1): `walyze` vs `wasm-opt` の function 対応差分レポートを追加する（gap の支配関数を TopK で特定）
+- [x] A7 (P1): `hot-size` の unresolved 理由を分類する（import 不足 / signature 不一致 / 実行時例外）
+- [x] A8 (P1): analyze で得た示唆を TODO 優先度へ自動接続する（`migration_top3` と function 差分の統合スコア）
 - [ ] Note: 知見と運用ルールは `docs/analyze.md` に集約する
 
 ## Recent Progress
@@ -45,3 +45,7 @@
 - [x] テスト追加: `cfp/cfp-const/signature-refining` の `unused local` thunk ケースを追加
 - [x] P5: `optimize-instructions` に const-first 形（`i32.const 0/-1; local/global.get; op`）の簡約を追加
 - [x] テスト追加: `optimize-instructions simplifies const-first bitwise and cmp patterns`
+- [x] Analyze: `analyze-opt` に pass 単位 function 差分（gain/regression, TopK）を追加
+- [x] Analyze: `runtime-profile` / `hot-size` に unresolved 理由分類（import-missing / signature-mismatch / runtime-exception）を追加
+- [x] Analyze: `function-gap` API/CLI と `bench/kpi/zlib_function_gap.tsv` を追加（walyze vs wasm-opt function TopK 差分）
+- [x] KPI: `migration_top3` のスコアに function-gap 指標（`fn_gap_top` / `fn_gap_positive`）を統合

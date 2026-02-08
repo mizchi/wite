@@ -24,6 +24,8 @@ pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput?, 
 
 pub fn analyze_dce_report(Bytes) -> Result[DceReport, WalyzeError]
 
+pub fn analyze_function_size_gap(Bytes, Bytes, top_limit? : UInt) -> Result[FunctionGapReport, WalyzeError]
+
 pub fn analyze_function_sizes(Bytes) -> Result[Array[FunctionSize], WalyzeError]
 
 pub fn analyze_host_generated_code(Bytes) -> Result[HostGeneratedCodeReport, WalyzeError]
@@ -32,7 +34,7 @@ pub fn analyze_hotness_size_matrix(Bytes, iterations? : UInt) -> Result[HotnessS
 
 pub fn analyze_keep_reasons(Bytes, config? : OptimizeConfig) -> Result[KeepReasonReport, WalyzeError]
 
-pub fn analyze_optimize_metadata(Bytes, config? : OptimizeConfig) -> Result[OptimizeMetadataReport, WalyzeError]
+pub fn analyze_optimize_metadata(Bytes, config? : OptimizeConfig, function_diff_limit? : UInt) -> Result[OptimizeMetadataReport, WalyzeError]
 
 pub fn analyze_retain_paths(Bytes, config? : OptimizeConfig) -> Result[RetainPathReport, WalyzeError]
 
@@ -195,10 +197,45 @@ pub struct DceReport {
   removable_functions : Array[FunctionSize]
 }
 
+pub struct FunctionGapEntry {
+  match_kind : String
+  match_key : String
+  left_function_index : UInt?
+  right_function_index : UInt?
+  left_name : String?
+  right_name : String?
+  left_export_names : Array[String]
+  right_export_names : Array[String]
+  left_body_bytes : UInt
+  right_body_bytes : UInt
+  left_minus_right_bytes : Int
+  abs_gap_bytes : UInt
+}
+
+pub struct FunctionGapReport {
+  left_total_body_bytes : UInt
+  right_total_body_bytes : UInt
+  left_minus_right_total_bytes : Int
+  unmatched_left_count : UInt
+  unmatched_right_count : UInt
+  entries : Array[FunctionGapEntry]
+}
+
 pub struct FunctionSize {
   function_index : UInt
   body_bytes : UInt
   name : String?
+  export_names : Array[String]
+}
+
+pub struct FunctionSizeDiff {
+  function_index : UInt
+  before_body_bytes : UInt
+  after_body_bytes : UInt
+  gain_bytes : UInt
+  regression_bytes : UInt
+  before_name : String?
+  after_name : String?
   export_names : Array[String]
 }
 
@@ -242,6 +279,8 @@ pub struct HotnessSizeEntry {
   total_ns : UInt64
   average_ns : UInt64
   bucket : String
+  unresolved_reason : String?
+  unresolved_detail : String?
 }
 
 pub struct HotnessSizeMatrixReport {
@@ -250,8 +289,14 @@ pub struct HotnessSizeMatrixReport {
   hot_threshold_ns : UInt64
   large_threshold_bytes : UInt
   unresolved_exports : Array[String]
+  unresolved_reason_counts : Array[HotnessUnresolvedReasonCount]
   buckets : Array[HotnessSizeBucket]
   entries : Array[HotnessSizeEntry]
+}
+
+pub struct HotnessUnresolvedReasonCount {
+  reason : String
+  count : UInt
 }
 
 pub struct KeepReasonEntry {
@@ -337,6 +382,9 @@ pub struct OptimizeStageMetadata {
   after_size : UInt
   gain_bytes : UInt
   regression_bytes : UInt
+  function_gain_bytes : UInt
+  function_regression_bytes : UInt
+  function_diffs : Array[FunctionSizeDiff]
   removed_sections : Array[String]
   no_change_reasons : Array[String]
 }
@@ -368,6 +416,13 @@ pub struct RuntimeProfile {
   iterations : UInt
   functions : Array[RuntimeFunctionProfile]
   skipped_exports : Array[String]
+  unresolved_exports : Array[RuntimeUnresolvedExport]
+}
+
+pub struct RuntimeUnresolvedExport {
+  export_name : String
+  reason : String
+  detail : String
 }
 
 pub struct SectionSize {

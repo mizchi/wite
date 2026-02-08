@@ -35,12 +35,13 @@ It provides:
 - core wasm section-size analysis (`twiggy`-style breakdown by section)
 - core wasm deep breakdown analysis (sections/custom-sections/functions/blocks/opcodes/callgraph in one report)
 - core wasm top-function size analysis (`twiggy top`-style by code body size)
+- core wasm function-gap analysis (`walyze` vs `wasm-opt` 等の 2 wasm 比較で TopK 差分)
 - core wasm code-block size analysis (`function/block/loop/if` bytes + instruction counts)
 - core wasm call graph + dead-body analysis (export/start roots)
 - core wasm call graph roots from global/element `ref.func`
 - retain-path analysis (root reason + shortest root-to-function chain)
 - host/generated code analysis (forwarding-thunk/sig-refine/directize-candidate/dce-removable hints)
-- optimize metadata analysis (`strip -> code -> dce -> rume` stage waterfall for optimizer input)
+- optimize metadata analysis (`strip -> code -> dce -> rume` stage waterfall + pass-function diff TopK)
 - core wasm DCE report + apply (callgraph-based function-level pruning)
 - core wasm duplicate function elimination apply (body+type based index remap)
 - core wasm merge-similar-functions apply (forwarding thunk merge + index remap)
@@ -58,8 +59,8 @@ It provides:
 - size-oriented optimization pass (`wasm-opt`-style custom section stripping + vacuum + merge-blocks + remove-unused-brs + peephole + DCE + DFE + MSF + best-effort RUME)
 - closed-world root filtering (`--closed-world --closed-world-root=...`, with `--safe-mode` override)
 - static module profiler (imports/exports/functions/code-body bytes)
-- runtime profiler for zero-arg exports (call count / total ns / avg ns)
-- hotness x size matrix analysis (runtime profile + code-body size buckets)
+- runtime profiler for zero-arg exports (call count / total ns / avg ns + unresolved reason分類)
+- hotness x size matrix analysis (runtime profile + code-body size buckets + unresolved reason集計)
 - component model profiling (`mizchi/mwac` integration)
 - component core-module top-function size reports
 - component core-module call graph reports
@@ -72,10 +73,11 @@ It provides:
 ```bash
 just run -- analyze path/to/module.wasm
 just run -- analyze-host path/to/module.wasm 20
-just run -- analyze-opt path/to/module.wasm -O1
+just run -- analyze-opt path/to/module.wasm -O1 20
 just run -- deep-analyze path/to/module.wasm 20
 just run -- profile path/to/module.wasm
 just run -- top-functions path/to/module.wasm 20
+just run -- function-gap left.wasm right.wasm 20
 just run -- block-sizes path/to/module.wasm 20
 just run -- callgraph path/to/module.wasm 20
 just run -- keep-reasons path/to/module.wasm --closed-world --closed-world-root=run
@@ -111,11 +113,12 @@ Main APIs are in `src/lib.mbt`:
 - `analyze_section_sizes(bytes)`
 - `analyze_wasm_breakdown(bytes, top_limit=...)`
 - `analyze_function_sizes(bytes)`
+- `analyze_function_size_gap(left_bytes, right_bytes, top_limit=...)`
 - `analyze_code_block_sizes(bytes)`
 - `analyze_call_graph(bytes)`
 - `analyze_call_graph_summary(bytes)`
 - `analyze_host_generated_code(bytes)`
-- `analyze_optimize_metadata(bytes, config=...)`
+- `analyze_optimize_metadata(bytes, config=..., function_diff_limit=...)`
 - `analyze_keep_reasons(bytes, config=...)`
 - `analyze_retain_paths(bytes, config=...)`
 - `analyze_dce_report(bytes)`

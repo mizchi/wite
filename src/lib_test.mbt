@@ -626,6 +626,50 @@ fn sample_module_with_hot_size_runtime_gap_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_hot_size_unresolved_reasons_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   type#0: () -> ()
+  //   type#1: (i32) -> i32
+  append_section(
+    out,
+    1U,
+    bytes_of([0x02, 0x60, 0x00, 0x00, 0x60, 0x01, 0x7f, 0x01, 0x7f]),
+  )
+  // import section: import func env.imp type#0 (function index 0)
+  append_section(
+    out,
+    2U,
+    bytes_of([0x01, 0x03, 0x65, 0x6e, 0x76, 0x03, 0x69, 0x6d, 0x70, 0x00, 0x00]),
+  )
+  // function section: local idx1 uses type#0, local idx2 uses type#1
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x01]))
+  // export section:
+  //   idx0 (imported) as "from_import" -> import-missing(no local body)
+  //   idx1 as "boom" -> runtime-exception (unreachable)
+  //   idx2 as "sig" -> signature-mismatch (arity=1)
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x03, 0x0b, 0x66, 0x72, 0x6f, 0x6d, 0x5f, 0x69, 0x6d, 0x70, 0x6f, 0x72, 0x74,
+      0x00, 0x00, 0x04, 0x62, 0x6f, 0x6f, 0x6d, 0x00, 0x01, 0x03, 0x73, 0x69, 0x67,
+      0x00, 0x02,
+    ]),
+  )
+  // code section:
+  //   idx1 body: locals=0, unreachable, end
+  //   idx2 body: locals=0, local.get 0, end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x02, 0x03, 0x00, 0x00, 0x0b, 0x04, 0x00, 0x20, 0x00, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_nested_blocks_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -2459,6 +2503,32 @@ fn find_optimize_stage(
 }
 
 ///|
+fn find_function_size_diff(
+  diffs : Array[FunctionSizeDiff],
+  function_index : UInt,
+) -> FunctionSizeDiff? {
+  for diff in diffs {
+    if diff.function_index == function_index {
+      return Some(diff)
+    }
+  }
+  None
+}
+
+///|
+fn find_function_gap_entry(
+  entries : Array[FunctionGapEntry],
+  match_key : String,
+) -> FunctionGapEntry? {
+  for entry in entries {
+    if entry.match_key == match_key {
+      return Some(entry)
+    }
+  }
+  None
+}
+
+///|
 fn find_retain_path_entry(
   entries : Array[RetainPathEntry],
   function_index : UInt,
@@ -2491,6 +2561,19 @@ fn find_hotness_size_bucket(
 ) -> HotnessSizeBucket? {
   for item in buckets {
     if item.bucket == bucket {
+      return Some(item)
+    }
+  }
+  None
+}
+
+///|
+fn find_hotness_unresolved_reason(
+  reasons : Array[HotnessUnresolvedReasonCount],
+  reason : String,
+) -> HotnessUnresolvedReasonCount? {
+  for item in reasons {
+    if item.reason == reason {
       return Some(item)
     }
   }
@@ -2707,6 +2790,59 @@ test "analyze function sizes with names and exports" {
   assert_eq(functions[1].body_bytes, 2U)
   assert_eq(functions[1].name, Some("small"))
   assert_eq(functions[1].export_names, ["small"])
+}
+
+///|
+test "analyze function gap matches exports and reports byte deltas" {
+  let before = sample_module_with_hot_size_runtime_gap_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(before, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard analyze_function_size_gap(before, optimized.bytes, top_limit=10U)
+    is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_true(report.left_total_body_bytes >= report.right_total_body_bytes)
+  assert_eq(report.unmatched_left_count, 0U)
+  assert_eq(report.unmatched_right_count, 0U)
+  guard find_function_gap_entry(report.entries, "export:heavy")
+    is Some(heavy_gap) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(heavy_gap.match_kind, "export")
+  assert_true(heavy_gap.left_body_bytes > heavy_gap.right_body_bytes)
+  assert_true(heavy_gap.left_minus_right_bytes > 0)
+  assert_true(heavy_gap.abs_gap_bytes > 0U)
+}
+
+///|
+test "analyze function gap reports unmatched side entries" {
+  let left = sample_module_with_two_exported_functions_bytes()
+  let right = sample_module_with_peephole_bytes()
+  guard analyze_function_size_gap(left, right, top_limit=10U) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    report.unmatched_left_count > 0U || report.unmatched_right_count > 0U,
+  )
+  assert_true(report.entries.length() > 0)
 }
 
 ///|
@@ -2931,6 +3067,15 @@ test "analyze optimize metadata reports stage waterfall" {
   }
   assert_true(dce_stage.gain_bytes > 0U)
   assert_true(dce_stage.after_size <= dce_stage.before_size)
+  assert_true(dce_stage.function_gain_bytes > 0U)
+  guard find_function_size_diff(dce_stage.function_diffs, 3U) is Some(dead_diff) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(dead_diff.before_body_bytes, 2U)
+  assert_eq(dead_diff.after_body_bytes, 0U)
+  assert_eq(dead_diff.gain_bytes, 2U)
+  assert_eq(dead_diff.regression_bytes, 0U)
   guard find_optimize_stage(report.stages, "rume") is Some(rume_stage) else {
     assert_true(false)
     return
@@ -5708,6 +5853,59 @@ test "analyze hotness-size matrix combines runtime and body-size signals" {
   }
   assert_true(heavy_bucket.count >= 1U)
   assert_true(light_bucket.count >= 1U)
+}
+
+///|
+test "analyze hotness-size matrix classifies unresolved reasons" {
+  let bytes = sample_module_with_hot_size_unresolved_reasons_bytes()
+  guard analyze_hotness_size_matrix(bytes, iterations=5U) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.unresolved_exports.length(), 3)
+  guard find_hotness_size_entry(report.entries, "from_import")
+    is Some(import_entry) else {
+    assert_true(false)
+    return
+  }
+  guard find_hotness_size_entry(report.entries, "boom") is Some(runtime_entry) else {
+    assert_true(false)
+    return
+  }
+  guard find_hotness_size_entry(report.entries, "sig") is Some(sig_entry) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(import_entry.unresolved_reason, Some("import-missing"))
+  assert_eq(runtime_entry.unresolved_reason, Some("runtime-exception"))
+  assert_eq(sig_entry.unresolved_reason, Some("signature-mismatch"))
+  guard find_hotness_unresolved_reason(
+      report.unresolved_reason_counts,
+      "import-missing",
+    )
+    is Some(import_reason) else {
+    assert_true(false)
+    return
+  }
+  guard find_hotness_unresolved_reason(
+      report.unresolved_reason_counts,
+      "runtime-exception",
+    )
+    is Some(runtime_reason) else {
+    assert_true(false)
+    return
+  }
+  guard find_hotness_unresolved_reason(
+      report.unresolved_reason_counts,
+      "signature-mismatch",
+    )
+    is Some(sig_reason) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(import_reason.count, 1U)
+  assert_eq(runtime_reason.count, 1U)
+  assert_eq(sig_reason.count, 1U)
 }
 
 ///|

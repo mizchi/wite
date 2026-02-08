@@ -13,6 +13,7 @@ NO_CHANGE_TRIAGE_TSV="$OUT_DIR/no_change_triage.tsv"
 MIGRATION_TOP3_TSV="$OUT_DIR/migration_top3.tsv"
 MIGRATION_TOP3_MD="$OUT_DIR/migration_top3.md"
 ZLIB_GAP_MD="$OUT_DIR/zlib_gap.md"
+ZLIB_FUNCTION_GAP_TSV="$OUT_DIR/zlib_function_gap.tsv"
 RUNTIME_TSV="$OUT_DIR/runtime.tsv"
 BENCH_RAW_LOG="$OUT_DIR/bench.raw.log"
 LATEST_MD="$OUT_DIR/latest.md"
@@ -55,6 +56,7 @@ tmp_zlib_section_delta_wasm_opt="$(mktemp)"
 tmp_zlib_fn_before="$(mktemp)"
 tmp_zlib_fn_walyze="$(mktemp)"
 tmp_zlib_fn_wasm_opt="$(mktemp)"
+tmp_zlib_function_gap_raw="$(mktemp)"
 tmp_zlib_block_before="$(mktemp)"
 tmp_zlib_block_walyze="$(mktemp)"
 tmp_zlib_block_wasm_opt="$(mktemp)"
@@ -66,7 +68,7 @@ cleanup() {
     "$tmp_zlib_walyze" "$tmp_zlib_wasm_opt" \
     "$tmp_zlib_before_sections" "$tmp_zlib_walyze_sections" "$tmp_zlib_wasm_opt_sections" \
     "$tmp_zlib_section_delta_walyze" "$tmp_zlib_section_delta_wasm_opt" \
-    "$tmp_zlib_fn_before" "$tmp_zlib_fn_walyze" "$tmp_zlib_fn_wasm_opt" \
+    "$tmp_zlib_fn_before" "$tmp_zlib_fn_walyze" "$tmp_zlib_fn_wasm_opt" "$tmp_zlib_function_gap_raw" \
     "$tmp_zlib_block_before" "$tmp_zlib_block_walyze" "$tmp_zlib_block_wasm_opt" \
     "$tmp_no_change_triage" "$tmp_migration_candidates"
 }
@@ -303,12 +305,15 @@ generate_no_change_triage() {
 
 generate_migration_top3_report() {
   local zlib_code_gap zlib_function_gap zlib_type_gap primary_gap
+  local zlib_fn_gap_top_abs zlib_fn_gap_positive_sum
   local code_no_pattern_count dce_no_remove_count dce_partial_count dce_fail_count
   local rume_issue_count waterfall_code_gain waterfall_dce_gain waterfall_rume_gain
   zlib_code_gap="$(int_or_zero "$zlib_gap_code_section_to_wasm_opt_bytes")"
   zlib_function_gap="$(int_or_zero "$zlib_gap_function_section_to_wasm_opt_bytes")"
   zlib_type_gap="$(int_or_zero "$zlib_gap_type_section_to_wasm_opt_bytes")"
   primary_gap="$(int_or_zero "$primary_gap_to_wasm_opt_bytes")"
+  zlib_fn_gap_top_abs="$(int_or_zero "$zlib_function_gap_top_abs_bytes")"
+  zlib_fn_gap_positive_sum="$(int_or_zero "$zlib_function_gap_positive_sum_bytes")"
   code_no_pattern_count="$(sum_reason_count_by_category "code:no-reducible-pattern")"
   dce_no_remove_count="$(sum_reason_count_by_category "dce:no-removable-functions")"
   dce_partial_count="$(sum_reason_count_by_category "dce:partial-callgraph")"
@@ -322,13 +327,15 @@ generate_migration_top3_report() {
   if [[ "$zlib_function_gap" -lt 0 ]]; then zlib_function_gap=0; fi
   if [[ "$zlib_type_gap" -lt 0 ]]; then zlib_type_gap=0; fi
   if [[ "$primary_gap" -lt 0 ]]; then primary_gap=0; fi
+  if [[ "$zlib_fn_gap_top_abs" -lt 0 ]]; then zlib_fn_gap_top_abs=0; fi
+  if [[ "$zlib_fn_gap_positive_sum" -lt 0 ]]; then zlib_fn_gap_positive_sum=0; fi
 
   : > "$tmp_migration_candidates"
-  score_signature_refining=$((primary_gap + waterfall_dce_gain * 4 + (dce_no_remove_count + dce_partial_count) * 192 + dce_fail_count * 256))
-  echo -e "$score_signature_refining\tP2 signature-refining/cfp\tDCE precision + callgraph\tP1\tL\tprimary_gap=${primary_gap},dce_gain=${waterfall_dce_gain},dce_reasons=$((dce_no_remove_count + dce_partial_count + dce_fail_count))\tTODO:P2 signature-refining/cfp" >> "$tmp_migration_candidates"
+  score_signature_refining=$((primary_gap + waterfall_dce_gain * 4 + (dce_no_remove_count + dce_partial_count) * 192 + dce_fail_count * 256 + zlib_fn_gap_positive_sum * 2))
+  echo -e "$score_signature_refining\tP2 signature-refining/cfp\tDCE precision + callgraph\tP1\tL\tprimary_gap=${primary_gap},dce_gain=${waterfall_dce_gain},dce_reasons=$((dce_no_remove_count + dce_partial_count + dce_fail_count)),fn_gap_positive=${zlib_fn_gap_positive_sum}\tTODO:P2 signature-refining/cfp" >> "$tmp_migration_candidates"
 
-  score_precompute=$((zlib_code_gap + waterfall_code_gain * 16 + code_no_pattern_count * 160))
-  echo -e "$score_precompute\tP5 precompute extension\tcode simplification coverage\tP1\tM\tzlib_code_gap=${zlib_code_gap},code_gain=${waterfall_code_gain},code_no_pattern=${code_no_pattern_count}\tTODO:P5 precompute extension" >> "$tmp_migration_candidates"
+  score_precompute=$((zlib_code_gap + waterfall_code_gain * 16 + code_no_pattern_count * 160 + zlib_fn_gap_top_abs * 4))
+  echo -e "$score_precompute\tP5 precompute extension\tcode simplification coverage\tP1\tM\tzlib_code_gap=${zlib_code_gap},code_gain=${waterfall_code_gain},code_no_pattern=${code_no_pattern_count},fn_gap_top=${zlib_fn_gap_top_abs}\tTODO:P5 precompute extension" >> "$tmp_migration_candidates"
 
   score_rume_guard=$((waterfall_rume_gain * 24 + rume_issue_count * 320 + dce_fail_count * 192))
   echo -e "$score_rume_guard\tN8 module-elements/index rewrite hardening\tRUME safety + removability\tP1\tS\twaterfall_rume_gain=${waterfall_rume_gain},rume_issues=${rume_issue_count}\tTODO:N8 remove-unused-module-elements tests" >> "$tmp_migration_candidates"
@@ -351,6 +358,8 @@ generate_migration_top3_report() {
     echo "- zlib_code_gap_to_wasm_opt_bytes: $zlib_gap_code_section_to_wasm_opt_bytes"
     echo "- zlib_function_gap_to_wasm_opt_bytes: $zlib_gap_function_section_to_wasm_opt_bytes"
     echo "- zlib_type_gap_to_wasm_opt_bytes: $zlib_gap_type_section_to_wasm_opt_bytes"
+    echo "- zlib_function_gap_top_abs_bytes: $zlib_function_gap_top_abs_bytes"
+    echo "- zlib_function_gap_positive_sum_bytes: $zlib_function_gap_positive_sum_bytes"
     echo
     echo "| rank | candidate | focus | priority | estimate | score | evidence | todo_target |"
     echo "| ---: | --- | --- | --- | --- | ---: | --- | --- |"
@@ -500,6 +509,23 @@ generate_zlib_gap_report() {
   else
     echo "wasm-opt unavailable" > "$tmp_zlib_fn_wasm_opt"
   fi
+  echo -e "rank\tkind\tkey\tleft_idx\tright_idx\tleft_body_bytes\tright_body_bytes\tdelta_bytes\tabs_gap_bytes\tleft_exports\tright_exports" > "$ZLIB_FUNCTION_GAP_TSV"
+  if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
+    moon run src/main --target js -- function-gap "$tmp_zlib_walyze" "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_function_gap_raw" 2>&1 || true
+    awk -F '\t' '
+      /^[[:space:]]*tsv\t/ {
+        rank += 1
+        printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", rank, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11
+      }
+    ' "$tmp_zlib_function_gap_raw" >> "$ZLIB_FUNCTION_GAP_TSV"
+    zlib_function_gap_entry_count="$(awk 'NR > 1 { count += 1 } END { print count + 0 }' "$ZLIB_FUNCTION_GAP_TSV")"
+    zlib_function_gap_top_abs_bytes="$(awk 'NR == 2 { print $9; exit }' "$ZLIB_FUNCTION_GAP_TSV")"
+    zlib_function_gap_positive_sum_bytes="$(awk 'NR > 1 { d = $8 + 0; if (d > 0) sum += d } END { print sum + 0 }' "$ZLIB_FUNCTION_GAP_TSV")"
+  else
+    zlib_function_gap_entry_count="0"
+    zlib_function_gap_top_abs_bytes="NA"
+    zlib_function_gap_positive_sum_bytes="NA"
+  fi
 
   moon run src/main --target js -- block-sizes "$zlib_rel" 20 > "$tmp_zlib_block_before" 2>&1 || true
   moon run src/main --target js -- block-sizes "$tmp_zlib_walyze" 20 > "$tmp_zlib_block_walyze" 2>&1 || true
@@ -526,6 +552,9 @@ generate_zlib_gap_report() {
     echo
     echo "- gap_to_wasm_opt_bytes: $zlib_gap_to_wasm_opt_bytes"
     echo "- gap_to_wasm_opt_ratio_pct: $zlib_gap_to_wasm_opt_ratio_pct"
+    echo "- function_gap_entry_count: $zlib_function_gap_entry_count"
+    echo "- function_gap_top_abs_bytes: $zlib_function_gap_top_abs_bytes"
+    echo "- function_gap_positive_sum_bytes: $zlib_function_gap_positive_sum_bytes"
     echo
     echo "## Section Delta (before -> walyze)"
     echo
@@ -543,6 +572,16 @@ generate_zlib_gap_report() {
       echo "| section | before_bytes | after_bytes | gain_bytes | gain_ratio_pct |"
       echo "| --- | ---: | ---: | ---: | ---: |"
       awk -F '\t' '{ printf "| %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5 }' "$tmp_zlib_section_delta_wasm_opt"
+    else
+      echo "(unavailable)"
+    fi
+    echo
+    echo "## Function Gap (walyze -> wasm-opt)"
+    echo
+    if [[ "$(awk 'END { print NR }' "$ZLIB_FUNCTION_GAP_TSV")" -gt 1 ]]; then
+      echo "| rank | kind | key | left_idx | right_idx | left_body_bytes | right_body_bytes | delta_bytes | abs_gap_bytes | left_exports | right_exports |"
+      echo "| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"
+      awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11 }' "$ZLIB_FUNCTION_GAP_TSV"
     else
       echo "(unavailable)"
     fi
@@ -651,6 +690,9 @@ zlib_gap_block_wasm_opt_bytes="NA"
 zlib_gap_code_section_to_wasm_opt_bytes="NA"
 zlib_gap_function_section_to_wasm_opt_bytes="NA"
 zlib_gap_type_section_to_wasm_opt_bytes="NA"
+zlib_function_gap_top_abs_bytes="NA"
+zlib_function_gap_positive_sum_bytes="NA"
+zlib_function_gap_entry_count="0"
 
 while IFS= read -r file; do
   core_file_count=$((core_file_count + 1))
@@ -1075,10 +1117,29 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo "- zlib_gap_wasm_opt_after_bytes: $zlib_gap_wasm_opt_after_bytes"
   echo "- zlib_gap_to_wasm_opt_bytes: $zlib_gap_to_wasm_opt_bytes"
   echo "- zlib_gap_to_wasm_opt_ratio_pct: $zlib_gap_to_wasm_opt_ratio_pct"
+  echo "- zlib_function_gap_report: \`bench/kpi/zlib_function_gap.tsv\`"
+  echo "- zlib_function_gap_entry_count: $zlib_function_gap_entry_count"
+  echo "- zlib_function_gap_top_abs_bytes: $zlib_function_gap_top_abs_bytes"
+  echo "- zlib_function_gap_positive_sum_bytes: $zlib_function_gap_positive_sum_bytes"
   echo
   echo "| file | before_bytes | walyze_after_bytes | walyze_reduction_ratio_pct | wasm_opt_after_bytes | wasm_opt_reduction_ratio_pct | gap_to_wasm_opt_bytes | gap_to_wasm_opt_ratio_pct | wasm_opt_status |"
   echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
   awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9 }' "$SIZE_TSV"
+  echo
+  echo "## Function Gap to wasm-opt (A6)"
+  echo
+  echo "- source: \`bench/kpi/zlib_function_gap.tsv\` (left=walyze -O1, right=wasm-opt -Oz, zlib)"
+  echo "- entry_count: $zlib_function_gap_entry_count"
+  echo "- top_abs_gap_bytes: $zlib_function_gap_top_abs_bytes"
+  echo "- positive_delta_sum_bytes: $zlib_function_gap_positive_sum_bytes"
+  echo
+  if [[ "$(awk 'END { print NR }' "$ZLIB_FUNCTION_GAP_TSV")" -gt 1 ]]; then
+    echo "| rank | kind | key | left_idx | right_idx | left_body_bytes | right_body_bytes | delta_bytes | abs_gap_bytes | left_exports | right_exports |"
+    echo "| ---: | --- | --- | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- |"
+    awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11 }' "$ZLIB_FUNCTION_GAP_TSV"
+  else
+    echo "(unavailable)"
+  fi
   echo
   echo "## Before/After Diff Heatmap (section -> function -> block)"
   echo
@@ -1158,7 +1219,7 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo
   echo "## wasm-opt Migration Top3 (A3)"
   echo
-  echo "- source: pass waterfall + no-change triage + zlib section gap"
+  echo "- source: pass waterfall + no-change triage + zlib section gap + zlib function gap"
   echo "- detail_report: \`bench/kpi/migration_top3.md\`"
   echo
   echo "| rank | candidate | focus | priority | estimate | score | evidence | todo_target |"
@@ -1194,6 +1255,7 @@ echo "  $NO_CHANGE_TRIAGE_TSV"
 echo "  $MIGRATION_TOP3_TSV"
 echo "  $MIGRATION_TOP3_MD"
 echo "  $ZLIB_GAP_MD"
+echo "  $ZLIB_FUNCTION_GAP_TSV"
 echo "  $COMPONENT_DCE_TSV"
 echo "  $RUNTIME_TSV"
 echo "  $BENCH_RAW_LOG"

@@ -340,6 +340,32 @@ pub struct FunctionSize {
 }
 
 ///|
+pub struct FunctionGapEntry {
+  match_kind : String
+  match_key : String
+  left_function_index : UInt?
+  right_function_index : UInt?
+  left_name : String?
+  right_name : String?
+  left_export_names : Array[String]
+  right_export_names : Array[String]
+  left_body_bytes : UInt
+  right_body_bytes : UInt
+  left_minus_right_bytes : Int
+  abs_gap_bytes : UInt
+}
+
+///|
+pub struct FunctionGapReport {
+  left_total_body_bytes : UInt
+  right_total_body_bytes : UInt
+  left_minus_right_total_bytes : Int
+  unmatched_left_count : UInt
+  unmatched_right_count : UInt
+  entries : Array[FunctionGapEntry]
+}
+
+///|
 pub struct CodeBlockSize {
   function_index : UInt
   function_name : String?
@@ -462,12 +488,27 @@ pub struct HostGeneratedCodeReport {
 }
 
 ///|
+pub struct FunctionSizeDiff {
+  function_index : UInt
+  before_body_bytes : UInt
+  after_body_bytes : UInt
+  gain_bytes : UInt
+  regression_bytes : UInt
+  before_name : String?
+  after_name : String?
+  export_names : Array[String]
+}
+
+///|
 pub struct OptimizeStageMetadata {
   stage : String
   before_size : UInt
   after_size : UInt
   gain_bytes : UInt
   regression_bytes : UInt
+  function_gain_bytes : UInt
+  function_regression_bytes : UInt
+  function_diffs : Array[FunctionSizeDiff]
   removed_sections : Array[String]
   no_change_reasons : Array[String]
 }
@@ -584,6 +625,8 @@ pub struct HotnessSizeEntry {
   total_ns : UInt64
   average_ns : UInt64
   bucket : String
+  unresolved_reason : String?
+  unresolved_detail : String?
 }
 
 ///|
@@ -595,12 +638,19 @@ pub struct HotnessSizeBucket {
 }
 
 ///|
+pub struct HotnessUnresolvedReasonCount {
+  reason : String
+  count : UInt
+}
+
+///|
 pub struct HotnessSizeMatrixReport {
   iterations : UInt
   instantiate_ns : UInt64
   hot_threshold_ns : UInt64
   large_threshold_bytes : UInt
   unresolved_exports : Array[String]
+  unresolved_reason_counts : Array[HotnessUnresolvedReasonCount]
   buckets : Array[HotnessSizeBucket]
   entries : Array[HotnessSizeEntry]
 }
@@ -624,11 +674,19 @@ pub struct RuntimeFunctionProfile {
 }
 
 ///|
+pub struct RuntimeUnresolvedExport {
+  export_name : String
+  reason : String
+  detail : String
+}
+
+///|
 pub struct RuntimeProfile {
   instantiate_ns : UInt64
   iterations : UInt
   functions : Array[RuntimeFunctionProfile]
   skipped_exports : Array[String]
+  unresolved_exports : Array[RuntimeUnresolvedExport]
 }
 
 ///|
@@ -8410,6 +8468,370 @@ pub fn analyze_function_sizes(
 }
 
 ///|
+priv struct FunctionMatchPair {
+  match_kind : String
+  match_key : String
+  left_index : UInt
+  right_index : UInt
+}
+
+///|
+fn map_push_uint_array(
+  grouped : Map[String, Array[UInt]],
+  key : String,
+  value : UInt,
+) -> Unit {
+  match grouped.get(key) {
+    Some(prev) => {
+      let next = prev.copy()
+      next.push(value)
+      grouped.set(key, next)
+    }
+    None => grouped.set(key, [value])
+  }
+}
+
+///|
+fn build_export_match_map(
+  functions : Array[FunctionSize],
+) -> Map[String, Array[UInt]] {
+  let grouped : Map[String, Array[UInt]] = {}
+  for function in functions {
+    for export_name in function.export_names {
+      map_push_uint_array(
+        grouped,
+        "export:" + export_name,
+        function.function_index,
+      )
+    }
+  }
+  grouped
+}
+
+///|
+fn build_name_match_map(
+  functions : Array[FunctionSize],
+) -> Map[String, Array[UInt]] {
+  let grouped : Map[String, Array[UInt]] = {}
+  for function in functions {
+    match function.name {
+      Some(name) =>
+        if not(name.is_empty()) {
+          map_push_uint_array(grouped, "name:" + name, function.function_index)
+        }
+      None => ()
+    }
+  }
+  grouped
+}
+
+///|
+fn compare_function_match_pair(
+  a : FunctionMatchPair,
+  b : FunctionMatchPair,
+) -> Int {
+  if a.match_kind != b.match_kind {
+    a.match_kind.compare(b.match_kind)
+  } else {
+    a.match_key.compare(b.match_key)
+  }
+}
+
+///|
+fn collect_unique_function_pairs(
+  left_grouped : Map[String, Array[UInt]],
+  right_grouped : Map[String, Array[UInt]],
+  match_kind : String,
+  used_left : Map[UInt, Bool],
+  used_right : Map[UInt, Bool],
+) -> Array[FunctionMatchPair] {
+  let keys : Array[String] = []
+  left_grouped.each((key, _) => keys.push(key))
+  keys.sort()
+  let out : Array[FunctionMatchPair] = []
+  for key in keys {
+    let left_indices = match left_grouped.get(key) {
+      Some(v) => v
+      None => []
+    }
+    let right_indices = match right_grouped.get(key) {
+      Some(v) => v
+      None => []
+    }
+    if left_indices.length() != 1 || right_indices.length() != 1 {
+      continue
+    }
+    let left_index = left_indices[0]
+    let right_index = right_indices[0]
+    if used_left.get(left_index) is Some(_) {
+      continue
+    }
+    if used_right.get(right_index) is Some(_) {
+      continue
+    }
+    used_left.set(left_index, true)
+    used_right.set(right_index, true)
+    out.push({ match_kind, match_key: key, left_index, right_index })
+  }
+  out.sort_by(compare_function_match_pair)
+  out
+}
+
+///|
+fn collect_unmatched_functions(
+  functions : Array[FunctionSize],
+  used : Map[UInt, Bool],
+) -> Array[FunctionSize] {
+  let out : Array[FunctionSize] = []
+  for function in functions {
+    if used.get(function.function_index) is None {
+      out.push(function)
+    }
+  }
+  out.sort_by(compare_function_size)
+  out
+}
+
+///|
+fn signed_delta_from_uint(left : UInt, right : UInt) -> Int {
+  if left >= right {
+    (left - right).reinterpret_as_int()
+  } else {
+    -(right - left).reinterpret_as_int()
+  }
+}
+
+///|
+fn abs_signed_delta_from_uint(left : UInt, right : UInt) -> UInt {
+  if left >= right {
+    left - right
+  } else {
+    right - left
+  }
+}
+
+///|
+fn sum_function_body_bytes(functions : Array[FunctionSize]) -> UInt {
+  let mut total = 0U
+  for function in functions {
+    total += function.body_bytes
+  }
+  total
+}
+
+///|
+fn make_function_gap_entry(
+  match_kind : String,
+  match_key : String,
+  left : FunctionSize?,
+  right : FunctionSize?,
+) -> FunctionGapEntry {
+  let left_body_bytes = match left {
+    Some(v) => v.body_bytes
+    None => 0U
+  }
+  let right_body_bytes = match right {
+    Some(v) => v.body_bytes
+    None => 0U
+  }
+  {
+    match_kind,
+    match_key,
+    left_function_index: match left {
+      Some(v) => Some(v.function_index)
+      None => None
+    },
+    right_function_index: match right {
+      Some(v) => Some(v.function_index)
+      None => None
+    },
+    left_name: match left {
+      Some(v) => v.name
+      None => None
+    },
+    right_name: match right {
+      Some(v) => v.name
+      None => None
+    },
+    left_export_names: match left {
+      Some(v) => v.export_names
+      None => []
+    },
+    right_export_names: match right {
+      Some(v) => v.export_names
+      None => []
+    },
+    left_body_bytes,
+    right_body_bytes,
+    left_minus_right_bytes: signed_delta_from_uint(
+      left_body_bytes, right_body_bytes,
+    ),
+    abs_gap_bytes: abs_signed_delta_from_uint(left_body_bytes, right_body_bytes),
+  }
+}
+
+///|
+fn compare_function_gap_entry(
+  a : FunctionGapEntry,
+  b : FunctionGapEntry,
+) -> Int {
+  if a.abs_gap_bytes > b.abs_gap_bytes {
+    -1
+  } else if a.abs_gap_bytes < b.abs_gap_bytes {
+    1
+  } else if a.left_body_bytes > b.left_body_bytes {
+    -1
+  } else if a.left_body_bytes < b.left_body_bytes {
+    1
+  } else if a.right_body_bytes > b.right_body_bytes {
+    -1
+  } else if a.right_body_bytes < b.right_body_bytes {
+    1
+  } else if a.match_kind != b.match_kind {
+    a.match_kind.compare(b.match_kind)
+  } else {
+    a.match_key.compare(b.match_key)
+  }
+}
+
+///|
+pub fn analyze_function_size_gap(
+  left_bytes : Bytes,
+  right_bytes : Bytes,
+  top_limit? : UInt = 20U,
+) -> Result[FunctionGapReport, WalyzeError] {
+  try? {
+    let left_functions = match analyze_function_sizes(left_bytes) {
+      Ok(v) => v
+      Err(e) => raise e
+    }
+    let right_functions = match analyze_function_sizes(right_bytes) {
+      Ok(v) => v
+      Err(e) => raise e
+    }
+    let left_by_index = map_function_sizes_by_index(left_functions)
+    let right_by_index = map_function_sizes_by_index(right_functions)
+    let used_left : Map[UInt, Bool] = {}
+    let used_right : Map[UInt, Bool] = {}
+    let entries : Array[FunctionGapEntry] = []
+    let left_export_grouped = build_export_match_map(left_functions)
+    let right_export_grouped = build_export_match_map(right_functions)
+    let export_pairs = collect_unique_function_pairs(
+      left_export_grouped, right_export_grouped, "export", used_left, used_right,
+    )
+    for pair in export_pairs {
+      match
+        (
+          left_by_index.get(pair.left_index),
+          right_by_index.get(pair.right_index),
+        ) {
+        (Some(left), Some(right)) =>
+          entries.push(
+            make_function_gap_entry(
+              pair.match_kind,
+              pair.match_key,
+              Some(left),
+              Some(right),
+            ),
+          )
+        _ => ()
+      }
+    }
+    let left_name_grouped = build_name_match_map(left_functions)
+    let right_name_grouped = build_name_match_map(right_functions)
+    let name_pairs = collect_unique_function_pairs(
+      left_name_grouped, right_name_grouped, "name", used_left, used_right,
+    )
+    for pair in name_pairs {
+      match
+        (
+          left_by_index.get(pair.left_index),
+          right_by_index.get(pair.right_index),
+        ) {
+        (Some(left), Some(right)) =>
+          entries.push(
+            make_function_gap_entry(
+              pair.match_kind,
+              pair.match_key,
+              Some(left),
+              Some(right),
+            ),
+          )
+        _ => ()
+      }
+    }
+    let left_unmatched = collect_unmatched_functions(left_functions, used_left)
+    let right_unmatched = collect_unmatched_functions(
+      right_functions, used_right,
+    )
+    let shared_unmatched_count = if left_unmatched.length() <
+      right_unmatched.length() {
+      left_unmatched.length()
+    } else {
+      right_unmatched.length()
+    }
+    for i in 0..<shared_unmatched_count {
+      entries.push(
+        make_function_gap_entry(
+          "rank",
+          "rank:" + (i + 1).to_string(),
+          Some(left_unmatched[i]),
+          Some(right_unmatched[i]),
+        ),
+      )
+    }
+    let mut unmatched_left_count = 0U
+    let mut unmatched_right_count = 0U
+    for i in shared_unmatched_count..<left_unmatched.length() {
+      unmatched_left_count += 1U
+      let left = left_unmatched[i]
+      entries.push(
+        make_function_gap_entry(
+          "left-only",
+          "left:#" + left.function_index.to_string(),
+          Some(left),
+          None,
+        ),
+      )
+    }
+    for i in shared_unmatched_count..<right_unmatched.length() {
+      unmatched_right_count += 1U
+      let right = right_unmatched[i]
+      entries.push(
+        make_function_gap_entry(
+          "right-only",
+          "right:#" + right.function_index.to_string(),
+          None,
+          Some(right),
+        ),
+      )
+    }
+    entries.sort_by(compare_function_gap_entry)
+    let limited_entries : Array[FunctionGapEntry] = []
+    let mut count = 0U
+    for entry in entries {
+      if top_limit > 0U && count >= top_limit {
+        break
+      }
+      limited_entries.push(entry)
+      count += 1U
+    }
+    let left_total_body_bytes = sum_function_body_bytes(left_functions)
+    let right_total_body_bytes = sum_function_body_bytes(right_functions)
+    {
+      left_total_body_bytes,
+      right_total_body_bytes,
+      left_minus_right_total_bytes: signed_delta_from_uint(
+        left_total_body_bytes, right_total_body_bytes,
+      ),
+      unmatched_left_count,
+      unmatched_right_count,
+      entries: limited_entries,
+    }
+  }
+}
+
+///|
 fn code_block_kind_from_opcode(opcode : UInt) -> String? {
   match opcode {
     0x02U => Some("block")
@@ -9739,6 +10161,156 @@ fn make_optimize_stage_config(
 }
 
 ///|
+fn compare_function_size_diff(
+  a : FunctionSizeDiff,
+  b : FunctionSizeDiff,
+) -> Int {
+  if a.gain_bytes > b.gain_bytes {
+    -1
+  } else if a.gain_bytes < b.gain_bytes {
+    1
+  } else if a.regression_bytes > b.regression_bytes {
+    -1
+  } else if a.regression_bytes < b.regression_bytes {
+    1
+  } else if a.before_body_bytes > b.before_body_bytes {
+    -1
+  } else if a.before_body_bytes < b.before_body_bytes {
+    1
+  } else if a.function_index < b.function_index {
+    -1
+  } else if a.function_index > b.function_index {
+    1
+  } else {
+    0
+  }
+}
+
+///|
+fn map_function_sizes_by_index(
+  functions : Array[FunctionSize],
+) -> Map[UInt, FunctionSize] {
+  let out : Map[UInt, FunctionSize] = {}
+  for function in functions {
+    out.set(function.function_index, function)
+  }
+  out
+}
+
+///|
+fn collect_function_size_diff_indices(
+  before_map : Map[UInt, FunctionSize],
+  after_map : Map[UInt, FunctionSize],
+) -> Array[UInt] {
+  let out : Array[UInt] = []
+  let seen : Map[UInt, Bool] = {}
+  before_map.each((function_index, _) => {
+    seen.set(function_index, true)
+    out.push(function_index)
+  })
+  after_map.each((function_index, _) => if seen.get(function_index) is None {
+    seen.set(function_index, true)
+    out.push(function_index)
+  })
+  out
+}
+
+///|
+fn merged_export_names_for_function_diff(
+  before : FunctionSize?,
+  after : FunctionSize?,
+) -> Array[String] {
+  let names : Array[String] = []
+  match before {
+    Some(v) => names.append(v.export_names[:])
+    None => ()
+  }
+  match after {
+    Some(v) =>
+      for name in v.export_names {
+        if not(names.contains(name)) {
+          names.push(name)
+        }
+      }
+    None => ()
+  }
+  names
+}
+
+///|
+fn collect_function_size_diffs_raise(
+  before_bytes : Bytes,
+  after_bytes : Bytes,
+  limit : UInt,
+) -> (UInt, UInt, Array[FunctionSizeDiff]) raise WalyzeError {
+  let before_functions = match analyze_function_sizes(before_bytes) {
+    Ok(v) => v
+    Err(e) => raise e
+  }
+  let after_functions = match analyze_function_sizes(after_bytes) {
+    Ok(v) => v
+    Err(e) => raise e
+  }
+  let before_by_index = map_function_sizes_by_index(before_functions)
+  let after_by_index = map_function_sizes_by_index(after_functions)
+  let indices = collect_function_size_diff_indices(
+    before_by_index, after_by_index,
+  )
+  let mut total_gain = 0U
+  let mut total_regression = 0U
+  let diffs : Array[FunctionSizeDiff] = []
+  for function_index in indices {
+    let before_function = before_by_index.get(function_index)
+    let after_function = after_by_index.get(function_index)
+    let before_body_bytes = match before_function {
+      Some(v) => v.body_bytes
+      None => 0U
+    }
+    let after_body_bytes = match after_function {
+      Some(v) => v.body_bytes
+      None => 0U
+    }
+    let gain_bytes = size_gain_bytes(before_body_bytes, after_body_bytes)
+    let regression_bytes = size_regression_bytes(
+      before_body_bytes, after_body_bytes,
+    )
+    total_gain += gain_bytes
+    total_regression += regression_bytes
+    if gain_bytes > 0U || regression_bytes > 0U {
+      diffs.push({
+        function_index,
+        before_body_bytes,
+        after_body_bytes,
+        gain_bytes,
+        regression_bytes,
+        before_name: match before_function {
+          Some(v) => v.name
+          None => None
+        },
+        after_name: match after_function {
+          Some(v) => v.name
+          None => None
+        },
+        export_names: merged_export_names_for_function_diff(
+          before_function, after_function,
+        ),
+      })
+    }
+  }
+  diffs.sort_by(compare_function_size_diff)
+  let top_diffs : Array[FunctionSizeDiff] = []
+  let mut count = 0U
+  for diff in diffs {
+    if limit > 0U && count >= limit {
+      break
+    }
+    top_diffs.push(diff)
+    count += 1U
+  }
+  (total_gain, total_regression, top_diffs)
+}
+
+///|
 priv struct OptimizeStageRunResult {
   bytes : Bytes
   stage : OptimizeStageMetadata
@@ -9749,11 +10321,17 @@ fn run_optimize_stage_raise(
   stage_name : String,
   bytes : Bytes,
   config : OptimizeConfig,
+  function_diff_limit : UInt,
 ) -> OptimizeStageRunResult raise WalyzeError {
   let optimized = match optimize_for_size(bytes, config~) {
     Ok(v) => v
     Err(err) => raise err
   }
+  let (function_gain_bytes, function_regression_bytes, function_diffs) = collect_function_size_diffs_raise(
+    bytes,
+    optimized.bytes,
+    function_diff_limit,
+  )
   let stage = {
     stage: stage_name,
     before_size: optimized.before_size,
@@ -9763,6 +10341,9 @@ fn run_optimize_stage_raise(
       optimized.before_size,
       optimized.after_size,
     ),
+    function_gain_bytes,
+    function_regression_bytes,
+    function_diffs,
     removed_sections: optimized.removed_sections,
     no_change_reasons: optimized.no_change_reasons,
   }
@@ -9773,27 +10354,32 @@ fn run_optimize_stage_raise(
 pub fn analyze_optimize_metadata(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::o1(),
+  function_diff_limit? : UInt = 20U,
 ) -> Result[OptimizeMetadataReport, WalyzeError] {
   try? {
     let strip_stage = run_optimize_stage_raise(
       "strip",
       bytes,
       make_optimize_stage_config(config, true, false, false),
+      function_diff_limit,
     )
     let code_stage = run_optimize_stage_raise(
       "code",
       strip_stage.bytes,
       make_optimize_stage_config(config, false, false, false),
+      function_diff_limit,
     )
     let dce_stage = run_optimize_stage_raise(
       "dce",
       code_stage.bytes,
       make_optimize_stage_config(config, false, true, false),
+      function_diff_limit,
     )
     let rume_stage = run_optimize_stage_raise(
       "rume",
       dce_stage.bytes,
       make_optimize_stage_config(config, false, true, true),
+      function_diff_limit,
     )
     let before_size = bytes.length().reinterpret_as_uint()
     let after_size = rume_stage.bytes.length().reinterpret_as_uint()
@@ -13406,6 +13992,43 @@ fn parse_u64_decimal(text : String) -> UInt64? {
 }
 
 ///|
+fn compare_runtime_unresolved_export(
+  a : RuntimeUnresolvedExport,
+  b : RuntimeUnresolvedExport,
+) -> Int {
+  let by_name = a.export_name.compare(b.export_name)
+  if by_name != 0 {
+    by_name
+  } else {
+    let by_reason = a.reason.compare(b.reason)
+    if by_reason != 0 {
+      by_reason
+    } else {
+      a.detail.compare(b.detail)
+    }
+  }
+}
+
+///|
+fn parse_runtime_unresolved_exports(
+  serialized : String,
+) -> Array[RuntimeUnresolvedExport] {
+  let out : Array[RuntimeUnresolvedExport] = []
+  for entry in split_non_empty(serialized, ";;") {
+    let fields = split_string(entry, "\t")
+    if fields.length() == 0 {
+      continue
+    }
+    let export_name = fields[0]
+    let reason = if fields.length() >= 2 { fields[1] } else { "unknown" }
+    let detail = if fields.length() >= 3 { fields[2] } else { "" }
+    out.push({ export_name, reason, detail })
+  }
+  out.sort_by(compare_runtime_unresolved_export)
+  out
+}
+
+///|
 extern "js" fn js_profile_zero_arg_exports(
   bytes : Bytes,
   iterations : Int,
@@ -13416,7 +14039,17 @@ extern "js" fn js_profile_zero_arg_exports(
   #|       ? bytes
   #|       : (Array.isArray(bytes) ? Uint8Array.from(bytes) : new Uint8Array(bytes));
   #|     const rounds = Math.max(1, iterations | 0);
+  #|     const sanitize = (value) => String(value)
+  #|       .replace(/\|/g, '/')
+  #|       .replace(/\t/g, ' ')
+  #|       .replace(/\r?\n/g, ' ')
+  #|       .replace(/;;/g, ';');
+  #|     const encodeUnresolved = (name, reason, detail) =>
+  #|       sanitize(name) + '\t' + sanitize(reason) + '\t' + sanitize(detail);
   #|     const module = new WebAssembly.Module(raw);
+  #|     const exportNames = WebAssembly.Module.exports(module)
+  #|       .filter((item) => item.kind === 'function')
+  #|       .map((item) => item.name);
   #|     const importDescs = WebAssembly.Module.imports(module);
   #|     const imports = {};
   #|     const ensureBucket = (name) => {
@@ -13491,27 +14124,54 @@ extern "js" fn js_profile_zero_arg_exports(
   #|         bucket[imp.name] = () => 0;
   #|       }
   #|     }
-  #|     const t0 = process.hrtime.bigint();
-  #|     const instance = new WebAssembly.Instance(module, imports);
-  #|     const t1 = process.hrtime.bigint();
-  #|     const instantiateNs = (t1 - t0).toString();
+  #|     let instantiateNs = '0';
+  #|     let instance = null;
+  #|     try {
+  #|       const t0 = process.hrtime.bigint();
+  #|       instance = new WebAssembly.Instance(module, imports);
+  #|       const t1 = process.hrtime.bigint();
+  #|       instantiateNs = (t1 - t0).toString();
+  #|     } catch (e) {
+  #|       const msg = e && e.message ? e.message : String(e);
+  #|       const unresolved = exportNames.map((name) =>
+  #|         encodeUnresolved(name, 'import-missing', msg)
+  #|       );
+  #|       return 'ok|' + instantiateNs + '|||' + unresolved.join(';;');
+  #|     }
   #|     const profiled = [];
   #|     const skipped = [];
+  #|     const unresolved = [];
   #|     for (const [name, value] of Object.entries(instance.exports)) {
   #|       if (typeof value !== 'function') continue;
   #|       if (value.length !== 0) {
   #|         skipped.push(name);
+  #|         unresolved.push(
+  #|           encodeUnresolved(name, 'signature-mismatch', 'arity=' + value.length)
+  #|         );
   #|         continue;
   #|       }
   #|       let total = 0n;
+  #|       let failed = null;
   #|       for (let i = 0; i < rounds; i++) {
-  #|         const s = process.hrtime.bigint();
-  #|         value();
-  #|         total += (process.hrtime.bigint() - s);
+  #|         try {
+  #|           const s = process.hrtime.bigint();
+  #|           value();
+  #|           total += (process.hrtime.bigint() - s);
+  #|         } catch (e) {
+  #|           failed = e;
+  #|           break;
+  #|         }
+  #|       }
+  #|       if (failed) {
+  #|         const msg = failed && failed.message ? failed.message : String(failed);
+  #|         unresolved.push(
+  #|           encodeUnresolved(name, 'runtime-exception', msg)
+  #|         );
+  #|         continue;
   #|       }
   #|       profiled.push(name + ',' + rounds + ',' + total.toString());
   #|     }
-  #|     return 'ok|' + instantiateNs + '|' + profiled.join(';') + '|' + skipped.join(',');
+  #|     return 'ok|' + instantiateNs + '|' + profiled.join(';') + '|' + skipped.join(',') + '|' + unresolved.join(';;');
   #|   } catch (e) {
   #|     const msg = e && e.message ? e.message : String(e);
   #|     return 'err|' + msg;
@@ -13571,7 +14231,18 @@ pub fn profile_runtime_zero_arg_exports(
   } else {
     []
   }
-  Ok({ instantiate_ns, iterations, functions, skipped_exports })
+  let unresolved_exports = if parts.length() >= 5 {
+    parse_runtime_unresolved_exports(parts[4])
+  } else {
+    []
+  }
+  Ok({
+    instantiate_ns,
+    iterations,
+    functions,
+    skipped_exports,
+    unresolved_exports,
+  })
 }
 
 ///|
@@ -13625,6 +14296,32 @@ fn map_function_size_by_index(
 }
 
 ///|
+fn map_runtime_unresolved_by_export_name(
+  unresolved_exports : Array[RuntimeUnresolvedExport],
+) -> Map[String, RuntimeUnresolvedExport] {
+  let out : Map[String, RuntimeUnresolvedExport] = {}
+  for entry in unresolved_exports {
+    if out.get(entry.export_name) is None {
+      out.set(entry.export_name, entry)
+    }
+  }
+  out
+}
+
+///|
+fn has_hotness_size_entry(
+  entries : Array[HotnessSizeEntry],
+  export_name : String,
+) -> Bool {
+  for entry in entries {
+    if entry.export_name == export_name {
+      return true
+    }
+  }
+  false
+}
+
+///|
 fn classify_hotness_size_bucket(
   total_ns : UInt64,
   body_bytes : UInt,
@@ -13663,6 +14360,20 @@ fn compare_hotness_size_entry(
     1
   } else {
     a.export_name.compare(b.export_name)
+  }
+}
+
+///|
+fn compare_hotness_unresolved_reason_count(
+  a : HotnessUnresolvedReasonCount,
+  b : HotnessUnresolvedReasonCount,
+) -> Int {
+  if a.count > b.count {
+    -1
+  } else if a.count < b.count {
+    1
+  } else {
+    a.reason.compare(b.reason)
   }
 }
 
@@ -13709,6 +14420,31 @@ fn collect_hotness_size_buckets(
 }
 
 ///|
+fn collect_hotness_unresolved_reason_counts(
+  entries : Array[HotnessSizeEntry],
+) -> Array[HotnessUnresolvedReasonCount] {
+  let counts : Map[String, UInt] = {}
+  for entry in entries {
+    if entry.bucket != "unresolved" {
+      continue
+    }
+    let reason = match entry.unresolved_reason {
+      Some(v) => v
+      None => "unknown"
+    }
+    let prev = match counts.get(reason) {
+      Some(v) => v
+      None => 0U
+    }
+    counts.set(reason, prev + 1U)
+  }
+  let out : Array[HotnessUnresolvedReasonCount] = []
+  counts.each((reason, count) => out.push({ reason, count }))
+  out.sort_by(compare_hotness_unresolved_reason_count)
+  out
+}
+
+///|
 pub fn analyze_hotness_size_matrix(
   bytes : Bytes,
   iterations? : UInt = 50U,
@@ -13728,6 +14464,9 @@ pub fn analyze_hotness_size_matrix(
     function_sizes,
   )
   let function_size_by_index = map_function_size_by_index(function_sizes)
+  let runtime_unresolved_by_name = map_runtime_unresolved_by_export_name(
+    runtime.unresolved_exports,
+  )
   let resolved_total_ns : Array[UInt64] = []
   let resolved_body_bytes : Array[UInt] = []
   let unresolved_exports : Array[String] = []
@@ -13744,8 +14483,6 @@ pub fn analyze_hotness_size_matrix(
       None => unresolved_exports.push(fn_profile.name)
     }
   }
-  unresolved_exports.sort()
-  unresolved_exports.dedup()
   let hot_threshold_ns = average_u64(resolved_total_ns)
   let large_threshold_bytes = average_u32(resolved_body_bytes)
   let entries : Array[HotnessSizeEntry] = []
@@ -13769,8 +14506,24 @@ pub fn analyze_hotness_size_matrix(
                 large_threshold_bytes,
                 true,
               ),
+              unresolved_reason: None,
+              unresolved_detail: None,
             })
-          None =>
+          None => {
+            let unresolved = runtime_unresolved_by_name.get(fn_profile.name)
+            let unresolved_reason = match unresolved {
+              Some(v) => v.reason
+              None => "import-missing"
+            }
+            let unresolved_detail_text = match unresolved {
+              Some(v) =>
+                if v.detail.is_empty() {
+                  "no local function body matched export"
+                } else {
+                  v.detail
+                }
+              None => "no local function body matched export"
+            }
             entries.push({
               export_name: fn_profile.name,
               function_index: None,
@@ -13780,9 +14533,27 @@ pub fn analyze_hotness_size_matrix(
               total_ns: fn_profile.total_ns,
               average_ns: fn_profile.average_ns,
               bucket: "unresolved",
+              unresolved_reason: Some(unresolved_reason),
+              unresolved_detail: Some(unresolved_detail_text),
             })
+            unresolved_exports.push(fn_profile.name)
+          }
         }
-      None =>
+      None => {
+        let unresolved = runtime_unresolved_by_name.get(fn_profile.name)
+        let unresolved_reason = match unresolved {
+          Some(v) => v.reason
+          None => "import-missing"
+        }
+        let unresolved_detail_text = match unresolved {
+          Some(v) =>
+            if v.detail.is_empty() {
+              "no local function body matched export"
+            } else {
+              v.detail
+            }
+          None => "no local function body matched export"
+        }
         entries.push({
           export_name: fn_profile.name,
           function_index: None,
@@ -13792,17 +14563,49 @@ pub fn analyze_hotness_size_matrix(
           total_ns: fn_profile.total_ns,
           average_ns: fn_profile.average_ns,
           bucket: "unresolved",
+          unresolved_reason: Some(unresolved_reason),
+          unresolved_detail: Some(unresolved_detail_text),
         })
+        unresolved_exports.push(fn_profile.name)
+      }
     }
   }
+  for unresolved in runtime.unresolved_exports {
+    if has_hotness_size_entry(entries, unresolved.export_name) {
+      continue
+    }
+    entries.push({
+      export_name: unresolved.export_name,
+      function_index: None,
+      function_name: None,
+      body_bytes: 0U,
+      calls: 0U,
+      total_ns: 0UL,
+      average_ns: 0UL,
+      bucket: "unresolved",
+      unresolved_reason: Some(unresolved.reason),
+      unresolved_detail: if unresolved.detail.is_empty() {
+        None
+      } else {
+        Some(unresolved.detail)
+      },
+    })
+    unresolved_exports.push(unresolved.export_name)
+  }
+  unresolved_exports.sort()
+  unresolved_exports.dedup()
   entries.sort_by(compare_hotness_size_entry)
   let buckets = collect_hotness_size_buckets(entries)
+  let unresolved_reason_counts = collect_hotness_unresolved_reason_counts(
+    entries,
+  )
   Ok({
     iterations: runtime.iterations,
     instantiate_ns: runtime.instantiate_ns,
     hot_threshold_ns,
     large_threshold_bytes,
     unresolved_exports,
+    unresolved_reason_counts,
     buckets,
     entries,
   })

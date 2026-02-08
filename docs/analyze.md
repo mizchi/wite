@@ -22,18 +22,22 @@
 
 ## 今回露出した不足
 
-- import 依存 wasm で runtime 系分析が壊れやすい
 - section 解析は表示フォーマット変化に脆く、レポート欠落が起きうる
 - `walyze` と `wasm-opt` の差分を function 粒度で比較できない
-- unresolved の理由が粗く、次の実装タスクに接続しづらい
+- analyze 結果と TODO 優先度の接続がまだ手動寄り
+
+## 実装済みアップデート (2026-02-08)
+
+- `analyze-opt` に pass 単位 function 差分（gain/regression, TopK）を追加
+- `runtime-profile` に unresolved 理由を追加（`import-missing` / `signature-mismatch` / `runtime-exception`）
+- `hot-size` に unresolved 理由集計（reason 別 count）を追加
+- `function-gap`（`walyze` vs `wasm-opt`）を追加し、`zlib` の支配関数 gap を TopK 可視化
+- `migration_top3` を function-gap 指標つきで再スコア化（`fn_gap_top` / `fn_gap_positive`）
 
 ## 拡張優先度
 
-- P0: pass ごとの function 差分レポート（before/after, gain bytes, TopK）
 - P0: runtime profile のシナリオ化（引数付き export、複数ケース）
-- P1: `walyze` vs `wasm-opt` の function 対応差分
-- P1: unresolved 理由の分類（import / signature / runtime）
-- P1: analyze 結果を TODO 優先度へ自動接続するスコアリング
+- P2: section 解析のフォーマット耐性を上げる
 
 ## 運用ループ
 

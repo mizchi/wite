@@ -3,10 +3,11 @@ fn print_usage() -> Unit {
   println("walyze commands:")
   println("  analyze <core.wasm>")
   println("  analyze-host <core.wasm> [limit]")
-  println("  analyze-opt <core.wasm> [opt-level]")
+  println("  analyze-opt <core.wasm> [opt-level] [diff-limit]")
   println("  deep-analyze <core.wasm> [limit]")
   println("  profile <core.wasm>")
   println("  top-functions <core.wasm> [limit]")
+  println("  function-gap <left.wasm> <right.wasm> [limit]")
   println("  block-sizes <core.wasm> [limit]")
   println("  callgraph <core.wasm> [limit]")
   println(
@@ -320,12 +321,61 @@ fn print_optimize_metadata_stage(stage : @walyze.OptimizeStageMetadata) -> Unit 
   if stage.no_change_reasons.length() > 0 {
     println("      no-change: " + stage.no_change_reasons.join(", "))
   }
+  println(
+    "      function-delta: gain=" +
+    stage.function_gain_bytes.to_string() +
+    " regression=" +
+    stage.function_regression_bytes.to_string(),
+  )
+  if stage.function_diffs.length() > 0 {
+    println("      top-function-diffs:")
+    let mut printed = 0U
+    for diff in stage.function_diffs {
+      if printed >= 5U {
+        break
+      }
+      let label = match diff.before_name {
+        Some(v) => v
+        None =>
+          match diff.after_name {
+            Some(v) => v
+            None => "#\{diff.function_index.to_string()}"
+          }
+      }
+      let exports = if diff.export_names.length() == 0 {
+        ""
+      } else {
+        " exports=" + diff.export_names.join(",")
+      }
+      println(
+        "        " +
+        label +
+        " idx=" +
+        diff.function_index.to_string() +
+        " before=" +
+        diff.before_body_bytes.to_string() +
+        " after=" +
+        diff.after_body_bytes.to_string() +
+        " gain=" +
+        diff.gain_bytes.to_string() +
+        " regression=" +
+        diff.regression_bytes.to_string() +
+        exports,
+      )
+      printed += 1U
+    }
+  }
 }
 
 ///|
-fn run_analyze_opt(path : String, config : @walyze.OptimizeConfig) -> Unit {
+fn run_analyze_opt(
+  path : String,
+  config : @walyze.OptimizeConfig,
+  function_diff_limit : UInt,
+) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_optimize_metadata(bytes, config~) {
+  match
+    @walyze.analyze_optimize_metadata(bytes, config~, function_diff_limit~) {
     Ok(report) => {
       println("optimize metadata analysis:")
       println(
@@ -723,6 +773,23 @@ fn run_runtime_profile(path : String, iterations : UInt) -> Unit {
       if profile.skipped_exports.length() > 0 {
         println("  skipped_exports: " + profile.skipped_exports.join(", "))
       }
+      if profile.unresolved_exports.length() > 0 {
+        println("  unresolved_exports:")
+        for unresolved in profile.unresolved_exports {
+          let detail = if unresolved.detail.is_empty() {
+            ""
+          } else {
+            " detail=" + unresolved.detail
+          }
+          println(
+            "    " +
+            unresolved.export_name +
+            " reason=" +
+            unresolved.reason +
+            detail,
+          )
+        }
+      }
     }
     Err(msg) => {
       println("runtime profile failed: " + msg)
@@ -754,6 +821,14 @@ fn print_hotness_size_entries(
       Some(v) => v
       None => "-"
     }
+    let unresolved_reason = match entry.unresolved_reason {
+      Some(v) => " reason=" + v
+      None => ""
+    }
+    let unresolved_detail = match entry.unresolved_detail {
+      Some(v) => if v.is_empty() { "" } else { " detail=" + v }
+      None => ""
+    }
     println(
       "    " +
       entry.export_name +
@@ -770,7 +845,9 @@ fn print_hotness_size_entries(
       " avg_ns=" +
       entry.average_ns.to_string() +
       " bucket=" +
-      entry.bucket,
+      entry.bucket +
+      unresolved_reason +
+      unresolved_detail,
     )
     printed += 1U
   }
@@ -796,6 +873,19 @@ fn print_hotness_size_buckets(
 }
 
 ///|
+fn print_hotness_unresolved_reason_counts(
+  counts : Array[@walyze.HotnessUnresolvedReasonCount],
+) -> Unit {
+  if counts.length() == 0 {
+    return
+  }
+  println("  unresolved_reasons:")
+  for count in counts {
+    println("    " + count.reason + " count=" + count.count.to_string())
+  }
+}
+
+///|
 fn run_hot_size(path : String, iterations : UInt, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
   match @walyze.analyze_hotness_size_matrix(bytes, iterations~) {
@@ -812,6 +902,7 @@ fn run_hot_size(path : String, iterations : UInt, limit : UInt) -> Unit {
       if report.unresolved_exports.length() > 0 {
         println("  unresolved_exports: " + report.unresolved_exports.join(", "))
       }
+      print_hotness_unresolved_reason_counts(report.unresolved_reason_counts)
       print_hotness_size_buckets(report.buckets)
       print_hotness_size_entries(report.entries, limit)
     }
@@ -851,6 +942,93 @@ fn print_function_sizes(
       exports,
     )
     printed += 1U
+  }
+}
+
+///|
+fn format_opt_uint(value : UInt?) -> String {
+  match value {
+    Some(v) => v.to_string()
+    None => "-"
+  }
+}
+
+///|
+fn format_opt_name(value : String?) -> String {
+  match value {
+    Some(v) => if v.is_empty() { "-" } else { v }
+    None => "-"
+  }
+}
+
+///|
+fn print_function_gap_entries(
+  entries : Array[@walyze.FunctionGapEntry],
+) -> Unit {
+  if entries.length() == 0 {
+    println("  entries: (none)")
+    return
+  }
+  println("  entries:")
+  for entry in entries {
+    let left_exports = if entry.left_export_names.length() == 0 {
+      "-"
+    } else {
+      entry.left_export_names.join(",")
+    }
+    let right_exports = if entry.right_export_names.length() == 0 {
+      "-"
+    } else {
+      entry.right_export_names.join(",")
+    }
+    println(
+      "    kind=" +
+      entry.match_kind +
+      " key=" +
+      entry.match_key +
+      " left_idx=" +
+      format_opt_uint(entry.left_function_index) +
+      " right_idx=" +
+      format_opt_uint(entry.right_function_index) +
+      " left_name=" +
+      format_opt_name(entry.left_name) +
+      " right_name=" +
+      format_opt_name(entry.right_name) +
+      " left_body=" +
+      entry.left_body_bytes.to_string() +
+      " right_body=" +
+      entry.right_body_bytes.to_string() +
+      " delta=" +
+      entry.left_minus_right_bytes.to_string() +
+      " abs_gap=" +
+      entry.abs_gap_bytes.to_string() +
+      " left_exports=" +
+      left_exports +
+      " right_exports=" +
+      right_exports,
+    )
+    println(
+      "    tsv\t" +
+      entry.match_kind +
+      "\t" +
+      entry.match_key +
+      "\t" +
+      format_opt_uint(entry.left_function_index) +
+      "\t" +
+      format_opt_uint(entry.right_function_index) +
+      "\t" +
+      entry.left_body_bytes.to_string() +
+      "\t" +
+      entry.right_body_bytes.to_string() +
+      "\t" +
+      entry.left_minus_right_bytes.to_string() +
+      "\t" +
+      entry.abs_gap_bytes.to_string() +
+      "\t" +
+      left_exports +
+      "\t" +
+      right_exports,
+    )
   }
 }
 
@@ -933,6 +1111,47 @@ fn run_top_functions(path : String, limit : UInt) -> Unit {
     }
     Err(e) => {
       println("top-functions failed: " + @walyze.error_to_string(e))
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
+fn run_function_gap(
+  left_path : String,
+  right_path : String,
+  limit : UInt,
+) -> Unit {
+  let left_bytes = read_bytes_or_exit(left_path)
+  let right_bytes = read_bytes_or_exit(right_path)
+  match
+    @walyze.analyze_function_size_gap(left_bytes, right_bytes, top_limit=limit) {
+    Ok(report) => {
+      println("function-gap:")
+      println(
+        "  left_total_body_bytes: " + report.left_total_body_bytes.to_string(),
+      )
+      println(
+        "  right_total_body_bytes: " + report.right_total_body_bytes.to_string(),
+      )
+      println(
+        "  left_minus_right_total_bytes: " +
+        report.left_minus_right_total_bytes.to_string(),
+      )
+      println(
+        "  unmatched_left_count: " + report.unmatched_left_count.to_string(),
+      )
+      println(
+        "  unmatched_right_count: " + report.unmatched_right_count.to_string(),
+      )
+      println("  entries_count: " + report.entries.length().to_string())
+      println(
+        "  tsv_header\tkind\tkey\tleft_idx\tright_idx\tleft_body\tright_body\tdelta\tabs_gap\tleft_exports\tright_exports",
+      )
+      print_function_gap_entries(report.entries)
+    }
+    Err(e) => {
+      println("function-gap failed: " + @walyze.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -1505,19 +1724,20 @@ fn main {
         print_usage()
         @sys.exit(1)
       }
-      let config = if args.length() >= 4 {
+      let mut config = @walyze.OptimizeConfig::o1()
+      let mut diff_limit = 20U
+      if args.length() >= 4 {
         match @walyze.optimize_config_from_opt_level(args[3]) {
-          Some(v) => v
-          None => {
-            println("invalid opt-level: " + args[3])
-            @sys.exit(1)
-            @walyze.OptimizeConfig::o1()
+          Some(v) => {
+            config = v
+            if args.length() >= 5 {
+              diff_limit = parse_uint_or_exit(args[4], "diff-limit")
+            }
           }
+          None => diff_limit = parse_uint_or_exit(args[3], "diff-limit")
         }
-      } else {
-        @walyze.OptimizeConfig::o1()
       }
-      run_analyze_opt(args[2], config)
+      run_analyze_opt(args[2], config, diff_limit)
     }
     "deep-analyze" => {
       if args.length() < 3 {
@@ -1549,6 +1769,18 @@ fn main {
         20U
       }
       run_top_functions(args[2], limit)
+    }
+    "function-gap" => {
+      if args.length() < 4 {
+        print_usage()
+        @sys.exit(1)
+      }
+      let limit = if args.length() >= 5 {
+        parse_uint_or_exit(args[4], "limit")
+      } else {
+        20U
+      }
+      run_function_gap(args[2], args[3], limit)
     }
     "block-sizes" => {
       if args.length() < 3 {
