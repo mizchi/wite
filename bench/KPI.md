@@ -9,7 +9,7 @@
 
 - 指標: `size_reduction_ratio_o1_core_corpus`
 - 定義:
-  - 対象: `bench/corpus/core/binaryen/*.wasm`
+  - 対象: `bench/corpus/core/**/*.wasm`
   - 実行: `optimize -O1`
   - 算出: `(sum(before_bytes) - sum(after_bytes)) / sum(before_bytes)`
   - ファイル別: `size.tsv` に各 wasm の減衰率を記録
@@ -21,7 +21,7 @@
 
 - 指標: `wasm_opt_reduction_ratio_oz_core_corpus`（参考）
 - 定義:
-  - 対象: `bench/corpus/core/binaryen/*.wasm`
+  - 対象: `bench/corpus/core/**/*.wasm`
   - 実行: `wasm-opt -Oz --all-features --strip-debug --strip-dwarf --strip-target-features`（`wasm-opt` 利用可能時）
   - 算出: `(sum(before_bytes) - sum(wasm_opt_after_bytes)) / sum(before_bytes)`
 - 備考:
@@ -31,7 +31,7 @@
 ### wasm-opt gap 判定スコープ（固定）
 
 - 主要 gap 判定:
-  - 対象: `bench/corpus/core/binaryen/*.wasm` から `gc_target_feature.wasm` を除外
+  - 対象: `bench/corpus/core/**/*.wasm` から `gc_target_feature.wasm` を除外
   - 理由: GC feature 由来の乖離が大きく、core size 主戦場の比較ノイズになるため
   - レポート: `latest.md` の `total_*` / `gap_to_wasm_opt_*` はこの主要スコープで集計
 - 参考 gap（全件）:
@@ -53,7 +53,7 @@
 
 - 指標: `directize_dce_rume_chain_gain`
 - 定義:
-  - 対象: `bench/corpus/core/binaryen/*.wasm`
+  - 対象: `bench/corpus/core/**/*.wasm`
   - 実行:
     - pre-DCE: `optimize --strip-debug --strip-dwarf --strip-target-features --rounds=2`
     - post-DCE: 上記 + `--dce-apply --dfe-apply --msf-apply`
@@ -71,7 +71,7 @@
 
 - 指標: `hierarchical_before_after_heatmap`
 - 定義:
-  - 対象: `bench/corpus/core/binaryen/*.wasm`
+  - 対象: `bench/corpus/core/**/*.wasm`
   - 実行: `optimize -O1` の `before/after` を比較
   - 階層:
     - section: `module bytes` 差分
@@ -86,7 +86,7 @@
 
 - 指標: `pass_waterfall_gain`
 - 定義:
-  - 対象: `bench/corpus/core/binaryen/*.wasm`
+  - 対象: `bench/corpus/core/**/*.wasm`
   - ステージ順:
     - `strip`: `--strip-debug --strip-dwarf --strip-target-features --rounds=1 --no-peephole --no-vacuum --no-merge-blocks --no-remove-unused-brs`
     - `code`: `--strip-debug --strip-dwarf --strip-target-features --rounds=2`
@@ -149,8 +149,18 @@
     - module/code_body/block_instruction の要約比較
     - section 差分（before->walyze / before->wasm-opt）
     - top-functions / block-sizes のスナップショット
-- 目的:
+  - 目的:
   - core corpus gap の支配要因（現状ほぼ zlib）を、関数/ブロック/section 単位で帰属する
+
+### analyze-only corpus（巨大 wasm 診断）
+
+- 指標: `analyze_only_core_corpus`
+- 定義:
+  - 対象: `bench/corpus/core-analyze/**/*.wasm`
+  - 実行: `profile` + `callgraph`
+  - 出力: `analyze_only.tsv`
+- 目的:
+  - `duckdb` のような巨大 wasm を optimize KPI から分離し、解析機能のスケール耐性を継続監視する
 
 ## 第二KPI: 実行速度
 
@@ -181,6 +191,7 @@ just kpi
 - `bench/kpi/migration_top3.tsv`: wasm-opt 移植候補 Top3 の機械可読出力
 - `bench/kpi/migration_top3.md`: wasm-opt 移植候補 Top3 の人間向けサマリ
 - `bench/kpi/zlib_gap.md`: zlib 専用の gap 詳細レポート
+- `bench/kpi/analyze_only.tsv`: analyze 専用 corpus の診断結果
 - `bench/kpi/component_dce.tsv`: component-model DCE サイズKPIの明細
 - `bench/kpi/runtime.tsv`: 速度KPIの明細
 - `bench/kpi/bench.raw.log`: `moon bench` の生ログ

@@ -5,6 +5,7 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 OUT_DIR="$ROOT_DIR/bench/kpi"
 SIZE_TSV="$OUT_DIR/size.tsv"
 COMPONENT_DCE_TSV="$OUT_DIR/component_dce.tsv"
+ANALYZE_ONLY_TSV="$OUT_DIR/analyze_only.tsv"
 DIRECTIZE_CHAIN_TSV="$OUT_DIR/directize_chain.tsv"
 HEATMAP_TSV="$OUT_DIR/heatmap.tsv"
 PASS_WATERFALL_TSV="$OUT_DIR/pass_waterfall.tsv"
@@ -29,7 +30,7 @@ PRIMARY_GAP_EXCLUDED_BASENAMES=(
   "gc_target_feature.wasm"
 )
 PRIMARY_GAP_SCOPE="core corpus excluding gc_target_feature.wasm"
-REFERENCE_GAP_SCOPE="all core corpus files (includes gc_target_feature.wasm)"
+REFERENCE_GAP_SCOPE="all files under bench/corpus/core (includes gc_target_feature.wasm)"
 
 if [[ -z "$WASM_OPT_BIN" ]]; then
   WASM_OPT_BIN="$(command -v wasm-opt || true)"
@@ -131,6 +132,14 @@ int_or_zero() {
   else
     echo "0"
   fi
+}
+
+core_optimize_corpus_files() {
+  find "$ROOT_DIR/bench/corpus/core" -type f -name '*.wasm' | sort
+}
+
+core_analyze_only_corpus_files() {
+  find "$ROOT_DIR/bench/corpus/core-analyze" -type f -name '*.wasm' | sort
 }
 
 parse_section_sizes_to_tsv() {
@@ -942,7 +951,7 @@ while IFS= read -r file; do
     waterfall_total_gain=$((waterfall_total_gain + waterfall_total_gain_bytes))
     waterfall_success_files=$((waterfall_success_files + 1))
   fi
-done < <(find "$ROOT_DIR/bench/corpus/core/binaryen" -type f -name '*.wasm' | sort)
+done < <(core_optimize_corpus_files)
 
 total_ratio_pct="$(ratio_pct "$total_before" "$total_after")"
 wasm_opt_total_ratio_pct="NA"
@@ -1029,6 +1038,74 @@ while IFS= read -r file; do
 done < <(find "$ROOT_DIR/bench/corpus/component-dce" -type f -name '*.wasm' | sort)
 
 component_total_ratio_pct="$(awk -v b="$component_total_before" -v a="$component_total_after" 'BEGIN { if (b == 0) { printf "0.0000" } else { printf "%.4f", ((b - a) * 100.0) / b } }')"
+
+echo -e "file\tmodule_bytes\tcode_body_bytes\timport_count\texport_count\tlocal_function_count\tcallgraph_imported_function_count\tcallgraph_local_function_count\treachable_function_count\tdead_function_count\thas_indirect_calls\tpartial\treachable_body_bytes\tdead_body_bytes\tstatus" > "$ANALYZE_ONLY_TSV"
+
+analyze_only_file_count=0
+analyze_only_success_files=0
+analyze_only_total_module_bytes=0
+analyze_only_total_code_body_bytes=0
+
+while IFS= read -r file; do
+  analyze_only_file_count=$((analyze_only_file_count + 1))
+  rel="${file#$ROOT_DIR/}"
+
+  module_bytes="NA"
+  code_body_bytes="NA"
+  import_count="NA"
+  export_count="NA"
+  local_function_count="NA"
+  callgraph_imported_function_count="NA"
+  callgraph_local_function_count="NA"
+  reachable_function_count="NA"
+  dead_function_count="NA"
+  has_indirect_calls="NA"
+  partial="NA"
+  reachable_body_bytes="NA"
+  dead_body_bytes="NA"
+  status="ok"
+
+  if profile_output="$(moon run src/main --target js -- profile "$rel" 2>&1)"; then
+    module_bytes="$(awk -F ': ' '/^  total_bytes: / { print $2; exit }' <<< "$profile_output")"
+    code_body_bytes="$(awk -F ': ' '/^  code_body_bytes: / { print $2; exit }' <<< "$profile_output")"
+    import_count="$(awk -F ': ' '/^  import_count: / { print $2; exit }' <<< "$profile_output")"
+    export_count="$(awk -F ': ' '/^  export_count: / { print $2; exit }' <<< "$profile_output")"
+    local_function_count="$(awk -F ': ' '/^  function_count: / { print $2; exit }' <<< "$profile_output")"
+  else
+    status="profile-error"
+  fi
+
+  if [[ "$status" == "ok" ]]; then
+    if analyze_output="$(moon run src/main --target js -- analyze "$rel" 2>&1)"; then
+      callgraph_line="$(awk '/^  functions: imported=/ { print; exit }' <<< "$analyze_output")"
+      if [[ "$callgraph_line" =~ imported=([0-9]+)[[:space:]]+local=([0-9]+)[[:space:]]+reachable=([0-9]+)[[:space:]]+dead=([0-9]+) ]]; then
+        callgraph_imported_function_count="${BASH_REMATCH[1]}"
+        callgraph_local_function_count="${BASH_REMATCH[2]}"
+        reachable_function_count="${BASH_REMATCH[3]}"
+        dead_function_count="${BASH_REMATCH[4]}"
+      else
+        status="analyze-parse-error"
+      fi
+      has_indirect_calls="$(awk -F ': ' '/^  has_indirect_calls: / { print $2; exit }' <<< "$analyze_output")"
+      partial="$(awk -F ': ' '/^  partial: / { print $2; exit }' <<< "$analyze_output")"
+      reachable_body_bytes="$(awk -F ': ' '/^  reachable_body_bytes: / { print $2; exit }' <<< "$analyze_output" | sed -E 's/[[:space:]].*$//')"
+      dead_body_bytes="$(awk -F ': ' '/^  dead_body_bytes: / { print $2; exit }' <<< "$analyze_output" | sed -E 's/[[:space:]].*$//')"
+      if [[ ! "$has_indirect_calls" =~ ^(true|false)$ || ! "$partial" =~ ^(true|false)$ || ! "$reachable_body_bytes" =~ ^[0-9]+$ || ! "$dead_body_bytes" =~ ^[0-9]+$ ]]; then
+        status="analyze-parse-error"
+      fi
+    else
+      status="analyze-error"
+    fi
+  fi
+
+  if [[ "$status" == "ok" && "$module_bytes" =~ ^[0-9]+$ && "$code_body_bytes" =~ ^[0-9]+$ ]]; then
+    analyze_only_success_files=$((analyze_only_success_files + 1))
+    analyze_only_total_module_bytes=$((analyze_only_total_module_bytes + module_bytes))
+    analyze_only_total_code_body_bytes=$((analyze_only_total_code_body_bytes + code_body_bytes))
+  fi
+
+  echo -e "$rel\t$module_bytes\t$code_body_bytes\t$import_count\t$export_count\t$local_function_count\t$callgraph_imported_function_count\t$callgraph_local_function_count\t$reachable_function_count\t$dead_function_count\t$has_indirect_calls\t$partial\t$reachable_body_bytes\t$dead_body_bytes\t$status" >> "$ANALYZE_ONLY_TSV"
+done < <(core_analyze_only_corpus_files)
 
 moon bench --target js > "$BENCH_RAW_LOG"
 
@@ -1125,6 +1202,17 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo "| file | before_bytes | walyze_after_bytes | walyze_reduction_ratio_pct | wasm_opt_after_bytes | wasm_opt_reduction_ratio_pct | gap_to_wasm_opt_bytes | gap_to_wasm_opt_ratio_pct | wasm_opt_status |"
   echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
   awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9 }' "$SIZE_TSV"
+  echo
+  echo "## Analyze-only Core Corpus"
+  echo
+  echo "- target_scope: bench/corpus/core-analyze/**/*.wasm"
+  echo "- success_files: $analyze_only_success_files/$analyze_only_file_count"
+  echo "- total_module_bytes: $analyze_only_total_module_bytes"
+  echo "- total_code_body_bytes: $analyze_only_total_code_body_bytes"
+  echo
+  echo "| file | module_bytes | code_body_bytes | import_count | export_count | local_function_count | callgraph_imported_function_count | callgraph_local_function_count | reachable_function_count | dead_function_count | has_indirect_calls | partial | reachable_body_bytes | dead_body_bytes | status |"
+  echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- | --- | ---: | ---: | --- |"
+  awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15 }' "$ANALYZE_ONLY_TSV"
   echo
   echo "## Function Gap to wasm-opt (A6)"
   echo
@@ -1256,6 +1344,7 @@ echo "  $MIGRATION_TOP3_TSV"
 echo "  $MIGRATION_TOP3_MD"
 echo "  $ZLIB_GAP_MD"
 echo "  $ZLIB_FUNCTION_GAP_TSV"
+echo "  $ANALYZE_ONLY_TSV"
 echo "  $COMPONENT_DCE_TSV"
 echo "  $RUNTIME_TSV"
 echo "  $BENCH_RAW_LOG"

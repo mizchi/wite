@@ -389,6 +389,18 @@ fn bench_core_corpus_paths() -> Array[String] {
 }
 
 ///|
+fn bench_core_optimize_corpus_paths() -> Array[String] {
+  let out = bench_core_corpus_paths().copy()
+  out.push("bench/corpus/core/pglite/pglite.wasm")
+  out
+}
+
+///|
+fn bench_core_analyze_only_corpus_paths() -> Array[String] {
+  ["bench/corpus/core-analyze/duckdb/duckdb-mvp.wasm"]
+}
+
+///|
 fn bench_core_runtime_corpus_paths() -> Array[String] {
   [
     "bench/corpus/core/binaryen/br_to_exit.wasm", "bench/corpus/core/binaryen/elided-br.wasm",
@@ -6082,8 +6094,8 @@ test "component call graph report returns core module entries" {
 }
 
 ///|
-test "bench corpus core fixtures are parseable as core wasm" {
-  for path in bench_core_corpus_paths() {
+test "bench corpus core optimize fixtures are parseable as core wasm" {
+  for path in bench_core_optimize_corpus_paths() {
     let bytes = @fs.read_file_to_bytes(path) catch {
       _ => {
         inspect(path, content="missing")
@@ -6101,7 +6113,7 @@ test "bench corpus core fixtures are parseable as core wasm" {
 }
 
 ///|
-test "kpi core corpus -O1 does not increase size" {
+test "kpi binaryen core corpus -O1 does not increase size" {
   let config = OptimizeConfig::o1()
   for path in bench_core_corpus_paths() {
     let bytes = @fs.read_file_to_bytes(path) catch {
@@ -6117,6 +6129,27 @@ test "kpi core corpus -O1 does not increase size" {
       return
     }
     assert_true(result.after_size <= result.before_size)
+  }
+}
+
+///|
+test "kpi core optimize corpus -O1 can run on extended fixtures" {
+  let config = OptimizeConfig::o1()
+  for path in bench_core_optimize_corpus_paths() {
+    let bytes = @fs.read_file_to_bytes(path) catch {
+      _ => {
+        inspect(path, content="missing")
+        assert_true(false)
+        return
+      }
+    }
+    guard optimize_for_size(bytes, config~) is Ok(result) else {
+      inspect(path, content="optimize failed")
+      assert_true(false)
+      return
+    }
+    assert_true(result.before_size > 0U)
+    assert_true(result.after_size > 0U)
   }
 }
 
@@ -6146,6 +6179,31 @@ test "kpi core runtime corpus -O1 preserves runtime behavior" {
       assert_true(false)
       return
     }
+  }
+}
+
+///|
+test "bench corpus analyze-only core fixtures are parseable and analyzable" {
+  for path in bench_core_analyze_only_corpus_paths() {
+    let bytes = @fs.read_file_to_bytes(path) catch {
+      _ => {
+        inspect(path, content="missing")
+        assert_true(false)
+        return
+      }
+    }
+    guard profile_module(bytes) is Ok(profile) else {
+      inspect(path, content="core parse failed")
+      assert_true(false)
+      return
+    }
+    assert_true(profile.total_bytes > 0U)
+    guard analyze_call_graph_summary(bytes) is Ok(summary) else {
+      inspect(path, content="call graph summary failed")
+      assert_true(false)
+      return
+    }
+    assert_true(summary.local_function_count > 0U)
   }
 }
 

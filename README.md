@@ -155,6 +155,8 @@ just info      # generate .mbti
 `bench/corpus/` に外部由来 fixture を配置しています。
 
 - `core/binaryen`: Binaryen 由来の core wasm サンプル
+- `core/pglite`: pglite 由来の core wasm サンプル（size KPI 拡張）
+- `core-analyze/duckdb`: duckdb-wasm 由来の巨大 core wasm（analyze 専用）
 - `component/wac`: wac 由来の component wasm サンプル
 - `component-dce/mwac`: component-model DCE KPI 専用の component サンプル
 

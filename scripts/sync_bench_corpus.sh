@@ -4,7 +4,11 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 MANIFEST="$ROOT_DIR/bench/corpus/manifest.tsv"
 
-if ! command -v curl >/dev/null 2>&1; then
+if command -v curl >/dev/null 2>&1; then
+  CURL_BIN="$(command -v curl)"
+elif [[ -x /usr/bin/curl ]]; then
+  CURL_BIN="/usr/bin/curl"
+else
   echo "curl is required" >&2
   exit 1
 fi
@@ -27,6 +31,12 @@ repo_url() {
     mwac)
       echo "https://raw.githubusercontent.com/mizchi/mwac/$commit/$path"
       ;;
+    pglite_npm)
+      echo "https://unpkg.com/@electric-sql/pglite@$commit/$path"
+      ;;
+    duckdb_wasm_npm)
+      echo "https://unpkg.com/@duckdb/duckdb-wasm@$commit/$path"
+      ;;
     *)
       echo "unknown repo: $repo" >&2
       return 1
@@ -42,7 +52,7 @@ while IFS=$'\t' read -r kind repo commit upstream_path dest_path sha256; do
   url="$(repo_url "$repo" "$commit" "$upstream_path")"
   tmp_file="$(mktemp)"
 
-  curl -fsSL "$url" -o "$tmp_file"
+  "$CURL_BIN" -fsSL "$url" -o "$tmp_file"
   actual_sha256="$(shasum -a 256 "$tmp_file" | awk '{print $1}')"
   if [[ "$actual_sha256" != "$sha256" ]]; then
     echo "sha256 mismatch: $dest_path" >&2
