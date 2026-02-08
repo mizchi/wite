@@ -111,6 +111,34 @@
 - 目的:
   - 「最適化できない理由」を定量化し、次の実装優先順位に直結させる
 
+### no-change triage（A2）
+
+- 指標: `no_change_reason_triage`
+- 定義:
+  - 入力: `no-change reasons` の集計結果（`no_change_reasons.tsv`）
+  - 分類:
+    - `in-scope`: 実装対象（pass 拡張/精度改善/バグ修正）
+    - `out-of-scope`: 非対象（対象 section 不在など）
+    - `unknown`: 手動分類待ち
+  - 出力:
+    - `no_change_triage.tsv` に `scope/action/priority/estimate/todo_target` を付与
+- 目的:
+  - 「実装対象 / 非対象」を切り分け、TODO の優先順位に直接つなぐ
+
+### wasm-opt 移植 Top3（A3）
+
+- 指標: `wasm_opt_migration_top3`
+- 定義:
+  - 入力:
+    - `pass_waterfall.tsv`
+    - `no_change_triage.tsv`
+    - `zlib_gap.md` の section ギャップ（code/function/type）
+  - 出力:
+    - `migration_top3.tsv`: 上位3件の候補（score/evidence/todo_target）
+    - `migration_top3.md`: 人間向けサマリ
+- 目的:
+  - code / dce 系の追加移植候補を毎回 Top3 に絞って優先実装する
+
 ### zlib gap 詳細レポート（第一KPIアトリビューション）
 
 - 指標: `zlib_gap_detail`
@@ -149,6 +177,9 @@ just kpi
 - `bench/kpi/pass_waterfall.tsv`: pass waterfall の段階別差分
 - `bench/kpi/directize_chain.tsv`: directize→DCE→RUME 連鎖の段階差分
 - `bench/kpi/no_change_reasons.tsv`: no-change 理由ダッシュボードの生データ
+- `bench/kpi/no_change_triage.tsv`: no-change 理由の実装対象/非対象 triage
+- `bench/kpi/migration_top3.tsv`: wasm-opt 移植候補 Top3 の機械可読出力
+- `bench/kpi/migration_top3.md`: wasm-opt 移植候補 Top3 の人間向けサマリ
 - `bench/kpi/zlib_gap.md`: zlib 専用の gap 詳細レポート
 - `bench/kpi/component_dce.tsv`: component-model DCE サイズKPIの明細
 - `bench/kpi/runtime.tsv`: 速度KPIの明細

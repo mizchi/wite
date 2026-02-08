@@ -9,6 +9,9 @@ DIRECTIZE_CHAIN_TSV="$OUT_DIR/directize_chain.tsv"
 HEATMAP_TSV="$OUT_DIR/heatmap.tsv"
 PASS_WATERFALL_TSV="$OUT_DIR/pass_waterfall.tsv"
 NO_CHANGE_REASON_TSV="$OUT_DIR/no_change_reasons.tsv"
+NO_CHANGE_TRIAGE_TSV="$OUT_DIR/no_change_triage.tsv"
+MIGRATION_TOP3_TSV="$OUT_DIR/migration_top3.tsv"
+MIGRATION_TOP3_MD="$OUT_DIR/migration_top3.md"
 ZLIB_GAP_MD="$OUT_DIR/zlib_gap.md"
 RUNTIME_TSV="$OUT_DIR/runtime.tsv"
 BENCH_RAW_LOG="$OUT_DIR/bench.raw.log"
@@ -55,6 +58,8 @@ tmp_zlib_fn_wasm_opt="$(mktemp)"
 tmp_zlib_block_before="$(mktemp)"
 tmp_zlib_block_walyze="$(mktemp)"
 tmp_zlib_block_wasm_opt="$(mktemp)"
+tmp_no_change_triage="$(mktemp)"
+tmp_migration_candidates="$(mktemp)"
 cleanup() {
   rm -f \
     "$tmp_wasm" "$tmp_wasm_opt" "$tmp_runtime" "$tmp_component" \
@@ -62,7 +67,8 @@ cleanup() {
     "$tmp_zlib_before_sections" "$tmp_zlib_walyze_sections" "$tmp_zlib_wasm_opt_sections" \
     "$tmp_zlib_section_delta_walyze" "$tmp_zlib_section_delta_wasm_opt" \
     "$tmp_zlib_fn_before" "$tmp_zlib_fn_walyze" "$tmp_zlib_fn_wasm_opt" \
-    "$tmp_zlib_block_before" "$tmp_zlib_block_walyze" "$tmp_zlib_block_wasm_opt"
+    "$tmp_zlib_block_before" "$tmp_zlib_block_walyze" "$tmp_zlib_block_wasm_opt" \
+    "$tmp_no_change_triage" "$tmp_migration_candidates"
 }
 trap cleanup EXIT
 
@@ -109,6 +115,20 @@ parse_block_total_instruction_bytes() {
 is_uint() {
   local value="$1"
   [[ "$value" =~ ^[0-9]+$ ]]
+}
+
+is_int() {
+  local value="$1"
+  [[ "$value" =~ ^-?[0-9]+$ ]]
+}
+
+int_or_zero() {
+  local value="$1"
+  if is_int "$value"; then
+    echo "$value"
+  else
+    echo "0"
+  fi
 }
 
 parse_section_sizes_to_tsv() {
@@ -177,6 +197,15 @@ heat_bar_from_ratio_pct() {
   }'
 }
 
+section_gain_from_delta_tsv() {
+  local delta_tsv="$1"
+  local section_name="$2"
+  awk -F '\t' -v section="$section_name" '
+    $1 == section { print $4; found = 1; exit }
+    END { if (!found) print "NA" }
+  ' "$delta_tsv"
+}
+
 normalize_no_change_reason() {
   local reason="$1"
   case "$reason" in
@@ -217,6 +246,115 @@ normalize_no_change_reason() {
       echo "other"
       ;;
   esac
+}
+
+classify_no_change_category() {
+  local category="$1"
+  case "$category" in
+    strip:no-custom-section|strip:target-not-present|code:no-code-section|common:already-optimized|common:no-pass-enabled)
+      echo -e "out-of-scope\tmonitor-only\tP3\tS\tno-action"
+      ;;
+    common:size-neutral-rewrite)
+      echo -e "in-scope\ttuning\tP2\tM\tP5: optimize-instructions encoding"
+      ;;
+    code:no-reducible-pattern)
+      echo -e "in-scope\tcode-pass-extension\tP1\tM\tP5: precompute extension (eqz(eqz)/logic)"
+      ;;
+    dce:partial-callgraph)
+      echo -e "in-scope\tdce-precision\tP1\tL\tP2: signature-refining / cfp"
+      ;;
+    dce:no-removable-functions)
+      echo -e "in-scope\tdce-coverage\tP1\tM\tP2: signature-refining / cfp"
+      ;;
+    dce:analysis-failed)
+      echo -e "in-scope\tbugfix\tP0\tS\tN8: module-elements/index rewrite boundary tests"
+      ;;
+    diag:section-inspect-failed)
+      echo -e "in-scope\tdiagnostics\tP1\tS\tA2: diagnostic hardening"
+      ;;
+    *)
+      echo -e "unknown\tmanual-triage\tP2\tM\tA2: manual classification"
+      ;;
+  esac
+}
+
+sum_reason_count_by_category() {
+  local category="$1"
+  awk -F '\t' -v category="$category" 'NR > 1 && $2 == category { sum += $4 } END { print sum + 0 }' "$NO_CHANGE_REASON_TSV"
+}
+
+sum_reason_count_by_scope() {
+  local scope="$1"
+  awk -F '\t' -v scope="$scope" 'NR > 1 && $5 == scope { sum += $4 } END { print sum + 0 }' "$NO_CHANGE_TRIAGE_TSV"
+}
+
+generate_no_change_triage() {
+  echo -e "stage\tcategory\treason\tcount\tscope\taction\tpriority\testimate\ttodo_target\tsample_files" > "$NO_CHANGE_TRIAGE_TSV"
+  : > "$tmp_no_change_triage"
+  awk -F '\t' 'NR > 1 { print $1 "\t" $2 "\t" $3 "\t" $4 "\t" $5 }' "$NO_CHANGE_REASON_TSV" |
+    while IFS=$'\t' read -r stage category reason count sample_files; do
+      classification="$(classify_no_change_category "$category")"
+      IFS=$'\t' read -r scope action priority estimate todo_target <<< "$classification"
+      echo -e "$stage\t$category\t$reason\t$count\t$scope\t$action\t$priority\t$estimate\t$todo_target\t$sample_files" >> "$tmp_no_change_triage"
+    done
+  sort -t $'\t' -k7,7 -k4,4nr -k1,1 -k2,2 "$tmp_no_change_triage" >> "$NO_CHANGE_TRIAGE_TSV"
+}
+
+generate_migration_top3_report() {
+  local zlib_code_gap zlib_function_gap zlib_type_gap primary_gap
+  local code_no_pattern_count dce_no_remove_count dce_partial_count dce_fail_count
+  local rume_issue_count waterfall_code_gain waterfall_dce_gain waterfall_rume_gain
+  zlib_code_gap="$(int_or_zero "$zlib_gap_code_section_to_wasm_opt_bytes")"
+  zlib_function_gap="$(int_or_zero "$zlib_gap_function_section_to_wasm_opt_bytes")"
+  zlib_type_gap="$(int_or_zero "$zlib_gap_type_section_to_wasm_opt_bytes")"
+  primary_gap="$(int_or_zero "$primary_gap_to_wasm_opt_bytes")"
+  code_no_pattern_count="$(sum_reason_count_by_category "code:no-reducible-pattern")"
+  dce_no_remove_count="$(sum_reason_count_by_category "dce:no-removable-functions")"
+  dce_partial_count="$(sum_reason_count_by_category "dce:partial-callgraph")"
+  dce_fail_count="$(sum_reason_count_by_category "dce:analysis-failed")"
+  rume_issue_count="$(awk -F '\t' 'NR > 1 && $12 != "ok" { sum += 1 } END { print sum + 0 }' "$PASS_WATERFALL_TSV")"
+  waterfall_code_gain="$(int_or_zero "$waterfall_total_code_gain")"
+  waterfall_dce_gain="$(int_or_zero "$waterfall_total_dce_gain")"
+  waterfall_rume_gain="$(int_or_zero "$waterfall_total_rume_gain")"
+
+  if [[ "$zlib_code_gap" -lt 0 ]]; then zlib_code_gap=0; fi
+  if [[ "$zlib_function_gap" -lt 0 ]]; then zlib_function_gap=0; fi
+  if [[ "$zlib_type_gap" -lt 0 ]]; then zlib_type_gap=0; fi
+  if [[ "$primary_gap" -lt 0 ]]; then primary_gap=0; fi
+
+  : > "$tmp_migration_candidates"
+  score_signature_refining=$((primary_gap + waterfall_dce_gain * 4 + (dce_no_remove_count + dce_partial_count) * 192 + dce_fail_count * 256))
+  echo -e "$score_signature_refining\tP2 signature-refining/cfp\tDCE precision + callgraph\tP1\tL\tprimary_gap=${primary_gap},dce_gain=${waterfall_dce_gain},dce_reasons=$((dce_no_remove_count + dce_partial_count + dce_fail_count))\tTODO:P2 signature-refining/cfp" >> "$tmp_migration_candidates"
+
+  score_precompute=$((zlib_code_gap + waterfall_code_gain * 16 + code_no_pattern_count * 160))
+  echo -e "$score_precompute\tP5 precompute extension\tcode simplification coverage\tP1\tM\tzlib_code_gap=${zlib_code_gap},code_gain=${waterfall_code_gain},code_no_pattern=${code_no_pattern_count}\tTODO:P5 precompute extension" >> "$tmp_migration_candidates"
+
+  score_rume_guard=$((waterfall_rume_gain * 24 + rume_issue_count * 320 + dce_fail_count * 192))
+  echo -e "$score_rume_guard\tN8 module-elements/index rewrite hardening\tRUME safety + removability\tP1\tS\twaterfall_rume_gain=${waterfall_rume_gain},rume_issues=${rume_issue_count}\tTODO:N8 remove-unused-module-elements tests" >> "$tmp_migration_candidates"
+
+  score_gc_type_refine=$((zlib_type_gap * 32 + zlib_function_gap * 8))
+  echo -e "$score_gc_type_refine\tN5 GC hierarchy type-refining\tGC type pruning\tP2\tM\tzlib_type_gap=${zlib_type_gap},zlib_function_gap=${zlib_function_gap}\tTODO:N5 GC hierarchy type-refining" >> "$tmp_migration_candidates"
+
+  score_duplicate_import=$((zlib_function_gap * 2 + waterfall_code_gain))
+  echo -e "$score_duplicate_import\tP5 duplicate-import-elimination\timport/function section cleanup\tP3\tS\tzlib_function_gap=${zlib_function_gap},code_gain=${waterfall_code_gain}\tTODO:P5 duplicate-import-elimination" >> "$tmp_migration_candidates"
+
+  echo -e "rank\tcandidate\tfocus\tpriority\testimate\tscore\tevidence\ttodo_target" > "$MIGRATION_TOP3_TSV"
+  sort -t $'\t' -k1,1nr "$tmp_migration_candidates" |
+    head -n 3 |
+    awk -F '\t' '{ printf "%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n", NR, $2, $3, $4, $5, $1, $6, $7 }' >> "$MIGRATION_TOP3_TSV"
+
+  {
+    echo "# wasm-opt Migration Top3"
+    echo
+    echo "- primary_gap_to_wasm_opt_bytes: $primary_gap_to_wasm_opt_bytes"
+    echo "- zlib_code_gap_to_wasm_opt_bytes: $zlib_gap_code_section_to_wasm_opt_bytes"
+    echo "- zlib_function_gap_to_wasm_opt_bytes: $zlib_gap_function_section_to_wasm_opt_bytes"
+    echo "- zlib_type_gap_to_wasm_opt_bytes: $zlib_gap_type_section_to_wasm_opt_bytes"
+    echo
+    echo "| rank | candidate | focus | priority | estimate | score | evidence | todo_target |"
+    echo "| ---: | --- | --- | --- | --- | ---: | --- | --- |"
+    awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8 }' "$MIGRATION_TOP3_TSV"
+  } > "$MIGRATION_TOP3_MD"
 }
 
 declare -A NO_CHANGE_REASON_COUNT=()
@@ -333,6 +471,25 @@ generate_zlib_gap_report() {
   else
     : > "$tmp_zlib_section_delta_walyze"
     : > "$tmp_zlib_section_delta_wasm_opt"
+  fi
+
+  local zlib_code_gain_walyze zlib_code_gain_wasm_opt
+  local zlib_function_gain_walyze zlib_function_gain_wasm_opt
+  local zlib_type_gain_walyze zlib_type_gain_wasm_opt
+  zlib_code_gain_walyze="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_walyze" "code")"
+  zlib_code_gain_wasm_opt="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_wasm_opt" "code")"
+  zlib_function_gain_walyze="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_walyze" "function")"
+  zlib_function_gain_wasm_opt="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_wasm_opt" "function")"
+  zlib_type_gain_walyze="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_walyze" "type")"
+  zlib_type_gain_wasm_opt="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_wasm_opt" "type")"
+  if is_int "$zlib_code_gain_walyze" && is_int "$zlib_code_gain_wasm_opt"; then
+    zlib_gap_code_section_to_wasm_opt_bytes=$((zlib_code_gain_wasm_opt - zlib_code_gain_walyze))
+  fi
+  if is_int "$zlib_function_gain_walyze" && is_int "$zlib_function_gain_wasm_opt"; then
+    zlib_gap_function_section_to_wasm_opt_bytes=$((zlib_function_gain_wasm_opt - zlib_function_gain_walyze))
+  fi
+  if is_int "$zlib_type_gain_walyze" && is_int "$zlib_type_gain_wasm_opt"; then
+    zlib_gap_type_section_to_wasm_opt_bytes=$((zlib_type_gain_wasm_opt - zlib_type_gain_walyze))
   fi
 
   moon run src/main --target js -- top-functions "$zlib_rel" 20 > "$tmp_zlib_fn_before" 2>&1 || true
@@ -490,6 +647,9 @@ zlib_gap_code_wasm_opt_bytes="NA"
 zlib_gap_block_before_bytes="NA"
 zlib_gap_block_walyze_bytes="NA"
 zlib_gap_block_wasm_opt_bytes="NA"
+zlib_gap_code_section_to_wasm_opt_bytes="NA"
+zlib_gap_function_section_to_wasm_opt_bytes="NA"
+zlib_gap_type_section_to_wasm_opt_bytes="NA"
 
 while IFS= read -r file; do
   core_file_count=$((core_file_count + 1))
@@ -792,7 +952,9 @@ if [[ "${#NO_CHANGE_REASON_COUNT[@]}" -gt 0 ]]; then
   done | sort -t $'\t' -k4,4nr -k1,1 -k2,2 >> "$NO_CHANGE_REASON_TSV"
 fi
 
+generate_no_change_triage
 generate_zlib_gap_report
+generate_migration_top3_report
 
 echo -e "file\tcomponent_bytes\tcore_before_bytes\tcore_after_bytes\treduction_ratio_pct\tcore_module_count\troot_count" > "$COMPONENT_DCE_TSV"
 
@@ -980,6 +1142,28 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo "| --- | --- | --- | ---: | --- |"
   awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5 }' "$NO_CHANGE_REASON_TSV"
   echo
+  echo "## No-Change Triage (A2)"
+  echo
+  triage_in_scope_count="$(sum_reason_count_by_scope "in-scope")"
+  triage_out_scope_count="$(sum_reason_count_by_scope "out-of-scope")"
+  triage_unknown_count="$(sum_reason_count_by_scope "unknown")"
+  echo "- triage_in_scope_count: $triage_in_scope_count"
+  echo "- triage_out_of_scope_count: $triage_out_scope_count"
+  echo "- triage_unknown_count: $triage_unknown_count"
+  echo
+  echo "| stage | category | count | scope | action | priority | estimate | todo_target | sample_files |"
+  echo "| --- | --- | ---: | --- | --- | --- | --- | --- | --- |"
+  awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $4, $5, $6, $7, $8, $9, $10 }' "$NO_CHANGE_TRIAGE_TSV"
+  echo
+  echo "## wasm-opt Migration Top3 (A3)"
+  echo
+  echo "- source: pass waterfall + no-change triage + zlib section gap"
+  echo "- detail_report: \`bench/kpi/migration_top3.md\`"
+  echo
+  echo "| rank | candidate | focus | priority | estimate | score | evidence | todo_target |"
+  echo "| ---: | --- | --- | --- | --- | ---: | --- | --- |"
+  awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8 }' "$MIGRATION_TOP3_TSV"
+  echo
   echo "## Component-model DCE Size KPI (priority 1)"
   echo
   echo "- total_component_bytes: $component_total_component_bytes"
@@ -1005,6 +1189,9 @@ echo "  $HEATMAP_TSV"
 echo "  $PASS_WATERFALL_TSV"
 echo "  $DIRECTIZE_CHAIN_TSV"
 echo "  $NO_CHANGE_REASON_TSV"
+echo "  $NO_CHANGE_TRIAGE_TSV"
+echo "  $MIGRATION_TOP3_TSV"
+echo "  $MIGRATION_TOP3_MD"
 echo "  $ZLIB_GAP_MD"
 echo "  $COMPONENT_DCE_TSV"
 echo "  $RUNTIME_TSV"
