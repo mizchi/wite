@@ -1323,6 +1323,23 @@ fn encode_u32_leb128(value : UInt) -> Array[Byte] {
 }
 
 ///|
+fn encode_nonnegative_i32_leb128(value : UInt) -> Array[Byte] {
+  let out : Array[Byte] = []
+  let mut current = value
+  while true {
+    let low = current & 0x7fU
+    current = current >> 7
+    let sign_set = (low & 0x40U) != 0U
+    if current == 0U && not(sign_set) {
+      out.push(low.to_byte())
+      break
+    }
+    out.push((low | 0x80U).to_byte())
+  }
+  out
+}
+
+///|
 fn append_encoded_section(
   out : Array[Byte],
   section_id : UInt,
@@ -2458,6 +2475,40 @@ fn rewrite_global_section_payload_for_keep_local_and_global_index_map_raise(
 }
 
 ///|
+fn rewrite_global_section_payload_for_local_order_and_global_index_map_raise(
+  payload : Bytes,
+  local_order : Array[UInt],
+  global_index_map : Map[UInt, UInt],
+) -> Bytes raise WalyzeError {
+  let entries = parse_global_section_entries_with_refs_raise(payload)
+  if entries.length() != local_order.length() {
+    raise WalyzeError::InvalidFormat(
+      "global section length mismatch for reorder: global=" +
+      entries.length().to_string() +
+      " order=" +
+      local_order.length().to_string(),
+    )
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(local_order.length().reinterpret_as_uint())[:])
+  for old_local_index_u in local_order {
+    let old_local_index = UInt::reinterpret_as_int(old_local_index_u)
+    if old_local_index < 0 || old_local_index >= entries.length() {
+      raise WalyzeError::InvalidFormat(
+        "global reorder index out of range: " + old_local_index_u.to_string(),
+      )
+    }
+    let entry = entries[old_local_index]
+    out.append(entry.val_type[:].to_array())
+    out.push(entry.mutability)
+    out.append(
+      rewrite_const_expr_global_indices_raise(entry.init_expr, global_index_map)[:].to_array(),
+    )
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn parse_memory_section_entries_raise(
   payload : Bytes,
 ) -> Array[Bytes] raise WalyzeError {
@@ -2497,6 +2548,34 @@ fn rewrite_memory_section_payload_for_keep_local_raise(
   out.append(encode_u32_leb128(kept_entries.length().reinterpret_as_uint())[:])
   for entry in kept_entries {
     out.append(entry[:].to_array())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_memory_section_payload_for_local_order_raise(
+  payload : Bytes,
+  local_order : Array[UInt],
+) -> Bytes raise WalyzeError {
+  let entries = parse_memory_section_entries_raise(payload)
+  if entries.length() != local_order.length() {
+    raise WalyzeError::InvalidFormat(
+      "memory section length mismatch for reorder: memory=" +
+      entries.length().to_string() +
+      " order=" +
+      local_order.length().to_string(),
+    )
+  }
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(local_order.length().reinterpret_as_uint())[:])
+  for old_local_index_u in local_order {
+    let old_local_index = UInt::reinterpret_as_int(old_local_index_u)
+    if old_local_index < 0 || old_local_index >= entries.length() {
+      raise WalyzeError::InvalidFormat(
+        "memory reorder index out of range: " + old_local_index_u.to_string(),
+      )
+    }
+    out.append(entries[old_local_index][:].to_array())
   }
   Bytes::from_array(out[:])
 }
@@ -2597,6 +2676,57 @@ fn make_identity_index_map(count : UInt) -> Map[UInt, UInt] {
     out.set(i, i)
   }
   out
+}
+
+///|
+priv struct ImportKindCounts {
+  table_count : UInt
+  memory_count : UInt
+  global_count : UInt
+}
+
+///|
+fn count_import_kinds(entries : Array[ImportSectionEntry]) -> ImportKindCounts {
+  let mut table_count = 0U
+  let mut memory_count = 0U
+  let mut global_count = 0U
+  for entry in entries {
+    match entry.kind {
+      1U => table_count += 1U
+      2U => memory_count += 1U
+      3U => global_count += 1U
+      _ => ()
+    }
+  }
+  { table_count, memory_count, global_count }
+}
+
+///|
+fn count_reordered_local_indices(local_order : Array[UInt]) -> UInt {
+  let mut moved = 0U
+  for i in 0..<local_order.length() {
+    if local_order[i] != i.reinterpret_as_uint() {
+      moved += 1U
+    }
+  }
+  moved
+}
+
+///|
+fn increment_index_count_in_array(counts : Array[UInt], index : UInt) -> Unit {
+  let pos = UInt::reinterpret_as_int(index)
+  if pos >= 0 && pos < counts.length() {
+    counts[pos] += 1U
+  }
+}
+
+///|
+fn index_count_in_array(counts : Array[UInt], index : UInt) -> UInt {
+  let pos = UInt::reinterpret_as_int(index)
+  if pos < 0 || pos >= counts.length() {
+    return 0U
+  }
+  counts[pos]
 }
 
 ///|
@@ -6738,6 +6868,24 @@ priv struct DirectizeApplyResult {
 }
 
 ///|
+priv struct SimplifyGlobalsApplyResult {
+  bytes : Bytes
+  rewritten_global_get_count : UInt
+}
+
+///|
+priv struct ReorderGlobalsApplyResult {
+  bytes : Bytes
+  reordered_local_count : UInt
+}
+
+///|
+priv struct MemoryPackingApplyResult {
+  bytes : Bytes
+  reordered_local_count : UInt
+}
+
+///|
 fn apply_directize_raise(
   bytes : Bytes,
 ) -> DirectizeApplyResult raise WalyzeError {
@@ -6855,6 +7003,632 @@ fn apply_directize_raise(
 }
 
 ///|
+fn collect_global_usage_counts_from_code_section_raise(
+  payload : Bytes,
+  counts : Array[UInt],
+) -> Unit raise WalyzeError {
+  let bodies = parse_code_bodies(payload)
+  for body in bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    for span in spans {
+      if span.opcode == 0x23U || span.opcode == 0x24U {
+        match decode_span_u32_immediate(instr_bytes, span) {
+          Some(index) => increment_index_count_in_array(counts, index)
+          None =>
+            raise WalyzeError::InvalidFormat(
+              "failed to decode global index immediate in reorder-globals",
+            )
+        }
+      }
+    }
+  }
+}
+
+///|
+fn rewrite_instruction_global_get_to_i32_const_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  global_i32_const_map : Map[UInt, UInt],
+) -> (Bytes, UInt) raise WalyzeError {
+  let out : Array[Byte] = []
+  let mut rewritten_global_get_count = 0U
+  for span in spans {
+    if span.opcode == 0x23U {
+      match decode_span_u32_immediate(instr_bytes, span) {
+        Some(index) =>
+          match global_i32_const_map.get(index) {
+            Some(value) => {
+              let replacement : Array[Byte] = [0x41U.to_byte()]
+              replacement.append(encode_nonnegative_i32_leb128(value)[:])
+              if replacement.length() <= span.end_ - span.start {
+                out.append(replacement[:])
+                rewritten_global_get_count += 1U
+                continue
+              }
+            }
+            None => ()
+          }
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode global.get immediate in simplify-globals",
+          )
+      }
+    }
+    out.append(instr_bytes[span.start:span.end_].to_array())
+  }
+  (Bytes::from_array(out[:]), rewritten_global_get_count)
+}
+
+///|
+fn rewrite_code_section_payload_for_simplify_globals_raise(
+  payload : Bytes,
+  global_i32_const_map : Map[UInt, UInt],
+) -> (Bytes, UInt) raise WalyzeError {
+  let bodies = parse_code_bodies(payload)
+  let rewritten_bodies : Array[Bytes] = []
+  let mut rewritten_global_get_count = 0U
+  for body in bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    let (rewritten_instr, rewritten_count) = rewrite_instruction_global_get_to_i32_const_raise(
+      instr_bytes,
+      spans,
+      global_i32_const_map,
+    )
+    rewritten_global_get_count += rewritten_count
+    if rewritten_count > 0U {
+      let rewritten_body : Array[Byte] = body[0:prefix_end].to_array()
+      rewritten_body.append(rewritten_instr[:].to_array())
+      rewritten_bodies.push(Bytes::from_array(rewritten_body[:]))
+    } else {
+      rewritten_bodies.push(body)
+    }
+  }
+  (
+    encode_code_section_payload_from_bodies(rewritten_bodies),
+    rewritten_global_get_count,
+  )
+}
+
+///|
+fn apply_simplify_globals_raise(
+  bytes : Bytes,
+) -> SimplifyGlobalsApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut import_payload : Bytes? = None
+  let mut global_payload : Bytes? = None
+  let mut code_payload : Bytes? = None
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U => import_payload = Some(payload)
+      6U => global_payload = Some(payload)
+      10U => code_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let global_payload = match global_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_global_get_count: 0U }
+  }
+  let code_payload = match code_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_global_get_count: 0U }
+  }
+  let import_entries = match import_payload {
+    Some(payload) => parse_import_section_entries_raise(payload)
+    None => []
+  }
+  let imported_global_count = count_import_kinds(import_entries).global_count
+  let local_global_entries = parse_global_section_entries_with_refs_raise(
+    global_payload,
+  )
+  if local_global_entries.length() == 0 {
+    return { bytes, rewritten_global_get_count: 0U }
+  }
+  let global_i32_const_map : Map[UInt, UInt] = {}
+  let mut candidate_count = 0U
+  for i in 0..<local_global_entries.length() {
+    let entry = local_global_entries[i]
+    if entry.val_type.length() == 1 &&
+      entry.val_type[0].to_uint() == 0x7fU &&
+      entry.mutability.to_uint() == 0U {
+      match decode_const_expr_i32_const_nonnegative_offset_raise(entry.init_expr) {
+        Some(value) => {
+          global_i32_const_map.set(
+            imported_global_count + i.reinterpret_as_uint(),
+            value,
+          )
+          candidate_count += 1U
+        }
+        None => ()
+      }
+    }
+  }
+  if candidate_count == 0U {
+    return { bytes, rewritten_global_get_count: 0U }
+  }
+  let (rewritten_code_payload, rewritten_global_get_count) = rewrite_code_section_payload_for_simplify_globals_raise(
+    code_payload,
+    global_i32_const_map,
+  )
+  if rewritten_global_get_count == 0U {
+    return { bytes, rewritten_global_get_count: 0U }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    if section.section_id == 10U {
+      append_encoded_section(out, 10U, rewritten_code_payload)
+    } else {
+      out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), rewritten_global_get_count }
+}
+
+///|
+fn apply_simplify_globals(bytes : Bytes) -> SimplifyGlobalsApplyResult {
+  let result = try? apply_simplify_globals_raise(bytes)
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, rewritten_global_get_count: 0U }
+  }
+}
+
+///|
+fn apply_reorder_globals_raise(
+  bytes : Bytes,
+) -> ReorderGlobalsApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut import_payload : Bytes? = None
+  let mut table_payload : Bytes? = None
+  let mut memory_payload : Bytes? = None
+  let mut global_payload : Bytes? = None
+  let mut export_payload : Bytes? = None
+  let mut element_payload : Bytes? = None
+  let mut code_payload : Bytes? = None
+  let mut data_payload : Bytes? = None
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U => import_payload = Some(payload)
+      4U => table_payload = Some(payload)
+      5U => memory_payload = Some(payload)
+      6U => global_payload = Some(payload)
+      7U => export_payload = Some(payload)
+      9U => element_payload = Some(payload)
+      10U => code_payload = Some(payload)
+      11U => data_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let global_payload = match global_payload {
+    Some(v) => v
+    None => return { bytes, reordered_local_count: 0U }
+  }
+  let import_entries = match import_payload {
+    Some(payload) => parse_import_section_entries_raise(payload)
+    None => []
+  }
+  let import_counts = count_import_kinds(import_entries)
+  let imported_table_count = import_counts.table_count
+  let imported_memory_count = import_counts.memory_count
+  let imported_global_count = import_counts.global_count
+  let local_global_entries = parse_global_section_entries_with_refs_raise(
+    global_payload,
+  )
+  if local_global_entries.length() <= 1 {
+    return { bytes, reordered_local_count: 0U }
+  }
+  // Avoid creating potentially invalid forward references across local globals.
+  for entry in local_global_entries {
+    for dep in entry.init_global_refs {
+      if dep >= imported_global_count {
+        return { bytes, reordered_local_count: 0U }
+      }
+    }
+  }
+  let local_global_count = local_global_entries.length().reinterpret_as_uint()
+  let total_global_count = imported_global_count + local_global_count
+  let usage_counts : Array[UInt] = []
+  for _ in 0U..<total_global_count {
+    usage_counts.push(0U)
+  }
+  match code_payload {
+    Some(payload) => collect_global_usage_counts_from_code_section_raise(
+      payload,
+      usage_counts,
+    )
+    None => ()
+  }
+  match export_payload {
+    Some(payload) =>
+      for index in parse_export_global_indices(payload) {
+        increment_index_count_in_array(usage_counts, index)
+      }
+    None => ()
+  }
+  match element_payload {
+    Some(payload) =>
+      for index in collect_used_global_indices_from_element_section_raise(payload) {
+        increment_index_count_in_array(usage_counts, index)
+      }
+    None => ()
+  }
+  match data_payload {
+    Some(payload) => {
+      let (_, global_indices) = collect_used_memory_and_global_indices_from_data_section_raise(
+        payload,
+      )
+      for index in global_indices {
+        increment_index_count_in_array(usage_counts, index)
+      }
+    }
+    None => ()
+  }
+  for entry in local_global_entries {
+    for dep in entry.init_global_refs {
+      increment_index_count_in_array(usage_counts, dep)
+    }
+  }
+  let local_order : Array[UInt] = []
+  for i in 0..<local_global_entries.length() {
+    local_order.push(i.reinterpret_as_uint())
+  }
+  local_order.sort_by((a, b) => {
+    let a_count = index_count_in_array(usage_counts, imported_global_count + a)
+    let b_count = index_count_in_array(usage_counts, imported_global_count + b)
+    if a_count > b_count {
+      -1
+    } else if a_count < b_count {
+      1
+    } else if a < b {
+      -1
+    } else if a > b {
+      1
+    } else {
+      0
+    }
+  })
+  let reordered_local_count = count_reordered_local_indices(local_order)
+  if reordered_local_count == 0U {
+    return { bytes, reordered_local_count: 0U }
+  }
+  let global_index_map : Map[UInt, UInt] = {}
+  for i in 0U..<imported_global_count {
+    global_index_map.set(i, i)
+  }
+  for new_local_pos in 0..<local_order.length() {
+    let old_local_pos = local_order[new_local_pos]
+    global_index_map.set(
+      imported_global_count + old_local_pos,
+      imported_global_count + new_local_pos.reinterpret_as_uint(),
+    )
+  }
+  let local_table_count = match table_payload {
+    Some(payload) => parse_table_section_entries_raise(payload).length().reinterpret_as_uint()
+    None => 0U
+  }
+  let local_memory_count = match memory_payload {
+    Some(payload) => parse_memory_section_entries_raise(payload).length().reinterpret_as_uint()
+    None => 0U
+  }
+  let table_index_map = make_identity_index_map(
+    imported_table_count + local_table_count,
+  )
+  let memory_index_map = make_identity_index_map(
+    imported_memory_count + local_memory_count,
+  )
+  let element_index_map = match element_payload {
+    Some(payload) => make_identity_index_map(parse_vec_count(payload))
+    None => make_identity_index_map(0U)
+  }
+  let data_index_map = match data_payload {
+    Some(payload) => make_identity_index_map(parse_vec_count(payload))
+    None => make_identity_index_map(0U)
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      6U => {
+        let rewritten = rewrite_global_section_payload_for_local_order_and_global_index_map_raise(
+          payload,
+          local_order,
+          global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 6U, rewritten)
+        }
+      }
+      7U => {
+        let (rewritten, _) = rewrite_export_section_payload_for_module_index_maps_raise(
+          payload,
+          table_index_map,
+          memory_index_map,
+          global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 7U, rewritten)
+        }
+      }
+      9U => {
+        let (rewritten, _, _) = rewrite_element_section_payload_for_table_index_map_raise(
+          payload,
+          table_index_map,
+          global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 9U, rewritten)
+        }
+      }
+      10U =>
+        append_encoded_section(
+          out,
+          10U,
+          rewrite_code_section_payload_for_module_index_map_raise(
+            payload,
+            table_index_map,
+            memory_index_map,
+            global_index_map,
+            element_index_map,
+            data_index_map,
+          ),
+        )
+      11U => {
+        let (rewritten, _, _) = rewrite_data_section_payload_for_memory_global_index_map_raise(
+          payload,
+          memory_index_map,
+          global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 11U, rewritten)
+        }
+      }
+      _ =>
+        out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), reordered_local_count }
+}
+
+///|
+fn apply_reorder_globals(bytes : Bytes) -> ReorderGlobalsApplyResult {
+  let result = try? apply_reorder_globals_raise(bytes)
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, reordered_local_count: 0U }
+  }
+}
+
+///|
+fn is_memory_index_marked_used(used_flags : Array[Bool], index : UInt) -> Bool {
+  let pos = UInt::reinterpret_as_int(index)
+  pos >= 0 && pos < used_flags.length() && used_flags[pos]
+}
+
+///|
+fn apply_memory_packing_raise(
+  bytes : Bytes,
+) -> MemoryPackingApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut import_payload : Bytes? = None
+  let mut table_payload : Bytes? = None
+  let mut memory_payload : Bytes? = None
+  let mut global_payload : Bytes? = None
+  let mut export_payload : Bytes? = None
+  let mut code_payload : Bytes? = None
+  let mut data_payload : Bytes? = None
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      2U => import_payload = Some(payload)
+      4U => table_payload = Some(payload)
+      5U => memory_payload = Some(payload)
+      6U => global_payload = Some(payload)
+      7U => export_payload = Some(payload)
+      10U => code_payload = Some(payload)
+      11U => data_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let memory_payload = match memory_payload {
+    Some(v) => v
+    None => return { bytes, reordered_local_count: 0U }
+  }
+  let import_entries = match import_payload {
+    Some(payload) => parse_import_section_entries_raise(payload)
+    None => []
+  }
+  let import_counts = count_import_kinds(import_entries)
+  let imported_table_count = import_counts.table_count
+  let imported_memory_count = import_counts.memory_count
+  let imported_global_count = import_counts.global_count
+  let local_memory_entries = parse_memory_section_entries_raise(memory_payload)
+  if local_memory_entries.length() <= 1 {
+    return { bytes, reordered_local_count: 0U }
+  }
+  let used_memory_indices : Array[UInt] = []
+  match export_payload {
+    Some(payload) =>
+      for index in parse_export_memory_indices(payload) {
+        push_unique_u32(used_memory_indices, index)
+      }
+    None => ()
+  }
+  match code_payload {
+    Some(payload) =>
+      match collect_used_memory_indices_from_code_section(payload) {
+        Some(indices) =>
+          for index in indices {
+            push_unique_u32(used_memory_indices, index)
+          }
+        None => return { bytes, reordered_local_count: 0U }
+      }
+    None => ()
+  }
+  match data_payload {
+    Some(payload) => {
+      let (memory_indices, _) = collect_used_memory_and_global_indices_from_data_section_raise(
+        payload,
+      )
+      for index in memory_indices {
+        push_unique_u32(used_memory_indices, index)
+      }
+    }
+    None => ()
+  }
+  let total_memory_count = imported_memory_count +
+    local_memory_entries.length().reinterpret_as_uint()
+  let used_flags : Array[Bool] = []
+  for _ in 0U..<total_memory_count {
+    used_flags.push(false)
+  }
+  for index in used_memory_indices {
+    let pos = UInt::reinterpret_as_int(index)
+    if pos >= 0 && pos < used_flags.length() {
+      used_flags[pos] = true
+    }
+  }
+  let local_order : Array[UInt] = []
+  let sortable_local_indices : Array[UInt] = []
+  let fixed_local_pos = if imported_memory_count == 0U { 0 } else { -1 }
+  for i in 0..<local_memory_entries.length() {
+    if i == fixed_local_pos {
+      local_order.push(i.reinterpret_as_uint())
+    } else {
+      sortable_local_indices.push(i.reinterpret_as_uint())
+    }
+  }
+  sortable_local_indices.sort_by((a, b) => {
+    let a_used = is_memory_index_marked_used(
+      used_flags,
+      imported_memory_count + a,
+    )
+    let b_used = is_memory_index_marked_used(
+      used_flags,
+      imported_memory_count + b,
+    )
+    if a_used && not(b_used) {
+      -1
+    } else if not(a_used) && b_used {
+      1
+    } else if a < b {
+      -1
+    } else if a > b {
+      1
+    } else {
+      0
+    }
+  })
+  local_order.append(sortable_local_indices[:])
+  let reordered_local_count = count_reordered_local_indices(local_order)
+  if reordered_local_count == 0U {
+    return { bytes, reordered_local_count: 0U }
+  }
+  let memory_index_map : Map[UInt, UInt] = {}
+  for i in 0U..<imported_memory_count {
+    memory_index_map.set(i, i)
+  }
+  for new_local_pos in 0..<local_order.length() {
+    let old_local_pos = local_order[new_local_pos]
+    memory_index_map.set(
+      imported_memory_count + old_local_pos,
+      imported_memory_count + new_local_pos.reinterpret_as_uint(),
+    )
+  }
+  if remap_memory_index_raise(0U, memory_index_map) != 0U {
+    return { bytes, reordered_local_count: 0U }
+  }
+  let local_table_count = match table_payload {
+    Some(payload) => parse_table_section_entries_raise(payload).length().reinterpret_as_uint()
+    None => 0U
+  }
+  let local_global_count = match global_payload {
+    Some(payload) =>
+      parse_global_section_entries_with_refs_raise(payload)
+      .length()
+      .reinterpret_as_uint()
+    None => 0U
+  }
+  let table_index_map = make_identity_index_map(
+    imported_table_count + local_table_count,
+  )
+  let global_index_map = make_identity_index_map(
+    imported_global_count + local_global_count,
+  )
+  let element_index_map = make_identity_index_map(0U)
+  let data_index_map = match data_payload {
+    Some(payload) => make_identity_index_map(parse_vec_count(payload))
+    None => make_identity_index_map(0U)
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      5U => {
+        let rewritten = rewrite_memory_section_payload_for_local_order_raise(
+          payload,
+          local_order,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 5U, rewritten)
+        }
+      }
+      7U => {
+        let (rewritten, _) = rewrite_export_section_payload_for_module_index_maps_raise(
+          payload,
+          table_index_map,
+          memory_index_map,
+          global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 7U, rewritten)
+        }
+      }
+      10U =>
+        append_encoded_section(
+          out,
+          10U,
+          rewrite_code_section_payload_for_module_index_map_raise(
+            payload,
+            table_index_map,
+            memory_index_map,
+            global_index_map,
+            element_index_map,
+            data_index_map,
+          ),
+        )
+      11U => {
+        let (rewritten, _, _) = rewrite_data_section_payload_for_memory_global_index_map_raise(
+          payload,
+          memory_index_map,
+          global_index_map,
+        )
+        if parse_vec_count(rewritten) > 0U {
+          append_encoded_section(out, 11U, rewritten)
+        }
+      }
+      _ =>
+        out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), reordered_local_count }
+}
+
+///|
+fn apply_memory_packing(bytes : Bytes) -> MemoryPackingApplyResult {
+  let result = try? apply_memory_packing_raise(bytes)
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, reordered_local_count: 0U }
+  }
+}
+
+///|
 fn is_dwarf_custom_section_name(name : String) -> Bool {
   name.has_prefix(".debug_") || name.has_prefix("reloc..debug_")
 }
@@ -6936,6 +7710,23 @@ fn should_duplicate_import_eliminate(config : OptimizeConfig) -> Bool {
   config.enable_dfe ||
   config.enable_merge_similar_functions ||
   config.enable_remove_unused_module_elements
+}
+
+///|
+fn should_simplify_globals(config : OptimizeConfig) -> Bool {
+  should_optimize_code_section(config) ||
+  config.enable_dce ||
+  config.enable_remove_unused_module_elements
+}
+
+///|
+fn should_reorder_globals(config : OptimizeConfig) -> Bool {
+  config.enable_dce || config.enable_remove_unused_module_elements
+}
+
+///|
+fn should_memory_pack(config : OptimizeConfig) -> Bool {
+  config.enable_dce || config.enable_remove_unused_module_elements
 }
 
 ///|
@@ -7213,6 +8004,36 @@ fn optimize_for_size_round_raise(
         rume.removed_data_count.to_string() +
         " exports:" +
         rume.removed_export_count.to_string(),
+      )
+    }
+  }
+  if should_simplify_globals(config) {
+    let simplify_globals = apply_simplify_globals(optimized_bytes)
+    optimized_bytes = simplify_globals.bytes
+    if simplify_globals.rewritten_global_get_count > 0U {
+      removed_sections.push(
+        "simplify-globals:gets:" +
+        simplify_globals.rewritten_global_get_count.to_string(),
+      )
+    }
+  }
+  if should_reorder_globals(config) {
+    let reorder_globals = apply_reorder_globals(optimized_bytes)
+    optimized_bytes = reorder_globals.bytes
+    if reorder_globals.reordered_local_count > 0U {
+      removed_sections.push(
+        "reorder-globals:locals:" +
+        reorder_globals.reordered_local_count.to_string(),
+      )
+    }
+  }
+  if should_memory_pack(config) {
+    let memory_pack = apply_memory_packing(optimized_bytes)
+    optimized_bytes = memory_pack.bytes
+    if memory_pack.reordered_local_count > 0U {
+      removed_sections.push(
+        "memory-packing:locals:" +
+        memory_pack.reordered_local_count.to_string(),
       )
     }
   }

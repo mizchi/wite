@@ -1943,6 +1943,79 @@ fn sample_module_with_duplicate_imports_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_simplifiable_global_get_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+  // type section: 1 func type () -> i32
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 1 local function (type 0)
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // global section: immutable i32 global = i32.const 7
+  append_section(out, 6U, bytes_of([0x01, 0x7f, 0x00, 0x41, 0x07, 0x0b]))
+  // export section: run (func 0)
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section: global.get 0; end
+  append_section(out, 10U, bytes_of([0x01, 0x04, 0x00, 0x23, 0x00, 0x0b]))
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_reorderable_globals_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+  // type section: 1 func type () -> i32
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 1 local function (type 0)
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // global section:
+  //   g0: (mut i32) i32.const 1
+  //   g1: (mut i32) i32.const 2
+  //   g2: (mut i32) i32.const 3
+  append_section(
+    out,
+    6U,
+    bytes_of([
+      0x03, 0x7f, 0x01, 0x41, 0x01, 0x0b, 0x7f, 0x01, 0x41, 0x02, 0x0b, 0x7f,
+      0x01, 0x41, 0x03, 0x0b,
+    ]),
+  )
+  // export section: run(func 0), g0/g1/g2(global 0/1/2)
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x04, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00, 0x02, 0x67, 0x30, 0x03, 0x00,
+      0x02, 0x67, 0x31, 0x03, 0x01, 0x02, 0x67, 0x32, 0x03, 0x02,
+    ]),
+  )
+  // code section: global.get 2; end
+  append_section(out, 10U, bytes_of([0x01, 0x04, 0x00, 0x23, 0x02, 0x0b]))
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_reorderable_memories_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+  // type section: 1 func type () -> i32
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 1 local function (type 0)
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // memory section: 3 local memories min=1
+  append_section(out, 5U, bytes_of([0x03, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01]))
+  // export section: run(func 0), m2(memory 2)
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x02, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00, 0x02, 0x6d, 0x32, 0x02, 0x02,
+    ]),
+  )
+  // code section: memory.size 2; end
+  append_section(out, 10U, bytes_of([0x01, 0x04, 0x00, 0x3f, 0x02, 0x0b]))
+  // data section: active segment on memory 2 at offset 0, one byte payload
+  append_section(out, 11U, bytes_of([0x01, 0x02, 0x02, 0x41, 0x00, 0x0b, 0x01, 0x00]))
+  Bytes::from_array(out[:])
+}
+
+///|
 fn bytes_contains_seq(bytes : Bytes, seq : Array[Int]) -> Bool {
   if seq.length() == 0 {
     return true
@@ -2883,11 +2956,111 @@ test "optimize removes duplicate imports and remaps all related indices" {
   assert_true(bytes_contains_seq(optimized.bytes, [0x01, 0x6d, 0x02, 0x00]))
   assert_true(
     bytes_contains_seq(optimized.bytes, [
+      0x04, 0x67, 0x66, 0x75, 0x6e, 0x03, 0x01,
+    ]) ||
+    bytes_contains_seq(optimized.bytes, [
       0x04, 0x67, 0x66, 0x75, 0x6e, 0x03, 0x02,
     ]),
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0x08, 0x01, 0x01]))
   assert_true(runtime_zero_arg_export_behaviors_equal(bytes, optimized.bytes))
+}
+
+///|
+test "optimize simplify-globals rewrites immutable global.get to i32.const" {
+  let bytes = sample_module_with_simplifiable_global_get_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("simplify-globals:gets:1")),
+  )
+  assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x07, 0x0b]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x23, 0x00, 0x0b])))
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
+test "optimize reorder-globals remaps global indices in code and exports" {
+  let bytes = sample_module_with_reorderable_globals_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("reorder-globals:locals:")),
+  )
+  assert_true(bytes_contains_seq(optimized.bytes, [0x23, 0x00, 0x0b]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x23, 0x02, 0x0b])))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x02, 0x67, 0x32, 0x03, 0x00]),
+  )
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
+test "optimize memory-packing reorders local memories and remaps users" {
+  let bytes = sample_module_with_reorderable_memories_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("memory-packing:locals:")),
+  )
+  assert_true(bytes_contains_seq(optimized.bytes, [0x3f, 0x01, 0x0b]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0x3f, 0x02, 0x0b])))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x02, 0x6d, 0x32, 0x02, 0x01]),
+  )
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x02, 0x01, 0x41, 0x00, 0x0b, 0x01, 0x00]),
+  )
+  assert_true(
+    not(
+      bytes_contains_seq(optimized.bytes, [0x02, 0x02, 0x41, 0x00, 0x0b, 0x01, 0x00]),
+    ),
+  )
 }
 
 ///|

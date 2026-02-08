@@ -133,7 +133,7 @@
 - [x] `inlining-optimizing` の最小実装（`() -> i32.const` callee の call inline）
 - [x] `dae-optimizing` の最小実装（drop される純粋式の除去）
 - [x] `duplicate-import-elimination` の最小実装（func/table/memory/global の重複 import 統合 + index remap）
-- [ ] `simplify-globals*` / `reorder-globals` / `memory-packing` を検討する
+- [x] `simplify-globals*` / `reorder-globals` / `memory-packing` の最小実装を導入する（immutable i32 global.get の const 化 / local global 再配置 / local memory 再配置）
 
 ## P6: 計測と品質
 
