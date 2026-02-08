@@ -105,6 +105,7 @@ Main APIs are in `src/lib.mbt`:
 - `analyze_function_sizes(bytes)`
 - `analyze_code_block_sizes(bytes)`
 - `analyze_call_graph(bytes)`
+- `analyze_call_graph_summary(bytes)`
 - `analyze_keep_reasons(bytes, config=...)`
 - `analyze_dce_report(bytes)`
 - `optimize_for_size(bytes, config=...)`

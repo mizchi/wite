@@ -151,12 +151,80 @@ fn print_opcode_stats(
 }
 
 ///|
+fn format_root_preview(roots : Array[UInt], limit : UInt) -> String {
+  if roots.length() == 0 {
+    return "(none)"
+  }
+  let items : Array[String] = []
+  let mut printed = 0U
+  for index in roots {
+    if printed >= limit {
+      break
+    }
+    items.push(index.to_string())
+    printed += 1U
+  }
+  if roots.length().reinterpret_as_uint() > limit {
+    items.join(", ") +
+    " ... (+" +
+    (roots.length().reinterpret_as_uint() - limit).to_string() +
+    ")"
+  } else {
+    items.join(", ")
+  }
+}
+
+///|
+fn print_call_graph_summary(summary : @walyze.CallGraphSummary) -> Unit {
+  println("call graph summary:")
+  println(
+    "  functions: imported=" +
+    summary.imported_function_count.to_string() +
+    " local=" +
+    summary.local_function_count.to_string() +
+    " reachable=" +
+    summary.reachable_function_count.to_string() +
+    " dead=" +
+    summary.dead_function_count.to_string(),
+  )
+  println("  roots: " + format_root_preview(summary.roots, 8U))
+  println("  has_indirect_calls: " + summary.has_indirect_calls.to_string())
+  println("  partial: " + summary.partial.to_string())
+  let total_local_body_bytes = summary.reachable_body_bytes +
+    summary.dead_body_bytes
+  println(
+    "  reachable_body_bytes: " +
+    summary.reachable_body_bytes.to_string() +
+    " (" +
+    format_percent(summary.reachable_body_bytes, total_local_body_bytes) +
+    ")",
+  )
+  println(
+    "  dead_body_bytes: " +
+    summary.dead_body_bytes.to_string() +
+    " (" +
+    format_percent(summary.dead_body_bytes, total_local_body_bytes) +
+    ")",
+  )
+}
+
+///|
 fn run_analyze(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
   match @walyze.analyze_section_sizes(bytes) {
     Ok(sections) => {
       println("section size analysis:")
-      print_section_sizes(sections)
+      print_section_sizes_with_share(
+        sections,
+        bytes.length().reinterpret_as_uint(),
+      )
+      match @walyze.analyze_call_graph_summary(bytes) {
+        Ok(summary) => print_call_graph_summary(summary)
+        Err(e) => {
+          println("analyze failed: " + @walyze.error_to_string(e))
+          @sys.exit(1)
+        }
+      }
     }
     Err(e) => {
       println("analyze failed: " + @walyze.error_to_string(e))

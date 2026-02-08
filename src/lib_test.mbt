@@ -1739,8 +1739,8 @@ fn sample_module_with_const_forwarding_thunk_bytes() -> Bytes {
     out,
     1U,
     bytes_of([
-      0x02, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f,
-      0x01, 0x7f,
+      0x02, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f, 0x01,
+      0x7f,
     ]),
   )
   // function section: 3 local functions (indices 0..2) with type idx [0,0,1]
@@ -1755,9 +1755,9 @@ fn sample_module_with_const_forwarding_thunk_bytes() -> Bytes {
     out,
     10U,
     bytes_of([
-      0x03, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x0a, 0x00,
-      0x20, 0x00, 0x20, 0x01, 0x41, 0x05, 0x10, 0x02, 0x0b, 0x0a, 0x00, 0x20,
-      0x00, 0x20, 0x01, 0x6a, 0x20, 0x02, 0x6a, 0x0b,
+      0x03, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x0a, 0x00, 0x20,
+      0x00, 0x20, 0x01, 0x41, 0x05, 0x10, 0x02, 0x0b, 0x0a, 0x00, 0x20, 0x00, 0x20,
+      0x01, 0x6a, 0x20, 0x02, 0x6a, 0x0b,
     ]),
   )
   Bytes::from_array(out[:])
@@ -1774,8 +1774,8 @@ fn sample_module_with_const_forwarding_thunk_with_unused_local_bytes() -> Bytes 
     out,
     1U,
     bytes_of([
-      0x02, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f,
-      0x01, 0x7f,
+      0x02, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f, 0x01,
+      0x7f,
     ]),
   )
   // function section: 3 local functions (indices 0..2) with type idx [0,0,1]
@@ -1809,8 +1809,8 @@ fn sample_module_with_const_forwarding_call_return_thunk_bytes() -> Bytes {
     out,
     1U,
     bytes_of([
-      0x02, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f,
-      0x01, 0x7f,
+      0x02, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f, 0x01,
+      0x7f,
     ]),
   )
   // function section: 3 local functions (indices 0..2) with type idx [0,0,1]
@@ -2671,6 +2671,39 @@ test "analyze call graph with dead function" {
   let dead_node = report.nodes[2]
   assert_eq(dead_node.function_index, 3U)
   assert_true(not(dead_node.reachable_from_roots))
+}
+
+///|
+test "analyze call graph summary with dead function" {
+  let bytes = sample_module_with_dead_function_bytes()
+  guard analyze_call_graph_summary(bytes) is Ok(summary) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(summary.imported_function_count, 1U)
+  assert_eq(summary.local_function_count, 3U)
+  assert_true(summary.roots.contains(1U))
+  assert_true(not(summary.has_indirect_calls))
+  assert_true(not(summary.partial))
+  assert_eq(summary.reachable_function_count, 2U)
+  assert_eq(summary.dead_function_count, 1U)
+  assert_eq(summary.reachable_body_bytes, 6U)
+  assert_eq(summary.dead_body_bytes, 5U)
+}
+
+///|
+test "analyze call graph summary marks indirect calls" {
+  let bytes = sample_module_with_call_indirect_type_gap_bytes()
+  guard analyze_call_graph_summary(bytes) is Ok(summary) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(summary.imported_function_count, 0U)
+  assert_eq(summary.local_function_count, 1U)
+  assert_true(summary.has_indirect_calls)
+  assert_true(not(summary.partial))
+  assert_eq(summary.reachable_function_count, 1U)
+  assert_eq(summary.dead_function_count, 0U)
 }
 
 ///|
@@ -3975,9 +4008,7 @@ test "optimize with merge-similar-functions removes param-forwarding thunk" {
     assert_true(false)
     return
   }
-  assert_true(
-    optimized.removed_sections.any(s => s.contains("msf:functions:")),
-  )
+  assert_true(optimized.removed_sections.any(s => s.contains("msf:functions:")))
   guard profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
@@ -4799,10 +4830,18 @@ test "optimize-instructions simplifies const-first bitwise and cmp patterns" {
     return
   }
   assert_true(after.code_body_bytes < before.code_body_bytes)
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x46])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x47])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x72])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x7f, 0x20, 0x00, 0x71])))
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x46])),
+  )
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x47])),
+  )
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x72])),
+  )
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x41, 0x7f, 0x20, 0x00, 0x71])),
+  )
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
       -7, -1, 0, 1, 42, 123456,

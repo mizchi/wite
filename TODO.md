@@ -21,6 +21,8 @@
 
 ## Recent Progress
 
+- [x] Analyze: `analyze_call_graph_summary` API を追加し、`analyze` CLI で到達/未到達関数と body bytes 要約を表示
+- [x] テスト追加: callgraph summary の dead-function / indirect-call カバレッジを追加
 - [x] P2/P5: forwarding thunk の終端パターン `call; return; end` を `cfp/cfp-const/signature-refine` で検出可能に拡張
 - [x] テスト追加: `call+return` 形 thunk の `cfp/cfp-const/signature-refining` カバレッジを追加
 - [x] P2/P5: forwarding thunk が `unused local` を持つ場合でも `cfp/cfp-const/signature-refine` を適用可能に拡張

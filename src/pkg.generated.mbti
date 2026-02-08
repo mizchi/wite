@@ -8,6 +8,8 @@ import {
 // Values
 pub fn analyze_call_graph(Bytes) -> Result[CallGraphReport, WalyzeError]
 
+pub fn analyze_call_graph_summary(Bytes) -> Result[CallGraphSummary, WalyzeError]
+
 pub fn analyze_code_block_sizes(Bytes) -> Result[CodeBlockSizeReport, WalyzeError]
 
 pub fn analyze_component_call_graphs(Bytes) -> Result[Array[ComponentCallGraphReport], String]
@@ -77,6 +79,18 @@ pub struct CallGraphReport {
   reachable_body_bytes : UInt
   dead_body_bytes : UInt
   nodes : Array[CallGraphNode]
+}
+
+pub struct CallGraphSummary {
+  imported_function_count : UInt
+  local_function_count : UInt
+  roots : Array[UInt]
+  has_indirect_calls : Bool
+  partial : Bool
+  reachable_function_count : UInt
+  dead_function_count : UInt
+  reachable_body_bytes : UInt
+  dead_body_bytes : UInt
 }
 
 pub struct CodeBlockSize {

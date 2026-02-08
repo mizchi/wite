@@ -423,6 +423,19 @@ pub struct CallGraphReport {
 }
 
 ///|
+pub struct CallGraphSummary {
+  imported_function_count : UInt
+  local_function_count : UInt
+  roots : Array[UInt]
+  has_indirect_calls : Bool
+  partial : Bool
+  reachable_function_count : UInt
+  dead_function_count : UInt
+  reachable_body_bytes : UInt
+  dead_body_bytes : UInt
+}
+
+///|
 pub struct DceReport {
   roots : Array[UInt]
   partial : Bool
@@ -9289,6 +9302,35 @@ pub fn analyze_call_graph(
 }
 
 ///|
+pub fn analyze_call_graph_summary(
+  bytes : Bytes,
+) -> Result[CallGraphSummary, WalyzeError] {
+  match analyze_call_graph(bytes) {
+    Ok(report) => {
+      let mut reachable_function_count = 0U
+      for node in report.nodes {
+        if node.reachable_from_roots {
+          reachable_function_count += 1U
+        }
+      }
+      Ok({
+        imported_function_count: report.imported_function_count,
+        local_function_count: report.local_function_count,
+        roots: report.roots,
+        has_indirect_calls: report.has_indirect_calls,
+        partial: report.partial,
+        reachable_function_count,
+        dead_function_count: report.local_function_count -
+        reachable_function_count,
+        reachable_body_bytes: report.reachable_body_bytes,
+        dead_body_bytes: report.dead_body_bytes,
+      })
+    }
+    Err(err) => Err(err)
+  }
+}
+
+///|
 fn export_root_names_from_config(config : OptimizeConfig) -> Array[String]? {
   if config.closed_world &&
     not(config.safe_mode) &&
@@ -9548,6 +9590,7 @@ fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
   true
 }
 
+///|
 fn detect_forward_call_span_position(
   spans : Array[InstrSpan],
   min_prefix_span_count : Int,
@@ -9575,6 +9618,7 @@ fn detect_forward_call_span_position(
   None
 }
 
+///|
 fn parse_forward_call_target_with_param_count(
   body_bytes : Bytes,
   param_count : UInt,
@@ -9720,9 +9764,7 @@ fn parse_forward_call_target_with_appended_i32_consts(
     if span.opcode != 0x41U {
       return None
     }
-    appended_i32_const_instrs.push(
-      instr_bytes[span.start:span.end_].to_bytes(),
-    )
+    appended_i32_const_instrs.push(instr_bytes[span.start:span.end_].to_bytes())
   }
   if appended_i32_const_instrs.length() == 0 {
     return None
@@ -9905,8 +9947,7 @@ fn collect_const_call_forwarding_alias_map(
       Some(initial_alias) => {
         let seen : Map[UInt, Bool] = {}
         let mut current_target = initial_alias.target
-        let appended_i32_const_instrs = initial_alias.appended_i32_const_instrs
-          .copy()
+        let appended_i32_const_instrs = initial_alias.appended_i32_const_instrs.copy()
         let mut valid = true
         while true {
           if current_target == old_index {
@@ -10095,9 +10136,7 @@ fn rewrite_code_section_payload_for_const_call_forwarding_raise(
     let instr_bytes = body[prefix_end:body.length()].to_bytes()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let (rewritten_instr, rewritten_count) = rewrite_instruction_calls_for_const_call_forwarding_raise(
-      instr_bytes,
-      spans,
-      alias_map,
+      instr_bytes, spans, alias_map,
     )
     rewritten_call_count += rewritten_count
     if rewritten_count > 0U {
@@ -10182,10 +10221,7 @@ fn apply_const_call_forwarding_propagation_raise(
     .length()
     .reinterpret_as_uint()
   let alias_map = collect_const_call_forwarding_alias_map(
-    code_bodies,
-    imported_function_count,
-    function_type_by_index,
-    function_type_entry_by_type_index,
+    code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
   )
   let mut has_alias = false
   alias_map.each((_, _target) => has_alias = true)
@@ -10193,8 +10229,7 @@ fn apply_const_call_forwarding_propagation_raise(
     return { bytes, rewritten_call_count: 0U }
   }
   let (rewritten_code_payload, rewritten_call_count) = rewrite_code_section_payload_for_const_call_forwarding_raise(
-    code_payload,
-    alias_map,
+    code_payload, alias_map,
   )
   if rewritten_call_count == 0U {
     return { bytes, rewritten_call_count: 0U }
@@ -12009,9 +12044,8 @@ fn apply_merge_similar_functions_raise(
       continue
     }
     let param_count = function_param_count_by_index[old_pos]
-    match parse_forward_call_target_with_param_count(
-      code_bodies[i], param_count,
-    ) {
+    match
+      parse_forward_call_target_with_param_count(code_bodies[i], param_count) {
       Some(target) =>
         if target != old_index {
           let target_pos = UInt::reinterpret_as_int(target)
