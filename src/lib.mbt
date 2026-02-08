@@ -9557,9 +9557,6 @@ fn parse_forward_call_target_with_param_count(
     Ok(v) => v
     Err(_) => return None
   }
-  if prefix.local_types.length() > 0 {
-    return None
-  }
   let prefix_end = prefix.prefix_end
   let param_count_i = UInt::reinterpret_as_int(param_count)
   if param_count_i < 0 {
@@ -9612,9 +9609,6 @@ fn parse_forward_call_target_with_prefix_param_count(
     Ok(v) => v
     Err(_) => return None
   }
-  if prefix.local_types.length() > 0 {
-    return None
-  }
   let prefix_end = prefix.prefix_end
   let prefix_end_result = try? parse_local_decl_prefix_end(body_bytes)
   match prefix_end_result {
@@ -9660,9 +9654,6 @@ fn parse_forward_call_target_with_appended_i32_consts(
   let prefix = match prefix_result {
     Ok(v) => v
     Err(_) => return None
-  }
-  if prefix.local_types.length() > 0 {
-    return None
   }
   let prefix_end = prefix.prefix_end
   let prefix_end_result = try? parse_local_decl_prefix_end(body_bytes)
