@@ -150,6 +150,7 @@ pub fn OptimizeConfig::o1() -> Self {
     enable_dce=true,
     enable_dfe=true,
     enable_merge_similar_functions=true,
+    enable_remove_unused_module_elements=true,
   )
 }
 
@@ -4910,6 +4911,23 @@ fn is_drop_elidable_producer_opcode(opcode : UInt) -> Bool {
 }
 
 ///|
+fn is_drop_elidable_producer_span(
+  instr_bytes : Bytes,
+  span : InstrSpan,
+) -> Bool {
+  if is_drop_elidable_producer_opcode(span.opcode) || span.opcode == 0x3fU {
+    return true
+  }
+  if span.opcode == 0xfcU {
+    match parse_prefixed_opcode_subopcode(instr_bytes, span) {
+      Some(16U) => return true
+      _ => ()
+    }
+  }
+  false
+}
+
+///|
 fn is_block_start_opcode(opcode : UInt) -> Bool {
   opcode == 0x02U || opcode == 0x03U || opcode == 0x04U
 }
@@ -5629,6 +5647,7 @@ fn apply_rse_local_tee_set_same(instr_bytes : Bytes) -> Bytes {
 
 ///|
 fn apply_basic_peephole_to_spans(
+  instr_bytes : Bytes,
   spans : Array[InstrSpan],
   config : OptimizeConfig,
 ) -> Array[InstrSpan] {
@@ -5642,7 +5661,7 @@ fn apply_basic_peephole_to_spans(
     }
     if config.peephole_remove_const_drop &&
       i + 1 < spans.length() &&
-      is_drop_elidable_producer_opcode(span.opcode) &&
+      is_drop_elidable_producer_span(instr_bytes, span) &&
       spans[i + 1].opcode == 0x1aU {
       i += 2
       continue
@@ -5834,7 +5853,7 @@ fn optimize_instruction_bytes(
     current = apply_vacuum_to_spans(current)
   }
   if config.peephole_remove_nop || config.peephole_remove_const_drop {
-    current = apply_basic_peephole_to_spans(current, config)
+    current = apply_basic_peephole_to_spans(current_bytes, current, config)
   }
   if config.enable_remove_unused_brs {
     current = apply_remove_unused_brs_to_spans(current_bytes, current)
@@ -6158,15 +6177,16 @@ fn apply_duplicate_import_elimination(
   let result = try? apply_duplicate_import_elimination_raise(bytes)
   match result {
     Ok(v) => v
-    Err(_) => {
-      bytes,
-      removed_import_count: 0U,
-      removed_function_import_count: 0U,
-      removed_table_import_count: 0U,
-      removed_memory_import_count: 0U,
-      removed_global_import_count: 0U,
-      dropped_name_section: false,
-    }
+    Err(_) =>
+      {
+        bytes,
+        removed_import_count: 0U,
+        removed_function_import_count: 0U,
+        removed_table_import_count: 0U,
+        removed_memory_import_count: 0U,
+        removed_global_import_count: 0U,
+        dropped_name_section: false,
+      }
   }
 }
 
@@ -6394,11 +6414,13 @@ fn apply_duplicate_import_elimination_raise(
     None => 0U
   }
   let local_table_count = match table_section_payload {
-    Some(payload) => parse_table_section_entries_raise(payload).length().reinterpret_as_uint()
+    Some(payload) =>
+      parse_table_section_entries_raise(payload).length().reinterpret_as_uint()
     None => 0U
   }
   let local_memory_count = match memory_section_payload {
-    Some(payload) => parse_memory_section_entries_raise(payload).length().reinterpret_as_uint()
+    Some(payload) =>
+      parse_memory_section_entries_raise(payload).length().reinterpret_as_uint()
     None => 0U
   }
   let local_global_count = match global_section_payload {
@@ -6470,7 +6492,10 @@ fn apply_duplicate_import_elimination_raise(
         Some(v) => v
         None => i
       }
-      table_index_map.set(i, remap_table_index_raise(canonical, table_index_map))
+      table_index_map.set(
+        i,
+        remap_table_index_raise(canonical, table_index_map),
+      )
     }
   }
   for i in 0U..<local_table_count {
@@ -6566,10 +6591,7 @@ fn apply_duplicate_import_elimination_raise(
     None => make_identity_index_map(0U)
   }
   let (rewritten_import_payload, removed_by_rewrite) = rewrite_import_section_payload_for_keep_kinds_raise(
-    import_payload,
-    keep_function_imports,
-    keep_table_imports,
-    keep_memory_imports,
+    import_payload, keep_function_imports, keep_table_imports, keep_memory_imports,
     keep_global_imports,
   )
   let out : Array[Byte] = bytes[0:8].to_array()
@@ -6583,13 +6605,10 @@ fn apply_duplicate_import_elimination_raise(
         }
       6U => {
         let rewritten_function = rewrite_global_section_payload_for_index_map_raise(
-          payload,
-          function_index_map,
+          payload, function_index_map,
         )
         let rewritten = rewrite_global_section_payload_for_keep_local_and_global_index_map_raise(
-          rewritten_function,
-          keep_local_globals,
-          global_index_map,
+          rewritten_function, keep_local_globals, global_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 6U, rewritten)
@@ -6597,14 +6616,10 @@ fn apply_duplicate_import_elimination_raise(
       }
       7U => {
         let rewritten_function = rewrite_export_section_payload_for_dce_raise(
-          payload,
-          function_index_map,
+          payload, function_index_map,
         )
         let (rewritten, _) = rewrite_export_section_payload_for_module_index_maps_raise(
-          rewritten_function,
-          table_index_map,
-          memory_index_map,
-          global_index_map,
+          rewritten_function, table_index_map, memory_index_map, global_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 7U, rewritten)
@@ -6614,17 +6629,16 @@ fn apply_duplicate_import_elimination_raise(
         append_encoded_section(
           out,
           8U,
-          rewrite_start_section_payload_for_dce_raise(payload, function_index_map),
+          rewrite_start_section_payload_for_dce_raise(
+            payload, function_index_map,
+          ),
         )
       9U => {
         let rewritten_function = rewrite_element_section_payload_for_index_map_raise(
-          payload,
-          function_index_map,
+          payload, function_index_map,
         )
         let (rewritten, _, _) = rewrite_element_section_payload_for_table_index_map_raise(
-          rewritten_function,
-          table_index_map,
-          global_index_map,
+          rewritten_function, table_index_map, global_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 9U, rewritten)
@@ -6632,17 +6646,11 @@ fn apply_duplicate_import_elimination_raise(
       }
       10U => {
         let rewritten_function = rewrite_code_section_payload_for_dce_raise(
-          payload,
-          keep_local_functions,
-          function_index_map,
+          payload, keep_local_functions, function_index_map,
         )
         let rewritten = rewrite_code_section_payload_for_module_index_map_raise(
-          rewritten_function,
-          table_index_map,
-          memory_index_map,
-          global_index_map,
-          element_index_map,
-          data_index_map,
+          rewritten_function, table_index_map, memory_index_map, global_index_map,
+          element_index_map, data_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 10U, rewritten)
@@ -6650,9 +6658,7 @@ fn apply_duplicate_import_elimination_raise(
       }
       11U => {
         let (rewritten, _, _) = rewrite_data_section_payload_for_memory_global_index_map_raise(
-          payload,
-          memory_index_map,
-          global_index_map,
+          payload, memory_index_map, global_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 11U, rewritten)
@@ -7074,9 +7080,7 @@ fn rewrite_code_section_payload_for_simplify_globals_raise(
     let instr_bytes = body[prefix_end:body.length()].to_bytes()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let (rewritten_instr, rewritten_count) = rewrite_instruction_global_get_to_i32_const_raise(
-      instr_bytes,
-      spans,
-      global_i32_const_map,
+      instr_bytes, spans, global_i32_const_map,
     )
     rewritten_global_get_count += rewritten_count
     if rewritten_count > 0U {
@@ -7136,7 +7140,8 @@ fn apply_simplify_globals_raise(
     if entry.val_type.length() == 1 &&
       entry.val_type[0].to_uint() == 0x7fU &&
       entry.mutability.to_uint() == 0U {
-      match decode_const_expr_i32_const_nonnegative_offset_raise(entry.init_expr) {
+      match
+        decode_const_expr_i32_const_nonnegative_offset_raise(entry.init_expr) {
         Some(value) => {
           global_i32_const_map.set(
             imported_global_count + i.reinterpret_as_uint(),
@@ -7152,8 +7157,7 @@ fn apply_simplify_globals_raise(
     return { bytes, rewritten_global_get_count: 0U }
   }
   let (rewritten_code_payload, rewritten_global_get_count) = rewrite_code_section_payload_for_simplify_globals_raise(
-    code_payload,
-    global_i32_const_map,
+    code_payload, global_i32_const_map,
   )
   if rewritten_global_get_count == 0U {
     return { bytes, rewritten_global_get_count: 0U }
@@ -7238,10 +7242,8 @@ fn apply_reorder_globals_raise(
     usage_counts.push(0U)
   }
   match code_payload {
-    Some(payload) => collect_global_usage_counts_from_code_section_raise(
-      payload,
-      usage_counts,
-    )
+    Some(payload) =>
+      collect_global_usage_counts_from_code_section_raise(payload, usage_counts)
     None => ()
   }
   match export_payload {
@@ -7253,7 +7255,8 @@ fn apply_reorder_globals_raise(
   }
   match element_payload {
     Some(payload) =>
-      for index in collect_used_global_indices_from_element_section_raise(payload) {
+      for
+        index in collect_used_global_indices_from_element_section_raise(payload) {
         increment_index_count_in_array(usage_counts, index)
       }
     None => ()
@@ -7309,11 +7312,13 @@ fn apply_reorder_globals_raise(
     )
   }
   let local_table_count = match table_payload {
-    Some(payload) => parse_table_section_entries_raise(payload).length().reinterpret_as_uint()
+    Some(payload) =>
+      parse_table_section_entries_raise(payload).length().reinterpret_as_uint()
     None => 0U
   }
   let local_memory_count = match memory_payload {
-    Some(payload) => parse_memory_section_entries_raise(payload).length().reinterpret_as_uint()
+    Some(payload) =>
+      parse_memory_section_entries_raise(payload).length().reinterpret_as_uint()
     None => 0U
   }
   let table_index_map = make_identity_index_map(
@@ -7336,9 +7341,7 @@ fn apply_reorder_globals_raise(
     match section.section_id {
       6U => {
         let rewritten = rewrite_global_section_payload_for_local_order_and_global_index_map_raise(
-          payload,
-          local_order,
-          global_index_map,
+          payload, local_order, global_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 6U, rewritten)
@@ -7346,10 +7349,7 @@ fn apply_reorder_globals_raise(
       }
       7U => {
         let (rewritten, _) = rewrite_export_section_payload_for_module_index_maps_raise(
-          payload,
-          table_index_map,
-          memory_index_map,
-          global_index_map,
+          payload, table_index_map, memory_index_map, global_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 7U, rewritten)
@@ -7357,9 +7357,7 @@ fn apply_reorder_globals_raise(
       }
       9U => {
         let (rewritten, _, _) = rewrite_element_section_payload_for_table_index_map_raise(
-          payload,
-          table_index_map,
-          global_index_map,
+          payload, table_index_map, global_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 9U, rewritten)
@@ -7370,19 +7368,13 @@ fn apply_reorder_globals_raise(
           out,
           10U,
           rewrite_code_section_payload_for_module_index_map_raise(
-            payload,
-            table_index_map,
-            memory_index_map,
-            global_index_map,
-            element_index_map,
+            payload, table_index_map, memory_index_map, global_index_map, element_index_map,
             data_index_map,
           ),
         )
       11U => {
         let (rewritten, _, _) = rewrite_data_section_payload_for_memory_global_index_map_raise(
-          payload,
-          memory_index_map,
-          global_index_map,
+          payload, memory_index_map, global_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 11U, rewritten)
@@ -7544,7 +7536,8 @@ fn apply_memory_packing_raise(
     return { bytes, reordered_local_count: 0U }
   }
   let local_table_count = match table_payload {
-    Some(payload) => parse_table_section_entries_raise(payload).length().reinterpret_as_uint()
+    Some(payload) =>
+      parse_table_section_entries_raise(payload).length().reinterpret_as_uint()
     None => 0U
   }
   let local_global_count = match global_payload {
@@ -7571,8 +7564,7 @@ fn apply_memory_packing_raise(
     match section.section_id {
       5U => {
         let rewritten = rewrite_memory_section_payload_for_local_order_raise(
-          payload,
-          local_order,
+          payload, local_order,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 5U, rewritten)
@@ -7580,10 +7572,7 @@ fn apply_memory_packing_raise(
       }
       7U => {
         let (rewritten, _) = rewrite_export_section_payload_for_module_index_maps_raise(
-          payload,
-          table_index_map,
-          memory_index_map,
-          global_index_map,
+          payload, table_index_map, memory_index_map, global_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 7U, rewritten)
@@ -7594,19 +7583,13 @@ fn apply_memory_packing_raise(
           out,
           10U,
           rewrite_code_section_payload_for_module_index_map_raise(
-            payload,
-            table_index_map,
-            memory_index_map,
-            global_index_map,
-            element_index_map,
+            payload, table_index_map, memory_index_map, global_index_map, element_index_map,
             data_index_map,
           ),
         )
       11U => {
         let (rewritten, _, _) = rewrite_data_section_payload_for_memory_global_index_map_raise(
-          payload,
-          memory_index_map,
-          global_index_map,
+          payload, memory_index_map, global_index_map,
         )
         if parse_vec_count(rewritten) > 0U {
           append_encoded_section(out, 11U, rewritten)
@@ -7899,6 +7882,15 @@ fn optimize_for_size_round_raise(
         "directize:calls:" + directize.rewritten_call_count.to_string(),
       )
     }
+    let cfp_const = apply_const_call_forwarding_propagation_raise(
+      optimized_bytes,
+    )
+    optimized_bytes = cfp_const.bytes
+    if cfp_const.rewritten_call_count > 0U {
+      removed_sections.push(
+        "cfp-const:calls:" + cfp_const.rewritten_call_count.to_string(),
+      )
+    }
     let cfp = apply_call_forwarding_propagation_raise(optimized_bytes)
     optimized_bytes = cfp.bytes
     if cfp.rewritten_call_count > 0U {
@@ -7978,9 +7970,7 @@ fn optimize_for_size_round_raise(
     }
   }
   if config.enable_remove_unused_module_elements {
-    let rume = apply_remove_unused_module_elements_raise(
-      optimized_bytes, config,
-    )
+    let rume = apply_remove_unused_module_elements(optimized_bytes, config)
     optimized_bytes = rume.bytes
     if rume.removed_import_count > 0U ||
       rume.removed_table_count > 0U ||
@@ -8032,8 +8022,7 @@ fn optimize_for_size_round_raise(
     optimized_bytes = memory_pack.bytes
     if memory_pack.reordered_local_count > 0U {
       removed_sections.push(
-        "memory-packing:locals:" +
-        memory_pack.reordered_local_count.to_string(),
+        "memory-packing:locals:" + memory_pack.reordered_local_count.to_string(),
       )
     }
   }
@@ -9410,6 +9399,12 @@ priv struct CfpApplyResult {
 }
 
 ///|
+priv struct CfpConstApplyResult {
+  bytes : Bytes
+  rewritten_call_count : UInt
+}
+
+///|
 priv struct SignatureRefineApplyResult {
   bytes : Bytes
   rewritten_call_count : UInt
@@ -9478,12 +9473,6 @@ fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
   true
 }
 
-///|
-fn parse_forward_call_target(body_bytes : Bytes) -> UInt? {
-  parse_forward_call_target_with_param_count(body_bytes, 0U)
-}
-
-///|
 fn parse_forward_call_target_with_param_count(
   body_bytes : Bytes,
   param_count : UInt,
@@ -9588,6 +9577,75 @@ fn parse_forward_call_target_with_prefix_param_count(
 }
 
 ///|
+fn parse_forward_call_target_with_appended_i32_consts(
+  body_bytes : Bytes,
+  wrapper_param_count : UInt,
+) -> (UInt, Array[Bytes])? {
+  let prefix_result = try? parse_local_decl_prefix_raise(body_bytes)
+  let prefix = match prefix_result {
+    Ok(v) => v
+    Err(_) => return None
+  }
+  if prefix.local_types.length() > 0 {
+    return None
+  }
+  let prefix_end = prefix.prefix_end
+  let prefix_end_result = try? parse_local_decl_prefix_end(body_bytes)
+  match prefix_end_result {
+    Ok(v) => if v != prefix_end { return None }
+    Err(_) => return None
+  }
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return None
+  }
+  if spans.length() < 3 {
+    return None
+  }
+  let wrapper_param_count_i = UInt::reinterpret_as_int(wrapper_param_count)
+  if wrapper_param_count_i < 0 {
+    return None
+  }
+  let call_pos = spans.length() - 2
+  if call_pos <= wrapper_param_count_i {
+    return None
+  }
+  if spans[call_pos].opcode != 0x10U || spans[call_pos + 1].opcode != 0x0bU {
+    return None
+  }
+  for i in 0..<wrapper_param_count_i {
+    if spans[i].opcode != 0x20U {
+      return None
+    }
+    match decode_span_u32_immediate(instr_bytes, spans[i]) {
+      Some(local_index) =>
+        if local_index != i.reinterpret_as_uint() {
+          return None
+        }
+      None => return None
+    }
+  }
+  let appended_i32_const_instrs : Array[Bytes] = []
+  for i in wrapper_param_count_i..<call_pos {
+    let span = spans[i]
+    if span.opcode != 0x41U {
+      return None
+    }
+    appended_i32_const_instrs.push(
+      instr_bytes[span.start:span.end_].to_bytes(),
+    )
+  }
+  if appended_i32_const_instrs.length() == 0 {
+    return None
+  }
+  match decode_span_u32_immediate(instr_bytes, spans[call_pos]) {
+    Some(target) => Some((target, appended_i32_const_instrs))
+    None => None
+  }
+}
+
+///|
 fn function_type_results_equal(
   a : FunctionTypeEntry,
   b : FunctionTypeEntry,
@@ -9597,6 +9655,38 @@ fn function_type_results_equal(
   }
   for i in 0..<a.results.length() {
     if not(bytes_equal(a.results[i], b.results[i])) {
+      return false
+    }
+  }
+  true
+}
+
+///|
+fn is_i32_value_type(value_type : Bytes) -> Bool {
+  value_type.length() == 1 && value_type[0] == 0x7fU.to_byte()
+}
+
+///|
+fn can_const_forward_with_appended_i32_to_target(
+  wrapper_type : FunctionTypeEntry,
+  target_type : FunctionTypeEntry,
+  appended_i32_const_count : UInt,
+) -> Bool {
+  let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
+  let target_param_count = target_type.params.length().reinterpret_as_uint()
+  if target_param_count != wrapper_param_count + appended_i32_const_count {
+    return false
+  }
+  if not(function_type_results_equal(wrapper_type, target_type)) {
+    return false
+  }
+  for i in 0..<wrapper_type.params.length() {
+    if not(bytes_equal(wrapper_type.params[i], target_type.params[i])) {
+      return false
+    }
+  }
+  for i in wrapper_type.params.length()..<target_type.params.length() {
+    if not(is_i32_value_type(target_type.params[i])) {
       return false
     }
   }
@@ -9662,6 +9752,105 @@ fn can_signature_refine_forward_to_target(
     }
   }
   Some(wrapper_param_count - target_param_count)
+}
+
+///|
+priv struct CfpConstAlias {
+  target : UInt
+  appended_i32_const_instrs : Array[Bytes]
+}
+
+///|
+fn collect_const_call_forwarding_alias_map(
+  code_bodies : Array[Bytes],
+  imported_function_count : UInt,
+  function_type_by_index : Array[UInt],
+  function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+) -> Map[UInt, CfpConstAlias] {
+  let alias_candidate : Map[UInt, CfpConstAlias] = {}
+  for i in 0..<code_bodies.length() {
+    let old_index = imported_function_count + i.reinterpret_as_uint()
+    let old_pos = UInt::reinterpret_as_int(old_index)
+    if old_pos < 0 || old_pos >= function_type_by_index.length() {
+      continue
+    }
+    let wrapper_type_index = function_type_by_index[old_pos]
+    let wrapper_type = match
+      function_type_entry_by_type_index.get(wrapper_type_index) {
+      Some(v) => v
+      None => continue
+    }
+    let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
+    match
+      parse_forward_call_target_with_appended_i32_consts(
+        code_bodies[i],
+        wrapper_param_count,
+      ) {
+      Some((target, appended_i32_const_instrs)) =>
+        if target != old_index {
+          let target_pos = UInt::reinterpret_as_int(target)
+          if target_pos >= 0 && target_pos < function_type_by_index.length() {
+            let target_type_index = function_type_by_index[target_pos]
+            match function_type_entry_by_type_index.get(target_type_index) {
+              Some(target_type) =>
+                if can_const_forward_with_appended_i32_to_target(
+                    wrapper_type,
+                    target_type,
+                    appended_i32_const_instrs.length().reinterpret_as_uint(),
+                  ) {
+                  alias_candidate.set(old_index, {
+                    target,
+                    appended_i32_const_instrs,
+                  })
+                }
+              None => ()
+            }
+          }
+        }
+      None => ()
+    }
+  }
+  let resolved_alias : Map[UInt, CfpConstAlias] = {}
+  for i in 0..<code_bodies.length() {
+    let old_index = imported_function_count + i.reinterpret_as_uint()
+    match alias_candidate.get(old_index) {
+      Some(initial_alias) => {
+        let seen : Map[UInt, Bool] = {}
+        let mut current_target = initial_alias.target
+        let appended_i32_const_instrs = initial_alias.appended_i32_const_instrs
+          .copy()
+        let mut valid = true
+        while true {
+          if current_target == old_index {
+            valid = false
+            break
+          }
+          if seen.get(current_target) is Some(_) {
+            valid = false
+            break
+          }
+          seen.set(current_target, true)
+          match alias_candidate.get(current_target) {
+            Some(next_alias) => {
+              appended_i32_const_instrs.append(
+                next_alias.appended_i32_const_instrs[:],
+              )
+              current_target = next_alias.target
+            }
+            None => break
+          }
+        }
+        if valid {
+          resolved_alias.set(old_index, {
+            target: current_target,
+            appended_i32_const_instrs,
+          })
+        }
+      }
+      None => ()
+    }
+  }
+  resolved_alias
 }
 
 ///|
@@ -9764,6 +9953,173 @@ fn rewrite_instruction_calls_for_call_forwarding_raise(
     }
   }
   (Bytes::from_array(out[:]), rewritten_call_count)
+}
+
+///|
+fn rewrite_instruction_calls_for_const_call_forwarding_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  alias_map : Map[UInt, CfpConstAlias],
+) -> (Bytes, UInt) raise WalyzeError {
+  let out : Array[Byte] = []
+  let mut rewritten_call_count = 0U
+  for span in spans {
+    if span.opcode == 0x10U {
+      if span.end_ <= span.start + 1 {
+        raise WalyzeError::InvalidFormat("invalid call immediate in cfp-const")
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let target = match decode_u32_leb128_bytes(imm) {
+        Some(v) => v
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode call immediate in cfp-const",
+          )
+      }
+      match alias_map.get(target) {
+        Some(alias_info) => {
+          for const_instr in alias_info.appended_i32_const_instrs {
+            out.append(const_instr[:].to_array())
+          }
+          out.push(0x10U.to_byte())
+          out.append(encode_u32_leb128(alias_info.target)[:])
+          rewritten_call_count += 1U
+        }
+        None => out.append(instr_bytes[span.start:span.end_].to_array())
+      }
+    } else {
+      out.append(instr_bytes[span.start:span.end_].to_array())
+    }
+  }
+  (Bytes::from_array(out[:]), rewritten_call_count)
+}
+
+///|
+fn rewrite_code_section_payload_for_const_call_forwarding_raise(
+  payload : Bytes,
+  alias_map : Map[UInt, CfpConstAlias],
+) -> (Bytes, UInt) raise WalyzeError {
+  let bodies = parse_code_bodies(payload)
+  let rewritten_bodies : Array[Bytes] = []
+  let mut rewritten_call_count = 0U
+  for body in bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    let (rewritten_instr, rewritten_count) = rewrite_instruction_calls_for_const_call_forwarding_raise(
+      instr_bytes,
+      spans,
+      alias_map,
+    )
+    rewritten_call_count += rewritten_count
+    if rewritten_count > 0U {
+      let rewritten_body : Array[Byte] = body[0:prefix_end].to_array()
+      rewritten_body.append(rewritten_instr[:].to_array())
+      rewritten_bodies.push(Bytes::from_array(rewritten_body[:]))
+    } else {
+      rewritten_bodies.push(body)
+    }
+  }
+  (
+    encode_code_section_payload_from_bodies(rewritten_bodies),
+    rewritten_call_count,
+  )
+}
+
+///|
+fn apply_const_call_forwarding_propagation_raise(
+  bytes : Bytes,
+) -> CfpConstApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut type_payload : Bytes? = None
+  let mut import_payload : Bytes? = None
+  let mut function_payload : Bytes? = None
+  let mut code_payload : Bytes? = None
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      1U => type_payload = Some(payload)
+      2U => import_payload = Some(payload)
+      3U => function_payload = Some(payload)
+      10U => code_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let type_payload = match type_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let function_payload = match function_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let code_payload = match code_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let local_function_type_indices = parse_function_type_indices(
+    function_payload,
+  )
+  let code_bodies = parse_code_bodies(code_payload)
+  if local_function_type_indices.length() != code_bodies.length() {
+    raise WalyzeError::InvalidFormat(
+      "function/code section count mismatch for cfp-const: function=" +
+      local_function_type_indices.length().to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let imported_function_type_indices = match import_payload {
+    Some(payload) => parse_import_function_type_indices(payload)
+    None => []
+  }
+  let function_type_by_index = imported_function_type_indices.copy()
+  function_type_by_index.append(local_function_type_indices[:])
+  let parsed_type_entries = parse_type_section_entries_with_refs_raise(
+    type_payload, "cfp-const",
+  )
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  for i in 0..<parsed_type_entries.length() {
+    if parsed_type_entries[i].form == 0x60U {
+      function_type_entry_by_type_index.set(
+        i.reinterpret_as_uint(),
+        parse_function_type_entry_from_raw_raise(
+          parsed_type_entries[i].raw,
+          "cfp-const",
+        ),
+      )
+    }
+  }
+  let imported_function_count = imported_function_type_indices
+    .length()
+    .reinterpret_as_uint()
+  let alias_map = collect_const_call_forwarding_alias_map(
+    code_bodies,
+    imported_function_count,
+    function_type_by_index,
+    function_type_entry_by_type_index,
+  )
+  let mut has_alias = false
+  alias_map.each((_, _target) => has_alias = true)
+  if not(has_alias) {
+    return { bytes, rewritten_call_count: 0U }
+  }
+  let (rewritten_code_payload, rewritten_call_count) = rewrite_code_section_payload_for_const_call_forwarding_raise(
+    code_payload,
+    alias_map,
+  )
+  if rewritten_call_count == 0U {
+    return { bytes, rewritten_call_count: 0U }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    if section.section_id == 10U {
+      append_encoded_section(out, 10U, rewritten_code_payload)
+    } else {
+      out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), rewritten_call_count }
 }
 
 ///|
@@ -10172,6 +10528,28 @@ fn apply_signature_refining_raise(
     }
   }
   { bytes: Bytes::from_array(out[:]), rewritten_call_count }
+}
+
+///|
+fn apply_remove_unused_module_elements(
+  bytes : Bytes,
+  config : OptimizeConfig,
+) -> RumeApplyResult {
+  let result = try? apply_remove_unused_module_elements_raise(bytes, config)
+  match result {
+    Ok(v) => v
+    Err(_) =>
+      {
+        bytes,
+        removed_import_count: 0U,
+        removed_table_count: 0U,
+        removed_memory_count: 0U,
+        removed_global_count: 0U,
+        removed_element_count: 0U,
+        removed_data_count: 0U,
+        removed_export_count: 0U,
+      }
+  }
 }
 
 ///|
@@ -11466,12 +11844,14 @@ fn apply_merge_similar_functions_raise(
   bytes : Bytes,
 ) -> MsfApplyResult raise WalyzeError {
   let sections = parse_core_sections_raise(bytes)
+  let mut type_payload : Bytes? = None
   let mut imported_function_type_indices : Array[UInt] = []
   let mut local_function_type_indices : Array[UInt] = []
   let mut code_bodies : Array[Bytes] = []
   for section in sections {
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
     match section.section_id {
+      1U => type_payload = Some(payload)
       2U =>
         imported_function_type_indices = parse_import_function_type_indices(
           payload,
@@ -11492,35 +11872,66 @@ fn apply_merge_similar_functions_raise(
   let imported_function_count = imported_function_type_indices
     .length()
     .reinterpret_as_uint()
-  let function_type_index_map : Map[UInt, UInt] = {}
-  for i in 0..<imported_function_type_indices.length() {
-    function_type_index_map.set(
-      i.reinterpret_as_uint(),
-      imported_function_type_indices[i],
+  let function_type_by_index = imported_function_type_indices.copy()
+  function_type_by_index.append(local_function_type_indices[:])
+  let function_param_count_by_index : Array[UInt] = []
+  if function_type_by_index.length() > 0 {
+    let type_payload = match type_payload {
+      Some(v) => v
+      None =>
+        raise WalyzeError::InvalidFormat("type section is missing for msf")
+    }
+    let parsed_type_entries = parse_type_section_entries_with_refs_raise(
+      type_payload, "msf",
     )
-  }
-  for i in 0..<local_function_type_indices.length() {
-    function_type_index_map.set(
-      imported_function_count + i.reinterpret_as_uint(),
-      local_function_type_indices[i],
-    )
+    let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
+    for type_index in function_type_by_index {
+      if type_index >= type_count_u {
+        raise WalyzeError::InvalidFormat(
+          "type index out of range in msf: " + type_index.to_string(),
+        )
+      }
+      let type_pos = UInt::reinterpret_as_int(type_index)
+      if type_pos < 0 || type_pos >= parsed_type_entries.length() {
+        raise WalyzeError::InvalidFormat(
+          "type index position out of range in msf: " + type_index.to_string(),
+        )
+      }
+      if parsed_type_entries[type_pos].form != 0x60U {
+        raise WalyzeError::InvalidFormat(
+          "non-function type index used by function in msf: " +
+          type_index.to_string(),
+        )
+      }
+      function_param_count_by_index.push(
+        parse_function_type_param_count_from_raw_raise(
+          parsed_type_entries[type_pos].raw,
+          "msf",
+        ),
+      )
+    }
   }
   let alias_candidate : Map[UInt, UInt] = {}
   for i in 0..<code_bodies.length() {
     let old_index = imported_function_count + i.reinterpret_as_uint()
-    match parse_forward_call_target(code_bodies[i]) {
+    let old_pos = UInt::reinterpret_as_int(old_index)
+    if old_pos < 0 ||
+      old_pos >= function_type_by_index.length() ||
+      old_pos >= function_param_count_by_index.length() {
+      continue
+    }
+    let param_count = function_param_count_by_index[old_pos]
+    match parse_forward_call_target_with_param_count(
+      code_bodies[i], param_count,
+    ) {
       Some(target) =>
         if target != old_index {
-          match
-            (
-              function_type_index_map.get(old_index),
-              function_type_index_map.get(target),
-            ) {
-            (Some(lhs), Some(rhs)) =>
-              if lhs == rhs {
-                alias_candidate.set(old_index, target)
-              }
-            _ => ()
+          let target_pos = UInt::reinterpret_as_int(target)
+          if target_pos >= 0 &&
+            target_pos < function_type_by_index.length() &&
+            function_type_by_index[old_pos] ==
+            function_type_by_index[target_pos] {
+            alias_candidate.set(old_index, target)
           }
         }
       None => ()
@@ -11693,17 +12104,11 @@ fn merge_root_names(
 }
 
 ///|
-fn with_additional_closed_world_roots(
+fn clone_optimize_config(
   config : OptimizeConfig,
-  extra_roots : Array[String],
+  pass_rounds? : UInt = config.pass_rounds,
+  closed_world_root_exports? : Array[String] = config.closed_world_root_exports,
 ) -> OptimizeConfig {
-  if extra_roots.length() == 0 {
-    return config
-  }
-  let closed_world_root_exports = merge_root_names(
-    config.closed_world_root_exports,
-    extra_roots,
-  )
   make_optimize_config(
     strip_all_custom=config.strip_all_custom,
     strip_name_section=config.strip_name_section,
@@ -11712,7 +12117,7 @@ fn with_additional_closed_world_roots(
     strip_dwarf_sections=config.strip_dwarf_sections,
     strip_target_features_section=config.strip_target_features_section,
     keep_custom_sections=config.keep_custom_sections,
-    pass_rounds=config.pass_rounds,
+    pass_rounds~,
     enable_peephole=config.enable_peephole,
     peephole_remove_nop=config.peephole_remove_nop,
     peephole_remove_const_drop=config.peephole_remove_const_drop,
@@ -11727,6 +12132,30 @@ fn with_additional_closed_world_roots(
     closed_world_root_exports~,
     safe_mode=config.safe_mode,
   )
+}
+
+///|
+pub fn make_component_optimize_config(
+  base? : OptimizeConfig = OptimizeConfig::default(),
+  root_name_candidates? : Array[String] = [],
+  exclude? : Array[String] = [],
+) -> OptimizeConfig {
+  let merged_roots = merge_root_names(
+    merge_root_names(base.closed_world_root_exports, root_name_candidates),
+    exclude,
+  )
+  clone_optimize_config(base, closed_world_root_exports=merged_roots)
+}
+
+///|
+fn with_additional_closed_world_roots(
+  config : OptimizeConfig,
+  extra_roots : Array[String],
+) -> OptimizeConfig {
+  if extra_roots.length() == 0 {
+    return config
+  }
+  make_component_optimize_config(base=config, exclude=extra_roots)
 }
 
 ///|
@@ -11848,65 +12277,24 @@ pub fn analyze_component_call_graphs(
 }
 
 ///|
-pub fn analyze_component_core_optimize(
-  bytes : Bytes,
-  config? : OptimizeConfig = OptimizeConfig::default(),
-  exclude? : Array[String] = [],
-) -> Result[ComponentCoreOptimizeReport, String] {
-  let detail = match @mwac_component.parse_component_detail(bytes) {
-    Ok(v) => v
-    Err(e) => return Err("component detail parse failed: " + e.to_string())
-  }
-  let effective_config = with_additional_closed_world_roots(config, exclude)
-  let entries : Array[ComponentCoreOptimizeEntry] = []
-  let mut total_core_before_bytes = 0U
-  let mut total_core_after_bytes = 0U
-  for i in 0..<detail.core_modules.length() {
-    let core_bytes = detail.core_modules[i]
-    let before_bytes = core_bytes.length().reinterpret_as_uint()
-    let optimized = match
-      optimize_for_size(core_bytes, config=effective_config) {
-      Ok(v) => v
-      Err(e) =>
-        return Err(
-          "core module optimize failed at index " +
-          i.to_string() +
-          ": " +
-          walyze_error_to_string(e),
-        )
-    }
-    total_core_before_bytes += before_bytes
-    total_core_after_bytes += optimized.after_size
-    entries.push({
-      module_index: i.reinterpret_as_uint(),
-      before_bytes,
-      after_bytes: optimized.after_size,
-      removed_sections: optimized.removed_sections,
-      no_change_reasons: optimized.no_change_reasons,
-    })
-  }
-  Ok({
-    total_component_bytes: bytes.length().reinterpret_as_uint(),
-    core_module_count: detail.core_modules.length().reinterpret_as_uint(),
-    total_core_before_bytes,
-    total_core_after_bytes,
-    entries,
-  })
+priv struct ComponentOptimizeRoundResult {
+  bytes : Bytes
+  core_module_count : UInt
+  removed_sections : Array[String]
+  no_change_reasons : Array[String]
 }
 
 ///|
-pub fn optimize_component_for_size(
+fn optimize_component_for_size_round(
   bytes : Bytes,
-  config? : OptimizeConfig = OptimizeConfig::default(),
-  exclude? : Array[String] = [],
-) -> Result[OptimizeResult, String] {
+  config : OptimizeConfig,
+) -> Result[ComponentOptimizeRoundResult, String] {
   let sections_result = try? parse_component_sections_raise(bytes)
   let sections = match sections_result {
     Ok(v) => v
     Err(e) =>
       return Err("component section parse failed: " + walyze_error_to_string(e))
   }
-  let effective_config = with_additional_closed_world_roots(config, exclude)
   let out : Array[Byte] = bytes[0:8].to_array()
   let removed_sections : Array[String] = []
   let no_change_reasons : Array[String] = []
@@ -11914,8 +12302,7 @@ pub fn optimize_component_for_size(
   for section in sections {
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
     if section.section_id == 1U && is_core_module_payload(payload) {
-      let optimized = match
-        optimize_for_size(payload, config=effective_config) {
+      let optimized = match optimize_for_size(payload, config~) {
         Ok(v) => v
         Err(e) =>
           return Err(
@@ -11942,20 +12329,185 @@ pub fn optimize_component_for_size(
     }
   }
   if core_module_index == 0 {
-    no_change_reasons.push("component has no embedded core module sections")
-  }
-  let optimized_bytes = Bytes::from_array(out[:])
-  if optimized_bytes.length() == bytes.length() &&
-    no_change_reasons.length() == 0 {
-    no_change_reasons.push("component optimization produced no size change")
+    push_reason(
+      no_change_reasons, "component has no embedded core module sections",
+    )
   }
   Ok({
-    bytes: optimized_bytes,
-    before_size: bytes.length().reinterpret_as_uint(),
-    after_size: optimized_bytes.length().reinterpret_as_uint(),
+    bytes: Bytes::from_array(out[:]),
+    core_module_count: core_module_index.reinterpret_as_uint(),
     removed_sections,
     no_change_reasons,
   })
+}
+
+///|
+fn filter_prefixed_items(
+  items : Array[String],
+  prefix : String,
+) -> Array[String] {
+  let out : Array[String] = []
+  for item in items {
+    match item.strip_prefix(prefix) {
+      Some(rest) => out.push(rest.to_string())
+      None => ()
+    }
+  }
+  out
+}
+
+///|
+fn sum_core_module_bytes(core_modules : Array[Bytes]) -> UInt {
+  let mut total = 0U
+  for core_bytes in core_modules {
+    total += core_bytes.length().reinterpret_as_uint()
+  }
+  total
+}
+
+///|
+pub fn analyze_component_core_optimize(
+  bytes : Bytes,
+  config? : OptimizeConfig = OptimizeConfig::default(),
+  exclude? : Array[String] = [],
+) -> Result[ComponentCoreOptimizeReport, String] {
+  let before_detail = match @mwac_component.parse_component_detail(bytes) {
+    Ok(v) => v
+    Err(e) => return Err("component detail parse failed: " + e.to_string())
+  }
+  let optimized_component = match
+    optimize_component_for_size(bytes, config~, exclude~) {
+    Ok(v) => v
+    Err(e) => return Err("component optimize failed: " + e)
+  }
+  let after_detail = match
+    @mwac_component.parse_component_detail(optimized_component.bytes) {
+    Ok(v) => v
+    Err(e) =>
+      return Err("optimized component detail parse failed: " + e.to_string())
+  }
+  if before_detail.core_modules.length() != after_detail.core_modules.length() {
+    return Err(
+      "core module count mismatch after optimize: before=" +
+      before_detail.core_modules.length().to_string() +
+      " after=" +
+      after_detail.core_modules.length().to_string(),
+    )
+  }
+  let entries : Array[ComponentCoreOptimizeEntry] = []
+  for i in 0..<before_detail.core_modules.length() {
+    let before_bytes = before_detail.core_modules[i]
+      .length()
+      .reinterpret_as_uint()
+    let after_bytes = after_detail.core_modules[i]
+      .length()
+      .reinterpret_as_uint()
+    let prefix = "core#" + i.to_string() + ":"
+    entries.push({
+      module_index: i.reinterpret_as_uint(),
+      before_bytes,
+      after_bytes,
+      removed_sections: filter_prefixed_items(
+        optimized_component.removed_sections,
+        prefix,
+      ),
+      no_change_reasons: filter_prefixed_items(
+        optimized_component.no_change_reasons,
+        prefix,
+      ),
+    })
+  }
+  Ok({
+    total_component_bytes: bytes.length().reinterpret_as_uint(),
+    core_module_count: before_detail.core_modules.length().reinterpret_as_uint(),
+    total_core_before_bytes: sum_core_module_bytes(before_detail.core_modules),
+    total_core_after_bytes: sum_core_module_bytes(after_detail.core_modules),
+    entries,
+  })
+}
+
+///|
+pub fn optimize_component_for_size(
+  bytes : Bytes,
+  config? : OptimizeConfig = OptimizeConfig::default(),
+  exclude? : Array[String] = [],
+) -> Result[OptimizeResult, String] {
+  let effective_config = with_additional_closed_world_roots(config, exclude)
+  let rounds = if effective_config.pass_rounds == 0U {
+    1U
+  } else {
+    effective_config.pass_rounds
+  }
+  let per_round_config = clone_optimize_config(effective_config, pass_rounds=1U)
+  let mut current = bytes
+  let removed_sections : Array[String] = []
+  let no_change_reasons : Array[String] = []
+  let mut converged = false
+  for i in 0U..<rounds {
+    let round_result = match
+      optimize_component_for_size_round(current, per_round_config) {
+      Ok(v) => v
+      Err(e) => return Err(e)
+    }
+    let before_size = current.length().reinterpret_as_uint()
+    let after_size = round_result.bytes.length().reinterpret_as_uint()
+    let changed = not(bytes_equal(round_result.bytes, current))
+    if after_size < before_size || (after_size == before_size && changed) {
+      current = round_result.bytes
+      removed_sections.append(round_result.removed_sections[:])
+      continue
+    }
+    converged = true
+    removed_sections.push(
+      "component-converge:no-improve:" + (i + 1U).to_string(),
+    )
+    for reason in round_result.no_change_reasons {
+      push_reason(no_change_reasons, reason)
+    }
+    if round_result.core_module_count == 0U {
+      push_reason(
+        no_change_reasons, "component has no embedded core module sections",
+      )
+    }
+    break
+  }
+  if not(converged) {
+    removed_sections.push("component-converge:round-cap:" + rounds.to_string())
+  }
+  if current.length() == bytes.length() && no_change_reasons.length() == 0 {
+    no_change_reasons.push("component optimization produced no size change")
+  }
+  Ok({
+    bytes: current,
+    before_size: bytes.length().reinterpret_as_uint(),
+    after_size: current.length().reinterpret_as_uint(),
+    removed_sections,
+    no_change_reasons,
+  })
+}
+
+///|
+pub fn optimize_binary_for_size(
+  bytes : Bytes,
+  config? : OptimizeConfig = OptimizeConfig::default(),
+  exclude? : Array[String] = [],
+) -> Result[OptimizeResult, String] {
+  if bytes.length() >= 8 &&
+    bytes[0] == 0x00U.to_byte() &&
+    bytes[1] == 0x61U.to_byte() &&
+    bytes[2] == 0x73U.to_byte() &&
+    bytes[3] == 0x6dU.to_byte() &&
+    bytes[4] == 0x0dU.to_byte() &&
+    bytes[5] == 0x00U.to_byte() &&
+    bytes[6] == 0x01U.to_byte() &&
+    bytes[7] == 0x00U.to_byte() {
+    optimize_component_for_size(bytes, config~, exclude~)
+  } else {
+    match optimize_for_size(bytes, config~) {
+      Ok(v) => Ok(v)
+      Err(e) => Err(walyze_error_to_string(e))
+    }
+  }
 }
 
 ///|

@@ -479,6 +479,13 @@ fn component_gc_optimize_config(roots : Array[String]) -> OptimizeConfig {
 }
 
 ///|
+fn sample_component_with_single_core_module(core_bytes : Bytes) -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x0d, 0x00, 0x01, 0x00])
+  append_section(out, 1U, core_bytes.to_array())
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1643,6 +1650,41 @@ fn sample_module_with_param_forwarding_thunk_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_const_forwarding_thunk_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 (func (param i32 i32) (result i32))
+  //   #1 (func (param i32 i32 i32) (result i32))
+  append_section(
+    out,
+    1U,
+    bytes_of([
+      0x02, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f,
+      0x01, 0x7f,
+    ]),
+  )
+  // function section: 3 local functions (indices 0..2) with type idx [0,0,1]
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x01]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0; local.get 1; call 1; end
+  // #1: local.get 0; local.get 1; i32.const 5; call 2; end (const-forward thunk)
+  // #2: local.get 0; local.get 1; i32.add; local.get 2; i32.add; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x0a, 0x00,
+      0x20, 0x00, 0x20, 0x01, 0x41, 0x05, 0x10, 0x02, 0x0b, 0x0a, 0x00, 0x20,
+      0x00, 0x20, 0x01, 0x6a, 0x20, 0x02, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_gc_signature_refining_thunk_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1924,7 +1966,11 @@ fn sample_module_with_duplicate_imports_bytes() -> Bytes {
   append_section(out, 8U, bytes_of([0x02]))
   // element section:
   //   active table old=1, function old=2
-  append_section(out, 9U, bytes_of([0x01, 0x02, 0x01, 0x41, 0x00, 0x0b, 0x00, 0x01, 0x02]))
+  append_section(
+    out,
+    9U,
+    bytes_of([0x01, 0x02, 0x01, 0x41, 0x00, 0x0b, 0x00, 0x01, 0x02]),
+  )
   // code section (#0):
   //   call 1; global.get 2; drop; global.get 3; drop;
   //   table.size 1; drop; memory.size 1; drop; end
@@ -1938,7 +1984,11 @@ fn sample_module_with_duplicate_imports_bytes() -> Bytes {
   )
   // data section:
   //   active memory old=1
-  append_section(out, 11U, bytes_of([0x01, 0x02, 0x01, 0x41, 0x00, 0x0b, 0x01, 0x00]))
+  append_section(
+    out,
+    11U,
+    bytes_of([0x01, 0x02, 0x01, 0x41, 0x00, 0x0b, 0x01, 0x00]),
+  )
   Bytes::from_array(out[:])
 }
 
@@ -1973,8 +2023,8 @@ fn sample_module_with_reorderable_globals_bytes() -> Bytes {
     out,
     6U,
     bytes_of([
-      0x03, 0x7f, 0x01, 0x41, 0x01, 0x0b, 0x7f, 0x01, 0x41, 0x02, 0x0b, 0x7f,
-      0x01, 0x41, 0x03, 0x0b,
+      0x03, 0x7f, 0x01, 0x41, 0x01, 0x0b, 0x7f, 0x01, 0x41, 0x02, 0x0b, 0x7f, 0x01,
+      0x41, 0x03, 0x0b,
     ]),
   )
   // export section: run(func 0), g0/g1/g2(global 0/1/2)
@@ -1982,8 +2032,8 @@ fn sample_module_with_reorderable_globals_bytes() -> Bytes {
     out,
     7U,
     bytes_of([
-      0x04, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00, 0x02, 0x67, 0x30, 0x03, 0x00,
-      0x02, 0x67, 0x31, 0x03, 0x01, 0x02, 0x67, 0x32, 0x03, 0x02,
+      0x04, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00, 0x02, 0x67, 0x30, 0x03, 0x00, 0x02,
+      0x67, 0x31, 0x03, 0x01, 0x02, 0x67, 0x32, 0x03, 0x02,
     ]),
   )
   // code section: global.get 2; end
@@ -2011,7 +2061,11 @@ fn sample_module_with_reorderable_memories_bytes() -> Bytes {
   // code section: memory.size 2; end
   append_section(out, 10U, bytes_of([0x01, 0x04, 0x00, 0x3f, 0x02, 0x0b]))
   // data section: active segment on memory 2 at offset 0, one byte payload
-  append_section(out, 11U, bytes_of([0x01, 0x02, 0x02, 0x41, 0x00, 0x0b, 0x01, 0x00]))
+  append_section(
+    out,
+    11U,
+    bytes_of([0x01, 0x02, 0x02, 0x41, 0x00, 0x0b, 0x01, 0x00]),
+  )
   Bytes::from_array(out[:])
 }
 
@@ -2157,6 +2211,7 @@ test "opt level presets map to expected optimizer knobs" {
   assert_true(o1.enable_dce)
   assert_true(o1.enable_dfe)
   assert_true(o1.enable_merge_similar_functions)
+  assert_true(o1.enable_remove_unused_module_elements)
   assert_eq(o1.pass_rounds, 2U)
   assert_true(o1.strip_debug_sections)
   assert_true(o1.strip_dwarf_sections)
@@ -2948,9 +3003,7 @@ test "optimize removes duplicate imports and remaps all related indices" {
   assert_true(bytes_contains_seq(optimized.bytes, [0x3f, 0x00]))
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x3f, 0x01])))
   assert_true(
-    bytes_contains_seq(optimized.bytes, [
-      0x03, 0x72, 0x75, 0x6e, 0x00, 0x01,
-    ]),
+    bytes_contains_seq(optimized.bytes, [0x03, 0x72, 0x75, 0x6e, 0x00, 0x01]),
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0x01, 0x74, 0x01, 0x00]))
   assert_true(bytes_contains_seq(optimized.bytes, [0x01, 0x6d, 0x02, 0x00]))
@@ -3054,11 +3107,15 @@ test "optimize memory-packing reorders local memories and remaps users" {
     bytes_contains_seq(optimized.bytes, [0x02, 0x6d, 0x32, 0x02, 0x01]),
   )
   assert_true(
-    bytes_contains_seq(optimized.bytes, [0x02, 0x01, 0x41, 0x00, 0x0b, 0x01, 0x00]),
+    bytes_contains_seq(optimized.bytes, [
+      0x02, 0x01, 0x41, 0x00, 0x0b, 0x01, 0x00,
+    ]),
   )
   assert_true(
     not(
-      bytes_contains_seq(optimized.bytes, [0x02, 0x02, 0x41, 0x00, 0x0b, 0x01, 0x00]),
+      bytes_contains_seq(optimized.bytes, [
+        0x02, 0x02, 0x41, 0x00, 0x0b, 0x01, 0x00,
+      ]),
     ),
   )
 }
@@ -3128,6 +3185,28 @@ test "kpi rume gain fixture has positive post-dce to post-rume delta" {
   assert_true(post_rume.after_size < post_dce.after_size)
   assert_true(post_rume.removed_sections.any(s => s.contains("rume:")))
   assert_true(runtime_export_outputs_equal(bytes, post_rume.bytes, "run", []))
+}
+
+///|
+test "optimize -O1 shrinks rume gain fixture by removing table.size drop" {
+  let bytes = @fs.read_file_to_bytes(
+    "bench/corpus/core/binaryen/rume_gain_fixture.wasm",
+  ) catch {
+    _ => {
+      assert_true(false)
+      return
+    }
+  }
+  let config = OptimizeConfig::o1()
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.after_size <= 34U)
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x00, 0x1a])),
+  )
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
 ///|
@@ -3653,6 +3732,46 @@ test "optimize with merge-similar-functions removes forwarding thunks" {
 }
 
 ///|
+test "optimize with merge-similar-functions removes param-forwarding thunk" {
+  let bytes = sample_module_with_param_forwarding_thunk_bytes()
+  guard profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 3U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("msf:functions:")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_true(after_profile.function_count < before_profile.function_count)
+  assert_true(after_profile.function_count <= 2U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
 test "optimize cfp rewrites forwarding calls and enables dce without msf" {
   let bytes = sample_module_with_similar_thunks_bytes()
   guard profile_module(bytes) is Ok(before_profile) else {
@@ -3719,6 +3838,48 @@ test "optimize cfp phase2 rewrites param-forwarding thunk and enables dce" {
     return
   }
   assert_true(optimized.removed_sections.any(s => s.contains("cfp:calls:1")))
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
+test "optimize cfp-const rewrites const-forwarding thunk and enables dce" {
+  let bytes = sample_module_with_const_forwarding_thunk_bytes()
+  guard profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 3U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("cfp-const:calls:1")),
+  )
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
@@ -5072,4 +5233,170 @@ test "component optimize reports no-change reasons when all passes are disabled"
       ),
     )
   }
+}
+
+///|
+test "make_component_optimize_config merges roots without wac plan type" {
+  let base = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=3U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=true,
+    closed_world=true,
+    closed_world_root_exports=["run", "cabi_realloc"],
+    safe_mode=false,
+  )
+  let effective = make_component_optimize_config(
+    base~,
+    root_name_candidates=["hello", "run"],
+    exclude=["socket", "hello"],
+  )
+  let merged_roots = effective.closed_world_root_exports
+  assert_eq(merged_roots.length(), 4)
+  assert_true(merged_roots.contains("cabi_realloc"))
+  assert_true(merged_roots.contains("hello"))
+  assert_true(merged_roots.contains("run"))
+  assert_true(merged_roots.contains("socket"))
+  assert_eq(effective.pass_rounds, base.pass_rounds)
+  assert_eq(effective.enable_dce, base.enable_dce)
+  assert_eq(
+    effective.enable_remove_unused_module_elements,
+    base.enable_remove_unused_module_elements,
+  )
+}
+
+///|
+test "component optimize converge loops until no size improvement" {
+  let component_bytes = sample_component_with_single_core_module(
+    sample_module_with_inlining_const_callee_bytes(),
+  )
+  let single_round = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=1U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+    closed_world=false,
+    safe_mode=false,
+  )
+  let converge_rounds = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=4U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+    closed_world=false,
+    safe_mode=false,
+  )
+  guard optimize_component_for_size(component_bytes, config=single_round)
+    is Ok(single_result) else {
+    assert_true(false)
+    return
+  }
+  guard optimize_component_for_size(component_bytes, config=converge_rounds)
+    is Ok(converged_result) else {
+    assert_true(false)
+    return
+  }
+  assert_true(converged_result.after_size < single_result.after_size)
+  assert_true(
+    converged_result.removed_sections.any(s => s.contains(
+      "core#0:dce:functions:1",
+    )),
+  )
+  assert_true(
+    converged_result.removed_sections.any(s => s.contains("component-converge:")),
+  )
+}
+
+///|
+test "component optimize converge stops on non-improving round" {
+  let component_bytes = sample_component_with_single_core_module(
+    sample_module_bytes(),
+  )
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=8U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+    closed_world=false,
+    safe_mode=false,
+  )
+  guard optimize_component_for_size(component_bytes, config~) is Ok(result) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(result.before_size, result.after_size)
+  assert_true(
+    result.removed_sections.any(s => s.contains(
+      "component-converge:no-improve:",
+    )),
+  )
+}
+
+///|
+test "optimize_binary_for_size auto-detects component wasm" {
+  let component_bytes = sample_component_with_single_core_module(
+    sample_module_bytes(),
+  )
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+    closed_world=false,
+    safe_mode=false,
+  )
+  guard optimize_component_for_size(component_bytes, config~) is Ok(direct) else {
+    assert_true(false)
+    return
+  }
+  guard optimize_binary_for_size(component_bytes, config~) is Ok(dispatched) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(dispatched.after_size, direct.after_size)
+  assert_eq(dispatched.before_size, direct.before_size)
+  assert_eq(dispatched.removed_sections, direct.removed_sections)
+  assert_true(
+    dispatched.no_change_reasons.any(r => r.contains("no optimization pass")),
+  )
 }
