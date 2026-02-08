@@ -558,6 +558,54 @@ pub struct KeepReasonReport {
 }
 
 ///|
+pub struct RetainPathEntry {
+  function_index : UInt
+  name : String?
+  export_names : Array[String]
+  body_bytes : UInt
+  root_reasons : Array[String]
+  path : Array[UInt]
+}
+
+///|
+pub struct RetainPathReport {
+  partial : Bool
+  roots : Array[UInt]
+  entries : Array[RetainPathEntry]
+}
+
+///|
+pub struct HotnessSizeEntry {
+  export_name : String
+  function_index : UInt?
+  function_name : String?
+  body_bytes : UInt
+  calls : UInt
+  total_ns : UInt64
+  average_ns : UInt64
+  bucket : String
+}
+
+///|
+pub struct HotnessSizeBucket {
+  bucket : String
+  count : UInt
+  body_bytes : UInt
+  total_ns : UInt64
+}
+
+///|
+pub struct HotnessSizeMatrixReport {
+  iterations : UInt
+  instantiate_ns : UInt64
+  hot_threshold_ns : UInt64
+  large_threshold_bytes : UInt
+  unresolved_exports : Array[String]
+  buckets : Array[HotnessSizeBucket]
+  entries : Array[HotnessSizeEntry]
+}
+
+///|
 pub struct ComponentRootPolicyReport {
   component_imports : Array[String]
   component_exports : Array[String]
@@ -9749,6 +9797,91 @@ fn export_root_names_from_config(config : OptimizeConfig) -> Array[String]? {
 }
 
 ///|
+fn collect_root_reasons_raise(
+  bytes : Bytes,
+  export_root_names : Array[String]?,
+) -> (Map[UInt, Array[String]], Bool) raise WalyzeError {
+  let reasons_map : Map[UInt, Array[String]] = {}
+  let sections = parse_core_sections_raise(bytes)
+  let mut partial = false
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      7U => {
+        let exports = parse_export_function_names(payload)
+        exports.each((index, names) => if should_include_export_root(
+            names, export_root_names,
+          ) {
+          for export_name in names {
+            map_push_string_array(reasons_map, index, "export:" + export_name)
+          }
+        })
+      }
+      8U => {
+        let start_index = parse_start_function_index(payload)
+        map_push_string_array(reasons_map, start_index, "start")
+      }
+      6U => {
+        let result = try? parse_global_section_function_refs_raise(payload)
+        match result {
+          Ok(indices) =>
+            for index in indices {
+              map_push_string_array(reasons_map, index, "global-ref.func")
+            }
+          Err(_) => partial = true
+        }
+      }
+      9U => {
+        let result = try? parse_element_section_function_refs_raise(payload)
+        match result {
+          Ok(indices) =>
+            for index in indices {
+              map_push_string_array(reasons_map, index, "element-ref.func")
+            }
+          Err(_) => partial = true
+        }
+      }
+      _ => ()
+    }
+  }
+  (reasons_map, partial)
+}
+
+///|
+fn build_retain_path_from_parent_map(
+  target : UInt,
+  parent_map : Map[UInt, UInt],
+) -> Array[UInt] {
+  let reversed : Array[UInt] = [target]
+  let mut current = target
+  while true {
+    match parent_map.get(current) {
+      Some(parent) => {
+        reversed.push(parent)
+        current = parent
+      }
+      None => break
+    }
+  }
+  let path : Array[UInt] = []
+  for i in 0..<reversed.length() {
+    path.push(reversed[reversed.length() - 1 - i])
+  }
+  path
+}
+
+///|
+fn compare_retain_path_entry(a : RetainPathEntry, b : RetainPathEntry) -> Int {
+  if a.function_index < b.function_index {
+    -1
+  } else if a.function_index > b.function_index {
+    1
+  } else {
+    0
+  }
+}
+
+///|
 pub fn analyze_keep_reasons(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
@@ -9756,48 +9889,9 @@ pub fn analyze_keep_reasons(
   try? {
     let export_root_names = export_root_names_from_config(config)
     let graph = analyze_call_graph_raise(bytes, export_root_names)
-    let reasons_map : Map[UInt, Array[String]] = {}
-    let sections = parse_core_sections_raise(bytes)
-    for section in sections {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
-      match section.section_id {
-        7U => {
-          let exports = parse_export_function_names(payload)
-          exports.each((index, names) => if should_include_export_root(
-              names, export_root_names,
-            ) {
-            for export_name in names {
-              map_push_string_array(reasons_map, index, "export:" + export_name)
-            }
-          })
-        }
-        8U => {
-          let start_index = parse_start_function_index(payload)
-          map_push_string_array(reasons_map, start_index, "start")
-        }
-        6U => {
-          let result = try? parse_global_section_function_refs_raise(payload)
-          match result {
-            Ok(indices) =>
-              for index in indices {
-                map_push_string_array(reasons_map, index, "global-ref.func")
-              }
-            Err(_) => ()
-          }
-        }
-        9U => {
-          let result = try? parse_element_section_function_refs_raise(payload)
-          match result {
-            Ok(indices) =>
-              for index in indices {
-                map_push_string_array(reasons_map, index, "element-ref.func")
-              }
-            Err(_) => ()
-          }
-        }
-        _ => ()
-      }
-    }
+    let (reasons_map, reasons_partial) = collect_root_reasons_raise(
+      bytes, export_root_names,
+    )
     let index_to_pos : Map[UInt, Int] = {}
     for i in 0..<graph.nodes.length() {
       index_to_pos.set(graph.nodes[i].function_index, i)
@@ -9856,7 +9950,87 @@ pub fn analyze_keep_reasons(
     } else {
       0
     })
-    { partial: graph.partial, entries }
+    { partial: graph.partial || reasons_partial, entries }
+  }
+}
+
+///|
+pub fn analyze_retain_paths(
+  bytes : Bytes,
+  config? : OptimizeConfig = OptimizeConfig::default(),
+) -> Result[RetainPathReport, WalyzeError] {
+  try? {
+    let export_root_names = export_root_names_from_config(config)
+    let graph = analyze_call_graph_raise(bytes, export_root_names)
+    let (root_reasons_map, root_reason_partial) = collect_root_reasons_raise(
+      bytes, export_root_names,
+    )
+    let index_to_pos : Map[UInt, Int] = {}
+    for i in 0..<graph.nodes.length() {
+      index_to_pos.set(graph.nodes[i].function_index, i)
+    }
+    let visited : Map[UInt, Bool] = {}
+    let parent_map : Map[UInt, UInt] = {}
+    let queue = graph.roots.copy()
+    let mut head = 0
+    while head < queue.length() {
+      let current = queue[head]
+      head += 1
+      if visited.get(current) is Some(_) {
+        continue
+      }
+      visited.set(current, true)
+      match index_to_pos.get(current) {
+        Some(pos) =>
+          for callee in graph.nodes[pos].direct_callees {
+            if visited.get(callee) is None {
+              if parent_map.get(callee) is None {
+                parent_map.set(callee, current)
+              }
+              queue.push(callee)
+            }
+          }
+        None => ()
+      }
+    }
+    let entries : Array[RetainPathEntry] = []
+    for node in graph.nodes {
+      if not(node.reachable_from_roots) {
+        continue
+      }
+      let path = build_retain_path_from_parent_map(
+        node.function_index,
+        parent_map,
+      )
+      let root_index = if path.length() > 0 {
+        path[0]
+      } else {
+        node.function_index
+      }
+      let root_reasons = match root_reasons_map.get(root_index) {
+        Some(v) => v.copy()
+        None => []
+      }
+      if root_reasons.length() == 0 {
+        root_reasons.push("reachable")
+      }
+      root_reasons.sort()
+      root_reasons.dedup()
+      entries.push({
+        function_index: node.function_index,
+        name: node.name,
+        export_names: node.export_names,
+        body_bytes: node.body_bytes,
+        root_reasons,
+        path,
+      })
+    }
+    entries.sort_by(compare_retain_path_entry)
+    {
+      partial: graph.partial || root_reason_partial,
+      roots: graph.roots,
+      entries,
+    }
   }
 }
 
@@ -13297,4 +13471,238 @@ pub fn profile_runtime_zero_arg_exports(
     []
   }
   Ok({ instantiate_ns, iterations, functions, skipped_exports })
+}
+
+///|
+fn average_u64(values : Array[UInt64]) -> UInt64 {
+  if values.length() == 0 {
+    return 0UL
+  }
+  let mut total = 0UL
+  for value in values {
+    total += value
+  }
+  total / values.length().to_uint64()
+}
+
+///|
+fn average_u32(values : Array[UInt]) -> UInt {
+  if values.length() == 0 {
+    return 0U
+  }
+  let mut total = 0U
+  for value in values {
+    total += value
+  }
+  total / values.length().reinterpret_as_uint()
+}
+
+///|
+fn map_export_name_to_function_index(
+  functions : Array[FunctionSize],
+) -> Map[String, UInt] {
+  let out : Map[String, UInt] = {}
+  for function in functions {
+    for export_name in function.export_names {
+      if out.get(export_name) is None {
+        out.set(export_name, function.function_index)
+      }
+    }
+  }
+  out
+}
+
+///|
+fn map_function_size_by_index(
+  functions : Array[FunctionSize],
+) -> Map[UInt, FunctionSize] {
+  let out : Map[UInt, FunctionSize] = {}
+  for function in functions {
+    out.set(function.function_index, function)
+  }
+  out
+}
+
+///|
+fn classify_hotness_size_bucket(
+  total_ns : UInt64,
+  body_bytes : UInt,
+  hot_threshold_ns : UInt64,
+  large_threshold_bytes : UInt,
+  resolved : Bool,
+) -> String {
+  if not(resolved) {
+    return "unresolved"
+  }
+  let hot = total_ns >= hot_threshold_ns
+  let large = body_bytes >= large_threshold_bytes
+  if hot && large {
+    "hot-large"
+  } else if hot {
+    "hot-small"
+  } else if large {
+    "cold-large"
+  } else {
+    "cold-small"
+  }
+}
+
+///|
+fn compare_hotness_size_entry(
+  a : HotnessSizeEntry,
+  b : HotnessSizeEntry,
+) -> Int {
+  if a.total_ns > b.total_ns {
+    -1
+  } else if a.total_ns < b.total_ns {
+    1
+  } else if a.body_bytes > b.body_bytes {
+    -1
+  } else if a.body_bytes < b.body_bytes {
+    1
+  } else {
+    a.export_name.compare(b.export_name)
+  }
+}
+
+///|
+fn collect_hotness_size_buckets(
+  entries : Array[HotnessSizeEntry],
+) -> Array[HotnessSizeBucket] {
+  let order = [
+    "hot-large", "hot-small", "cold-large", "cold-small", "unresolved",
+  ]
+  let grouped : Map[String, HotnessSizeBucket] = {}
+  for bucket in order {
+    grouped.set(bucket, { bucket, count: 0U, body_bytes: 0U, total_ns: 0UL })
+  }
+  for entry in entries {
+    let prev = match grouped.get(entry.bucket) {
+      Some(v) => v
+      None => {
+        let empty = {
+          bucket: entry.bucket,
+          count: 0U,
+          body_bytes: 0U,
+          total_ns: 0UL,
+        }
+        grouped.set(entry.bucket, empty)
+        empty
+      }
+    }
+    grouped.set(entry.bucket, {
+      bucket: entry.bucket,
+      count: prev.count + 1U,
+      body_bytes: prev.body_bytes + entry.body_bytes,
+      total_ns: prev.total_ns + entry.total_ns,
+    })
+  }
+  let buckets : Array[HotnessSizeBucket] = []
+  for bucket in order {
+    match grouped.get(bucket) {
+      Some(v) => buckets.push(v)
+      None => buckets.push({ bucket, count: 0U, body_bytes: 0U, total_ns: 0UL })
+    }
+  }
+  buckets
+}
+
+///|
+pub fn analyze_hotness_size_matrix(
+  bytes : Bytes,
+  iterations? : UInt = 50U,
+) -> Result[HotnessSizeMatrixReport, String] {
+  let runtime = match profile_runtime_zero_arg_exports(bytes, iterations~) {
+    Ok(v) => v
+    Err(msg) => return Err(msg)
+  }
+  let function_sizes = match analyze_function_sizes(bytes) {
+    Ok(v) => v
+    Err(err) =>
+      return Err(
+        "function size analysis failed: " + walyze_error_to_string(err),
+      )
+  }
+  let export_to_function_index = map_export_name_to_function_index(
+    function_sizes,
+  )
+  let function_size_by_index = map_function_size_by_index(function_sizes)
+  let resolved_total_ns : Array[UInt64] = []
+  let resolved_body_bytes : Array[UInt] = []
+  let unresolved_exports : Array[String] = []
+  for fn_profile in runtime.functions {
+    match export_to_function_index.get(fn_profile.name) {
+      Some(function_index) =>
+        match function_size_by_index.get(function_index) {
+          Some(function_size) => {
+            resolved_total_ns.push(fn_profile.total_ns)
+            resolved_body_bytes.push(function_size.body_bytes)
+          }
+          None => unresolved_exports.push(fn_profile.name)
+        }
+      None => unresolved_exports.push(fn_profile.name)
+    }
+  }
+  unresolved_exports.sort()
+  unresolved_exports.dedup()
+  let hot_threshold_ns = average_u64(resolved_total_ns)
+  let large_threshold_bytes = average_u32(resolved_body_bytes)
+  let entries : Array[HotnessSizeEntry] = []
+  for fn_profile in runtime.functions {
+    match export_to_function_index.get(fn_profile.name) {
+      Some(function_index) =>
+        match function_size_by_index.get(function_index) {
+          Some(function_size) =>
+            entries.push({
+              export_name: fn_profile.name,
+              function_index: Some(function_index),
+              function_name: function_size.name,
+              body_bytes: function_size.body_bytes,
+              calls: fn_profile.calls,
+              total_ns: fn_profile.total_ns,
+              average_ns: fn_profile.average_ns,
+              bucket: classify_hotness_size_bucket(
+                fn_profile.total_ns,
+                function_size.body_bytes,
+                hot_threshold_ns,
+                large_threshold_bytes,
+                true,
+              ),
+            })
+          None =>
+            entries.push({
+              export_name: fn_profile.name,
+              function_index: None,
+              function_name: None,
+              body_bytes: 0U,
+              calls: fn_profile.calls,
+              total_ns: fn_profile.total_ns,
+              average_ns: fn_profile.average_ns,
+              bucket: "unresolved",
+            })
+        }
+      None =>
+        entries.push({
+          export_name: fn_profile.name,
+          function_index: None,
+          function_name: None,
+          body_bytes: 0U,
+          calls: fn_profile.calls,
+          total_ns: fn_profile.total_ns,
+          average_ns: fn_profile.average_ns,
+          bucket: "unresolved",
+        })
+    }
+  }
+  entries.sort_by(compare_hotness_size_entry)
+  let buckets = collect_hotness_size_buckets(entries)
+  Ok({
+    iterations: runtime.iterations,
+    instantiate_ns: runtime.instantiate_ns,
+    hot_threshold_ns,
+    large_threshold_bytes,
+    unresolved_exports,
+    buckets,
+    entries,
+  })
 }

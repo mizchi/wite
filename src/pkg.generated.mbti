@@ -28,9 +28,13 @@ pub fn analyze_function_sizes(Bytes) -> Result[Array[FunctionSize], WalyzeError]
 
 pub fn analyze_host_generated_code(Bytes) -> Result[HostGeneratedCodeReport, WalyzeError]
 
+pub fn analyze_hotness_size_matrix(Bytes, iterations? : UInt) -> Result[HotnessSizeMatrixReport, String]
+
 pub fn analyze_keep_reasons(Bytes, config? : OptimizeConfig) -> Result[KeepReasonReport, WalyzeError]
 
 pub fn analyze_optimize_metadata(Bytes, config? : OptimizeConfig) -> Result[OptimizeMetadataReport, WalyzeError]
+
+pub fn analyze_retain_paths(Bytes, config? : OptimizeConfig) -> Result[RetainPathReport, WalyzeError]
 
 pub fn analyze_section_sizes(Bytes) -> Result[Array[SectionSize], WalyzeError]
 
@@ -222,6 +226,34 @@ pub struct HostGeneratedCodeReport {
   hints : Array[HostCodeHint]
 }
 
+pub struct HotnessSizeBucket {
+  bucket : String
+  count : UInt
+  body_bytes : UInt
+  total_ns : UInt64
+}
+
+pub struct HotnessSizeEntry {
+  export_name : String
+  function_index : UInt?
+  function_name : String?
+  body_bytes : UInt
+  calls : UInt
+  total_ns : UInt64
+  average_ns : UInt64
+  bucket : String
+}
+
+pub struct HotnessSizeMatrixReport {
+  iterations : UInt
+  instantiate_ns : UInt64
+  hot_threshold_ns : UInt64
+  large_threshold_bytes : UInt
+  unresolved_exports : Array[String]
+  buckets : Array[HotnessSizeBucket]
+  entries : Array[HotnessSizeEntry]
+}
+
 pub struct KeepReasonEntry {
   function_index : UInt
   name : String?
@@ -307,6 +339,21 @@ pub struct OptimizeStageMetadata {
   regression_bytes : UInt
   removed_sections : Array[String]
   no_change_reasons : Array[String]
+}
+
+pub struct RetainPathEntry {
+  function_index : UInt
+  name : String?
+  export_names : Array[String]
+  body_bytes : UInt
+  root_reasons : Array[String]
+  path : Array[UInt]
+}
+
+pub struct RetainPathReport {
+  partial : Bool
+  roots : Array[UInt]
+  entries : Array[RetainPathEntry]
 }
 
 pub struct RuntimeFunctionProfile {

@@ -12,8 +12,12 @@ fn print_usage() -> Unit {
   println(
     "  keep-reasons <core.wasm> [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
   )
+  println(
+    "  retain-path <core.wasm> [limit] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
+  )
   println("  dce-report <core.wasm> [limit]")
   println("  runtime-profile <core.wasm> [iterations]")
+  println("  hot-size <core.wasm> [iterations] [limit]")
   println(
     "  optimize <input.wasm> <output.wasm> [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
   )
@@ -728,6 +732,97 @@ fn run_runtime_profile(path : String, iterations : UInt) -> Unit {
 }
 
 ///|
+fn print_hotness_size_entries(
+  entries : Array[@walyze.HotnessSizeEntry],
+  limit : UInt,
+) -> Unit {
+  if entries.length() == 0 {
+    println("  entries: (none)")
+    return
+  }
+  println("  entries:")
+  let mut printed = 0U
+  for entry in entries {
+    if printed >= limit {
+      break
+    }
+    let index_text = match entry.function_index {
+      Some(v) => v.to_string()
+      None => "-"
+    }
+    let function_name = match entry.function_name {
+      Some(v) => v
+      None => "-"
+    }
+    println(
+      "    " +
+      entry.export_name +
+      " idx=" +
+      index_text +
+      " fn=" +
+      function_name +
+      " body=" +
+      entry.body_bytes.to_string() +
+      " calls=" +
+      entry.calls.to_string() +
+      " total_ns=" +
+      entry.total_ns.to_string() +
+      " avg_ns=" +
+      entry.average_ns.to_string() +
+      " bucket=" +
+      entry.bucket,
+    )
+    printed += 1U
+  }
+}
+
+///|
+fn print_hotness_size_buckets(
+  buckets : Array[@walyze.HotnessSizeBucket],
+) -> Unit {
+  println("  buckets:")
+  for bucket in buckets {
+    println(
+      "    " +
+      bucket.bucket +
+      " count=" +
+      bucket.count.to_string() +
+      " body_bytes=" +
+      bucket.body_bytes.to_string() +
+      " total_ns=" +
+      bucket.total_ns.to_string(),
+    )
+  }
+}
+
+///|
+fn run_hot_size(path : String, iterations : UInt, limit : UInt) -> Unit {
+  let bytes = read_bytes_or_exit(path)
+  match @walyze.analyze_hotness_size_matrix(bytes, iterations~) {
+    Ok(report) => {
+      println("hot-size matrix:")
+      println("  instantiate_ns: " + report.instantiate_ns.to_string())
+      println("  iterations: " + report.iterations.to_string())
+      println(
+        "  thresholds: hot_ns>=" +
+        report.hot_threshold_ns.to_string() +
+        " large_bytes>=" +
+        report.large_threshold_bytes.to_string(),
+      )
+      if report.unresolved_exports.length() > 0 {
+        println("  unresolved_exports: " + report.unresolved_exports.join(", "))
+      }
+      print_hotness_size_buckets(report.buckets)
+      print_hotness_size_entries(report.entries, limit)
+    }
+    Err(msg) => {
+      println("hot-size failed: " + msg)
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
 fn print_function_sizes(
   functions : Array[@walyze.FunctionSize],
   limit : UInt,
@@ -969,6 +1064,107 @@ fn run_keep_reasons(args : Array[String]) -> Unit {
     }
     Err(e) => {
       println("keep-reasons failed: " + @walyze.error_to_string(e))
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
+fn print_retain_path_entries(
+  entries : Array[@walyze.RetainPathEntry],
+  limit : UInt,
+) -> Unit {
+  if entries.length() == 0 {
+    println("  entries: (none)")
+    return
+  }
+  println("  entries:")
+  let mut printed = 0U
+  for entry in entries {
+    if printed >= limit {
+      break
+    }
+    let label = match entry.name {
+      Some(v) => v
+      None => "#\{entry.function_index.to_string()}"
+    }
+    let exports = if entry.export_names.length() == 0 {
+      ""
+    } else {
+      " exports=" + entry.export_names.join(",")
+    }
+    let root_reasons = if entry.root_reasons.length() == 0 {
+      "reachable"
+    } else {
+      entry.root_reasons.join(",")
+    }
+    let path = if entry.path.length() == 0 {
+      "(none)"
+    } else {
+      entry.path.map(i => i.to_string()).join(" -> ")
+    }
+    println(
+      "    " +
+      label +
+      " idx=" +
+      entry.function_index.to_string() +
+      " body=" +
+      entry.body_bytes.to_string() +
+      exports +
+      " root=" +
+      root_reasons +
+      " path=" +
+      path,
+    )
+    printed += 1U
+  }
+}
+
+///|
+fn run_retain_path(args : Array[String]) -> Unit {
+  if args.length() < 3 {
+    print_usage()
+    @sys.exit(1)
+  }
+  let path = args[2]
+  let bytes = read_bytes_or_exit(path)
+  let mut limit = 20U
+  let mut closed_world = false
+  let mut safe_mode = false
+  for i in 3..<args.length() {
+    let arg = args[i]
+    if arg == "--closed-world" {
+      closed_world = true
+    } else if arg == "--safe-mode" {
+      safe_mode = true
+    } else if arg.has_prefix("--closed-world-root=") {
+      ()
+    } else if arg.has_prefix("--") {
+      println("unknown retain-path option: " + arg)
+      @sys.exit(1)
+    } else {
+      limit = parse_uint_or_exit(arg, "limit")
+    }
+  }
+  let closed_world_root_exports = parse_closed_world_roots(args, 3)
+  let config = @walyze.make_optimize_config(
+    closed_world~,
+    closed_world_root_exports~,
+    safe_mode~,
+  )
+  match @walyze.analyze_retain_paths(bytes, config~) {
+    Ok(report) => {
+      println("retain-path analysis:")
+      println("  partial: " + report.partial.to_string())
+      if report.roots.length() == 0 {
+        println("  roots: (none)")
+      } else {
+        println("  roots: " + report.roots.map(i => i.to_string()).join(", "))
+      }
+      print_retain_path_entries(report.entries, limit)
+    }
+    Err(e) => {
+      println("retain-path failed: " + @walyze.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -1379,6 +1575,7 @@ fn main {
       run_callgraph(args[2], limit)
     }
     "keep-reasons" => run_keep_reasons(args)
+    "retain-path" => run_retain_path(args)
     "dce-report" => {
       if args.length() < 3 {
         print_usage()
@@ -1402,6 +1599,23 @@ fn main {
         50U
       }
       run_runtime_profile(args[2], iterations)
+    }
+    "hot-size" => {
+      if args.length() < 3 {
+        print_usage()
+        @sys.exit(1)
+      }
+      let iterations = if args.length() >= 4 {
+        parse_uint_or_exit(args[3], "iterations")
+      } else {
+        50U
+      }
+      let limit = if args.length() >= 5 {
+        parse_uint_or_exit(args[4], "limit")
+      } else {
+        20U
+      }
+      run_hot_size(args[2], iterations, limit)
     }
     "optimize" => run_optimize(args)
     "component-profile" => {

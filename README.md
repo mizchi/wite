@@ -38,6 +38,7 @@ It provides:
 - core wasm code-block size analysis (`function/block/loop/if` bytes + instruction counts)
 - core wasm call graph + dead-body analysis (export/start roots)
 - core wasm call graph roots from global/element `ref.func`
+- retain-path analysis (root reason + shortest root-to-function chain)
 - host/generated code analysis (forwarding-thunk/sig-refine/directize-candidate/dce-removable hints)
 - optimize metadata analysis (`strip -> code -> dce -> rume` stage waterfall for optimizer input)
 - core wasm DCE report + apply (callgraph-based function-level pruning)
@@ -58,6 +59,7 @@ It provides:
 - closed-world root filtering (`--closed-world --closed-world-root=...`, with `--safe-mode` override)
 - static module profiler (imports/exports/functions/code-body bytes)
 - runtime profiler for zero-arg exports (call count / total ns / avg ns)
+- hotness x size matrix analysis (runtime profile + code-body size buckets)
 - component model profiling (`mizchi/mwac` integration)
 - component core-module top-function size reports
 - component core-module call graph reports
@@ -77,8 +79,10 @@ just run -- top-functions path/to/module.wasm 20
 just run -- block-sizes path/to/module.wasm 20
 just run -- callgraph path/to/module.wasm 20
 just run -- keep-reasons path/to/module.wasm --closed-world --closed-world-root=run
+just run -- retain-path path/to/module.wasm 20 --closed-world --closed-world-root=run
 just run -- dce-report path/to/module.wasm 20
 just run -- runtime-profile path/to/module.wasm 100
+just run -- hot-size path/to/module.wasm 100 20
 just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features --converge --rume-apply --verbose
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
@@ -113,11 +117,13 @@ Main APIs are in `src/lib.mbt`:
 - `analyze_host_generated_code(bytes)`
 - `analyze_optimize_metadata(bytes, config=...)`
 - `analyze_keep_reasons(bytes, config=...)`
+- `analyze_retain_paths(bytes, config=...)`
 - `analyze_dce_report(bytes)`
 - `optimize_for_size(bytes, config=...)`
 - `optimize_binary_for_size(bytes, config=..., exclude=[...])`
 - `profile_module(bytes)`
 - `profile_runtime_zero_arg_exports(bytes, iterations=...)`
+- `analyze_hotness_size_matrix(bytes, iterations=...)`
 - `profile_component(bytes)`
 - `analyze_component_function_sizes(bytes)`
 - `analyze_component_call_graphs(bytes)`

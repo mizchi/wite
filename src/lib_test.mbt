@@ -592,6 +592,40 @@ fn sample_module_with_named_functions_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_hot_size_runtime_gap_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 2 local functions
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export idx 0 as "light", idx 1 as "heavy"
+  append_section(
+    out,
+    7U,
+    bytes_of([
+      0x02, 0x05, 0x6c, 0x69, 0x67, 0x68, 0x74, 0x00, 0x00, 0x05, 0x68, 0x65, 0x61,
+      0x76, 0x79, 0x00, 0x01,
+    ]),
+  )
+  // code section:
+  //   #0 light body: locals=0, end
+  //   #1 heavy body: locals=0, (i32.const 0; drop) * 20, end
+  let heavy_body : Array[Int] = [0x00]
+  for _ in 0..<20 {
+    heavy_body.push(0x41)
+    heavy_body.push(0x00)
+    heavy_body.push(0x1a)
+  }
+  heavy_body.push(0x0b)
+  let code_payload : Array[Byte] = bytes_of([0x02, 0x02, 0x00, 0x0b])
+  code_payload.push(heavy_body.length().reinterpret_as_uint().to_byte())
+  code_payload.append(bytes_of(heavy_body)[:])
+  append_section(out, 10U, code_payload)
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_nested_blocks_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -2372,6 +2406,45 @@ fn find_optimize_stage(
 }
 
 ///|
+fn find_retain_path_entry(
+  entries : Array[RetainPathEntry],
+  function_index : UInt,
+) -> RetainPathEntry? {
+  for entry in entries {
+    if entry.function_index == function_index {
+      return Some(entry)
+    }
+  }
+  None
+}
+
+///|
+fn find_hotness_size_entry(
+  entries : Array[HotnessSizeEntry],
+  export_name : String,
+) -> HotnessSizeEntry? {
+  for entry in entries {
+    if entry.export_name == export_name {
+      return Some(entry)
+    }
+  }
+  None
+}
+
+///|
+fn find_hotness_size_bucket(
+  buckets : Array[HotnessSizeBucket],
+  bucket : String,
+) -> HotnessSizeBucket? {
+  for item in buckets {
+    if item.bucket == bucket {
+      return Some(item)
+    }
+  }
+  None
+}
+
+///|
 test "analyze section sizes for core module" {
   let bytes = sample_module_bytes()
   guard analyze_section_sizes(bytes) is Ok(sections) else {
@@ -2905,6 +2978,53 @@ test "analyze keep reasons honors safe-mode override" {
     return
   }
   assert_true(drop_entry.reasons.any(r => r == "export:drop"))
+}
+
+///|
+test "analyze retain paths reports root to callee chain" {
+  let bytes = sample_module_with_dead_function_bytes()
+  let config = make_optimize_config(closed_world=true, closed_world_root_exports=[
+    "main",
+  ])
+  guard analyze_retain_paths(bytes, config~) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_true(not(report.partial))
+  assert_true(report.roots.contains(1U))
+  assert_eq(report.entries.length(), 2)
+  guard find_retain_path_entry(report.entries, 1U) is Some(main_entry) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(main_entry.path, [1U])
+  assert_true(main_entry.root_reasons.any(r => r == "export:main"))
+  guard find_retain_path_entry(report.entries, 2U) is Some(helper_entry) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(helper_entry.path, [1U, 2U])
+  assert_true(helper_entry.root_reasons.any(r => r == "export:main"))
+  match find_retain_path_entry(report.entries, 3U) {
+    Some(_) => assert_true(false)
+    None => ()
+  }
+}
+
+///|
+test "analyze retain paths records element roots" {
+  let bytes = sample_module_with_call_indirect_type_gap_bytes()
+  guard analyze_retain_paths(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  guard find_retain_path_entry(report.entries, 0U) is Some(run_entry) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(run_entry.path, [0U])
+  assert_true(run_entry.root_reasons.any(r => r == "export:run"))
+  assert_true(run_entry.root_reasons.any(r => r == "element-ref.func"))
 }
 
 ///|
@@ -5458,6 +5578,44 @@ test "runtime profiler profiles zero-arg exports" {
   assert_true(profile.instantiate_ns > 0UL)
   assert_true(profile.functions.length() > 0)
   assert_true(profile.functions.any(f => f.calls == 5U))
+}
+
+///|
+test "analyze hotness-size matrix combines runtime and body-size signals" {
+  let bytes = sample_module_with_hot_size_runtime_gap_bytes()
+  guard analyze_hotness_size_matrix(bytes, iterations=200U) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.entries.length(), 2)
+  assert_eq(report.unresolved_exports.length(), 0)
+  assert_true(report.hot_threshold_ns > 0UL)
+  assert_true(report.large_threshold_bytes > 0U)
+  guard find_hotness_size_entry(report.entries, "heavy") is Some(heavy_entry) else {
+    assert_true(false)
+    return
+  }
+  guard find_hotness_size_entry(report.entries, "light") is Some(light_entry) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(heavy_entry.function_index, Some(1U))
+  assert_eq(light_entry.function_index, Some(0U))
+  assert_true(heavy_entry.body_bytes > light_entry.body_bytes)
+  assert_true(heavy_entry.bucket.contains("large"))
+  assert_true(light_entry.bucket.contains("small"))
+  guard find_hotness_size_bucket(report.buckets, heavy_entry.bucket)
+    is Some(heavy_bucket) else {
+    assert_true(false)
+    return
+  }
+  guard find_hotness_size_bucket(report.buckets, light_entry.bucket)
+    is Some(light_bucket) else {
+    assert_true(false)
+    return
+  }
+  assert_true(heavy_bucket.count >= 1U)
+  assert_true(light_bucket.count >= 1U)
 }
 
 ///|
