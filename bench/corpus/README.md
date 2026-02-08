@@ -1,6 +1,6 @@
 # Benchmark Corpus
 
-`walyze` のベンチセット初期版。
+`wite` のベンチセット初期版。
 
 - `core/binaryen`: Binaryen の core wasm テスト素材
 - `core/pglite`: pglite の core wasm（size KPI 拡張ターゲット）

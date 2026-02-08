@@ -1,5 +1,5 @@
 ///|
-pub suberror WalyzeError {
+pub suberror WiteError {
   UnexpectedEof
   InvalidMagic
   UnsupportedVersion(String)
@@ -7,18 +7,18 @@ pub suberror WalyzeError {
 }
 
 ///|
-fn walyze_error_to_string(err : WalyzeError) -> String {
+fn wite_error_to_string(err : WiteError) -> String {
   match err {
-    WalyzeError::UnexpectedEof => "unexpected eof"
-    WalyzeError::InvalidMagic => "invalid wasm magic"
-    WalyzeError::UnsupportedVersion(msg) => "unsupported version: " + msg
-    WalyzeError::InvalidFormat(msg) => "invalid format: " + msg
+    WiteError::UnexpectedEof => "unexpected eof"
+    WiteError::InvalidMagic => "invalid wasm magic"
+    WiteError::UnsupportedVersion(msg) => "unsupported version: " + msg
+    WiteError::InvalidFormat(msg) => "invalid format: " + msg
   }
 }
 
 ///|
-pub fn error_to_string(err : WalyzeError) -> String {
-  walyze_error_to_string(err)
+pub fn error_to_string(err : WiteError) -> String {
+  wite_error_to_string(err)
 }
 
 ///|
@@ -730,25 +730,25 @@ fn Cursor::set_pos(self : Cursor, pos : Int) -> Unit {
 }
 
 ///|
-fn Cursor::read_byte(self : Cursor) -> Byte raise WalyzeError {
+fn Cursor::read_byte(self : Cursor) -> Byte raise WiteError {
   if self.pos < self.bytes.length() {
     let b = self.bytes.unsafe_get(self.pos)
     self.pos = self.pos + 1
     b
   } else {
-    raise WalyzeError::UnexpectedEof
+    raise WiteError::UnexpectedEof
   }
 }
 
 ///|
-fn Cursor::read_u32_leb128(self : Cursor) -> UInt raise WalyzeError {
-  fn read_loop(shift : Int, result : UInt) -> UInt raise WalyzeError {
+fn Cursor::read_u32_leb128(self : Cursor) -> UInt raise WiteError {
+  fn read_loop(shift : Int, result : UInt) -> UInt raise WiteError {
     let byte = self.read_byte()
     if shift >= 28 && (byte & 0x80) != 0 {
-      raise WalyzeError::InvalidFormat("LEB128 u32 overflow")
+      raise WiteError::InvalidFormat("LEB128 u32 overflow")
     }
     if shift >= 28 && byte > 0x0F {
-      raise WalyzeError::InvalidFormat("LEB128 u32 value overflow")
+      raise WiteError::InvalidFormat("LEB128 u32 value overflow")
     }
     let value = byte.land(0x7f).to_uint() << shift
     let next = result | value
@@ -763,14 +763,14 @@ fn Cursor::read_u32_leb128(self : Cursor) -> UInt raise WalyzeError {
 }
 
 ///|
-fn Cursor::skip(self : Cursor, n : Int) -> Unit raise WalyzeError {
+fn Cursor::skip(self : Cursor, n : Int) -> Unit raise WiteError {
   if n < 0 {
-    raise WalyzeError::InvalidFormat("negative skip")
+    raise WiteError::InvalidFormat("negative skip")
   }
   if self.pos + n <= self.bytes.length() {
     self.pos = self.pos + n
   } else {
-    raise WalyzeError::UnexpectedEof
+    raise WiteError::UnexpectedEof
   }
 }
 
@@ -784,57 +784,57 @@ priv struct RawSection {
 }
 
 ///|
-fn ensure_core_header(bytes : Bytes) -> Unit raise WalyzeError {
+fn ensure_core_header(bytes : Bytes) -> Unit raise WiteError {
   if bytes.length() < 8 {
-    raise WalyzeError::UnexpectedEof
+    raise WiteError::UnexpectedEof
   }
   if bytes[0] != 0x00U.to_byte() ||
     bytes[1] != 0x61U.to_byte() ||
     bytes[2] != 0x73U.to_byte() ||
     bytes[3] != 0x6dU.to_byte() {
-    raise WalyzeError::InvalidMagic
+    raise WiteError::InvalidMagic
   }
   if bytes[4] != 0x01U.to_byte() ||
     bytes[5] != 0x00U.to_byte() ||
     bytes[6] != 0x00U.to_byte() ||
     bytes[7] != 0x00U.to_byte() {
-    raise WalyzeError::UnsupportedVersion("expected core wasm version 1")
+    raise WiteError::UnsupportedVersion("expected core wasm version 1")
   }
 }
 
 ///|
-fn ensure_component_header(bytes : Bytes) -> Unit raise WalyzeError {
+fn ensure_component_header(bytes : Bytes) -> Unit raise WiteError {
   if bytes.length() < 8 {
-    raise WalyzeError::UnexpectedEof
+    raise WiteError::UnexpectedEof
   }
   if bytes[0] != 0x00U.to_byte() ||
     bytes[1] != 0x61U.to_byte() ||
     bytes[2] != 0x73U.to_byte() ||
     bytes[3] != 0x6dU.to_byte() {
-    raise WalyzeError::InvalidMagic
+    raise WiteError::InvalidMagic
   }
   if bytes[4] != 0x0dU.to_byte() ||
     bytes[5] != 0x00U.to_byte() ||
     bytes[6] != 0x01U.to_byte() ||
     bytes[7] != 0x00U.to_byte() {
-    raise WalyzeError::UnsupportedVersion(
+    raise WiteError::UnsupportedVersion(
       "expected component wasm header 0d 00 01 00",
     )
   }
 }
 
 ///|
-fn parse_custom_section_name(payload : Bytes) -> String raise WalyzeError {
+fn parse_custom_section_name(payload : Bytes) -> String raise WiteError {
   let parser = Cursor::new(payload)
   let name_len_u = parser.read_u32_leb128()
   let name_len = UInt::reinterpret_as_int(name_len_u)
   if name_len < 0 {
-    raise WalyzeError::InvalidFormat("custom section name length overflow")
+    raise WiteError::InvalidFormat("custom section name length overflow")
   }
   let start = parser.get_pos()
   let end_ = start + name_len
   if end_ > payload.length() {
-    raise WalyzeError::UnexpectedEof
+    raise WiteError::UnexpectedEof
   }
   let out : Array[Char] = []
   for b in payload[start:end_] {
@@ -850,7 +850,7 @@ fn parse_custom_section_name(payload : Bytes) -> String raise WalyzeError {
 fn parse_sections_from(
   bytes : Bytes,
   start : Int,
-) -> Array[RawSection] raise WalyzeError {
+) -> Array[RawSection] raise WiteError {
   let parser = Cursor::new(bytes)
   parser.set_pos(start)
   let sections : Array[RawSection] = []
@@ -860,12 +860,12 @@ fn parse_sections_from(
     let payload_size_u = parser.read_u32_leb128()
     let payload_size = UInt::reinterpret_as_int(payload_size_u)
     if payload_size < 0 {
-      raise WalyzeError::InvalidFormat("section size overflow")
+      raise WiteError::InvalidFormat("section size overflow")
     }
     let payload_start = parser.get_pos()
     let section_end = payload_start + payload_size
     if section_end > bytes.length() {
-      raise WalyzeError::UnexpectedEof
+      raise WiteError::UnexpectedEof
     }
     let custom_name = if section_id == 0U {
       let payload = bytes[payload_start:section_end].to_bytes()
@@ -888,7 +888,7 @@ fn parse_sections_from(
 ///|
 fn parse_core_sections_raise(
   bytes : Bytes,
-) -> Array[RawSection] raise WalyzeError {
+) -> Array[RawSection] raise WiteError {
   ensure_core_header(bytes)
   parse_sections_from(bytes, 8)
 }
@@ -896,7 +896,7 @@ fn parse_core_sections_raise(
 ///|
 fn parse_component_sections_raise(
   bytes : Bytes,
-) -> Array[RawSection] raise WalyzeError {
+) -> Array[RawSection] raise WiteError {
   ensure_component_header(bytes)
   parse_sections_from(bytes, 8)
 }
@@ -996,7 +996,7 @@ fn summarize_sections(
 }
 
 ///|
-fn parse_vec_count(payload : Bytes) -> UInt raise WalyzeError {
+fn parse_vec_count(payload : Bytes) -> UInt raise WiteError {
   let parser = Cursor::new(payload)
   parser.read_u32_leb128()
 }
@@ -1004,7 +1004,7 @@ fn parse_vec_count(payload : Bytes) -> UInt raise WalyzeError {
 ///|
 fn parse_code_section_metrics(
   payload : Bytes,
-) -> (UInt, UInt) raise WalyzeError {
+) -> (UInt, UInt) raise WiteError {
   let parser = Cursor::new(payload)
   let body_count = parser.read_u32_leb128()
   let mut total_body_bytes = 0U
@@ -1012,7 +1012,7 @@ fn parse_code_section_metrics(
     let body_size_u = parser.read_u32_leb128()
     let body_size = UInt::reinterpret_as_int(body_size_u)
     if body_size < 0 {
-      raise WalyzeError::InvalidFormat("code body size overflow")
+      raise WiteError::InvalidFormat("code body size overflow")
     }
     total_body_bytes += body_size_u
     parser.skip(body_size)
@@ -1021,16 +1021,16 @@ fn parse_code_section_metrics(
 }
 
 ///|
-fn read_name_string(parser : Cursor) -> String raise WalyzeError {
+fn read_name_string(parser : Cursor) -> String raise WiteError {
   let name_len_u = parser.read_u32_leb128()
   let name_len = UInt::reinterpret_as_int(name_len_u)
   if name_len < 0 {
-    raise WalyzeError::InvalidFormat("name length overflow")
+    raise WiteError::InvalidFormat("name length overflow")
   }
   let start = parser.get_pos()
   let end_ = start + name_len
   if end_ > parser.bytes.length() {
-    raise WalyzeError::UnexpectedEof
+    raise WiteError::UnexpectedEof
   }
   let out : Array[Char] = []
   for b in parser.bytes[start:end_] {
@@ -1044,11 +1044,11 @@ fn read_name_string(parser : Cursor) -> String raise WalyzeError {
 }
 
 ///|
-fn skip_name_string(parser : Cursor) -> Unit raise WalyzeError {
+fn skip_name_string(parser : Cursor) -> Unit raise WiteError {
   let name_len_u = parser.read_u32_leb128()
   let name_len = UInt::reinterpret_as_int(name_len_u)
   if name_len < 0 {
-    raise WalyzeError::InvalidFormat("name length overflow")
+    raise WiteError::InvalidFormat("name length overflow")
   }
   parser.skip(name_len)
 }
@@ -1066,7 +1066,7 @@ fn bytes_to_name_string(bytes : Bytes) -> String {
 }
 
 ///|
-fn parse_code_body_sizes(payload : Bytes) -> Array[UInt] raise WalyzeError {
+fn parse_code_body_sizes(payload : Bytes) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let body_count = parser.read_u32_leb128()
   let body_sizes : Array[UInt] = []
@@ -1074,7 +1074,7 @@ fn parse_code_body_sizes(payload : Bytes) -> Array[UInt] raise WalyzeError {
     let body_size_u = parser.read_u32_leb128()
     let body_size = UInt::reinterpret_as_int(body_size_u)
     if body_size < 0 {
-      raise WalyzeError::InvalidFormat("code body size overflow")
+      raise WiteError::InvalidFormat("code body size overflow")
     }
     body_sizes.push(body_size_u)
     parser.skip(body_size)
@@ -1083,7 +1083,7 @@ fn parse_code_body_sizes(payload : Bytes) -> Array[UInt] raise WalyzeError {
 }
 
 ///|
-fn parse_code_bodies(payload : Bytes) -> Array[Bytes] raise WalyzeError {
+fn parse_code_bodies(payload : Bytes) -> Array[Bytes] raise WiteError {
   let parser = Cursor::new(payload)
   let body_count = parser.read_u32_leb128()
   let out : Array[Bytes] = []
@@ -1091,12 +1091,12 @@ fn parse_code_bodies(payload : Bytes) -> Array[Bytes] raise WalyzeError {
     let body_size_u = parser.read_u32_leb128()
     let body_size = UInt::reinterpret_as_int(body_size_u)
     if body_size < 0 {
-      raise WalyzeError::InvalidFormat("code body size overflow")
+      raise WiteError::InvalidFormat("code body size overflow")
     }
     let start = parser.get_pos()
     let end_ = start + body_size
     if end_ > payload.length() {
-      raise WalyzeError::UnexpectedEof
+      raise WiteError::UnexpectedEof
     }
     out.push(payload[start:end_].to_bytes())
     parser.set_pos(end_)
@@ -1105,13 +1105,13 @@ fn parse_code_bodies(payload : Bytes) -> Array[Bytes] raise WalyzeError {
 }
 
 ///|
-fn parse_start_function_index(payload : Bytes) -> UInt raise WalyzeError {
+fn parse_start_function_index(payload : Bytes) -> UInt raise WiteError {
   let parser = Cursor::new(payload)
   parser.read_u32_leb128()
 }
 
 ///|
-fn parse_limits(parser : Cursor) -> Unit raise WalyzeError {
+fn parse_limits(parser : Cursor) -> Unit raise WiteError {
   let flags = parser.read_u32_leb128()
   ignore(parser.read_u32_leb128())
   if (flags & 0x01U) != 0U {
@@ -1120,7 +1120,7 @@ fn parse_limits(parser : Cursor) -> Unit raise WalyzeError {
 }
 
 ///|
-fn parse_import_function_count(payload : Bytes) -> UInt raise WalyzeError {
+fn parse_import_function_count(payload : Bytes) -> UInt raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let mut function_import_count = 0U
@@ -1147,7 +1147,7 @@ fn parse_import_function_count(payload : Bytes) -> UInt raise WalyzeError {
         ignore(parser.read_u32_leb128())
       }
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported import descriptor kind: " + kind.to_string(),
         )
     }
@@ -1165,7 +1165,7 @@ priv struct ImportSectionEntry {
 ///|
 fn parse_import_section_entries_raise(
   payload : Bytes,
-) -> Array[ImportSectionEntry] raise WalyzeError {
+) -> Array[ImportSectionEntry] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[ImportSectionEntry] = []
@@ -1214,7 +1214,7 @@ fn parse_import_section_entries_raise(
         current
       }
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported import descriptor kind: " + kind.to_string(),
         )
     }
@@ -1230,7 +1230,7 @@ fn rewrite_import_section_payload_for_keep_raise(
   keep_table_imports : Array[Bool],
   keep_memory_imports : Array[Bool],
   keep_global_imports : Array[Bool],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let entries = parse_import_section_entries_raise(payload)
   let kept_entries : Array[Bytes] = []
   let mut removed_count = 0U
@@ -1239,13 +1239,13 @@ fn rewrite_import_section_payload_for_keep_raise(
     if entry.kind == 1U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_table_imports.length() {
-        raise WalyzeError::InvalidFormat("table import keep index out of range")
+        raise WiteError::InvalidFormat("table import keep index out of range")
       }
       keep = keep_table_imports[index]
     } else if entry.kind == 2U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_memory_imports.length() {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "memory import keep index out of range",
         )
       }
@@ -1253,7 +1253,7 @@ fn rewrite_import_section_payload_for_keep_raise(
     } else if entry.kind == 3U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_global_imports.length() {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "global import keep index out of range",
         )
       }
@@ -1280,7 +1280,7 @@ fn rewrite_import_section_payload_for_keep_kinds_raise(
   keep_table_imports : Array[Bool],
   keep_memory_imports : Array[Bool],
   keep_global_imports : Array[Bool],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let entries = parse_import_section_entries_raise(payload)
   let kept_entries : Array[Bytes] = []
   let mut removed_count = 0U
@@ -1289,7 +1289,7 @@ fn rewrite_import_section_payload_for_keep_kinds_raise(
     if entry.kind == 0U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_function_imports.length() {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "function import keep index out of range",
         )
       }
@@ -1297,13 +1297,13 @@ fn rewrite_import_section_payload_for_keep_kinds_raise(
     } else if entry.kind == 1U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_table_imports.length() {
-        raise WalyzeError::InvalidFormat("table import keep index out of range")
+        raise WiteError::InvalidFormat("table import keep index out of range")
       }
       keep = keep_table_imports[index]
     } else if entry.kind == 2U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_memory_imports.length() {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "memory import keep index out of range",
         )
       }
@@ -1311,7 +1311,7 @@ fn rewrite_import_section_payload_for_keep_kinds_raise(
     } else if entry.kind == 3U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_global_imports.length() {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "global import keep index out of range",
         )
       }
@@ -1334,7 +1334,7 @@ fn rewrite_import_section_payload_for_keep_kinds_raise(
 ///|
 fn parse_import_function_type_indices(
   payload : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
@@ -1358,7 +1358,7 @@ fn parse_import_function_type_indices(
         ignore(parser.read_u32_leb128())
       }
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported import descriptor kind: " + kind.to_string(),
         )
     }
@@ -1385,7 +1385,7 @@ fn map_push_string_array(
 ///|
 fn parse_export_function_names(
   payload : Bytes,
-) -> Map[UInt, Array[String]] raise WalyzeError {
+) -> Map[UInt, Array[String]] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Map[UInt, Array[String]] = {}
@@ -1401,21 +1401,21 @@ fn parse_export_function_names(
 }
 
 ///|
-fn parse_export_table_indices(payload : Bytes) -> Array[UInt] raise WalyzeError {
+fn parse_export_table_indices(payload : Bytes) -> Array[UInt] raise WiteError {
   parse_export_indices_by_kind(payload, 1U)
 }
 
 ///|
 fn parse_export_memory_indices(
   payload : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   parse_export_indices_by_kind(payload, 2U)
 }
 
 ///|
 fn parse_export_global_indices(
   payload : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   parse_export_indices_by_kind(payload, 3U)
 }
 
@@ -1423,7 +1423,7 @@ fn parse_export_global_indices(
 fn parse_export_indices_by_kind(
   payload : Bytes,
   kind_filter : UInt,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
@@ -1452,12 +1452,12 @@ fn merge_export_function_names(
 ///|
 fn parse_custom_section_name_prefix_end(
   payload : Bytes,
-) -> Int raise WalyzeError {
+) -> Int raise WiteError {
   let parser = Cursor::new(payload)
   let name_len_u = parser.read_u32_leb128()
   let name_len = UInt::reinterpret_as_int(name_len_u)
   if name_len < 0 {
-    raise WalyzeError::InvalidFormat("custom section name length overflow")
+    raise WiteError::InvalidFormat("custom section name length overflow")
   }
   parser.skip(name_len)
   parser.get_pos()
@@ -1466,7 +1466,7 @@ fn parse_custom_section_name_prefix_end(
 ///|
 fn parse_name_section_function_names(
   payload : Bytes,
-) -> Map[UInt, String] raise WalyzeError {
+) -> Map[UInt, String] raise WiteError {
   let parser = Cursor::new(payload)
   parser.set_pos(parse_custom_section_name_prefix_end(payload))
   let out : Map[UInt, String] = {}
@@ -1475,12 +1475,12 @@ fn parse_name_section_function_names(
     let subsection_size_u = parser.read_u32_leb128()
     let subsection_size = UInt::reinterpret_as_int(subsection_size_u)
     if subsection_size < 0 {
-      raise WalyzeError::InvalidFormat("name subsection size overflow")
+      raise WiteError::InvalidFormat("name subsection size overflow")
     }
     let subsection_start = parser.get_pos()
     let subsection_end = subsection_start + subsection_size
     if subsection_end > payload.length() {
-      raise WalyzeError::UnexpectedEof
+      raise WiteError::UnexpectedEof
     }
     if subsection_id == 1U {
       let count = parser.read_u32_leb128()
@@ -1545,13 +1545,13 @@ fn append_encoded_section(
 fn skip_sleb_immediate(
   parser : Cursor,
   max_bytes : Int,
-) -> Unit raise WalyzeError {
+) -> Unit raise WiteError {
   let mut consumed = 0
   while true {
     let b = parser.read_byte()
     consumed += 1
     if consumed > max_bytes {
-      raise WalyzeError::InvalidFormat("sleb immediate overflow")
+      raise WiteError::InvalidFormat("sleb immediate overflow")
     }
     if (b & 0x80) == 0 {
       break
@@ -1560,7 +1560,7 @@ fn skip_sleb_immediate(
 }
 
 ///|
-fn skip_block_type(parser : Cursor) -> Unit raise WalyzeError {
+fn skip_block_type(parser : Cursor) -> Unit raise WiteError {
   let first = parser.read_byte()
   match first.to_uint() {
     0x40U | 0x7fU | 0x7eU | 0x7dU | 0x7cU | 0x7bU | 0x70U | 0x6fU => ()
@@ -1571,7 +1571,7 @@ fn skip_block_type(parser : Cursor) -> Unit raise WalyzeError {
           let b = parser.read_byte()
           consumed += 1
           if consumed > 5 {
-            raise WalyzeError::InvalidFormat("block type s33 overflow")
+            raise WiteError::InvalidFormat("block type s33 overflow")
           }
           if (b & 0x80) == 0 {
             break
@@ -1582,7 +1582,7 @@ fn skip_block_type(parser : Cursor) -> Unit raise WalyzeError {
 }
 
 ///|
-fn skip_heap_type(parser : Cursor) -> Unit raise WalyzeError {
+fn skip_heap_type(parser : Cursor) -> Unit raise WiteError {
   let first = parser.read_byte()
   match first.to_uint() {
     0x70U | 0x6fU => ()
@@ -1593,7 +1593,7 @@ fn skip_heap_type(parser : Cursor) -> Unit raise WalyzeError {
           let b = parser.read_byte()
           consumed += 1
           if consumed > 5 {
-            raise WalyzeError::InvalidFormat("heap type s33 overflow")
+            raise WiteError::InvalidFormat("heap type s33 overflow")
           }
           if (b & 0x80) == 0 {
             break
@@ -1604,19 +1604,19 @@ fn skip_heap_type(parser : Cursor) -> Unit raise WalyzeError {
 }
 
 ///|
-fn skip_memarg(parser : Cursor) -> Unit raise WalyzeError {
+fn skip_memarg(parser : Cursor) -> Unit raise WiteError {
   ignore(parser.read_u32_leb128())
   ignore(parser.read_u32_leb128())
 }
 
 ///|
-fn skip_memarg_lane(parser : Cursor) -> Unit raise WalyzeError {
+fn skip_memarg_lane(parser : Cursor) -> Unit raise WiteError {
   skip_memarg(parser)
   ignore(parser.read_byte())
 }
 
 ///|
-fn skip_fc_prefixed_immediate(parser : Cursor) -> Unit raise WalyzeError {
+fn skip_fc_prefixed_immediate(parser : Cursor) -> Unit raise WiteError {
   let subopcode = parser.read_u32_leb128()
   match subopcode {
     0U..=7U => ()
@@ -1641,14 +1641,14 @@ fn skip_fc_prefixed_immediate(parser : Cursor) -> Unit raise WalyzeError {
     }
     15U | 16U | 17U => ignore(parser.read_u32_leb128())
     _ =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "unsupported 0xfc subopcode in parser: " + subopcode.to_string(),
       )
   }
 }
 
 ///|
-fn skip_fd_prefixed_immediate(parser : Cursor) -> Unit raise WalyzeError {
+fn skip_fd_prefixed_immediate(parser : Cursor) -> Unit raise WiteError {
   let subopcode = parser.read_u32_leb128()
   match subopcode {
     0x00U..=0x0bU | 0x5cU | 0x5dU => skip_memarg(parser)
@@ -1657,7 +1657,7 @@ fn skip_fd_prefixed_immediate(parser : Cursor) -> Unit raise WalyzeError {
     0x54U..=0x5bU => skip_memarg_lane(parser)
     0x0eU..=0x14U | 0x23U..=0x53U | 0x5eU..=0xffU => ()
     _ =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "unsupported 0xfd subopcode in parser: " + subopcode.to_string(),
       )
   }
@@ -1667,7 +1667,7 @@ fn skip_fd_prefixed_immediate(parser : Cursor) -> Unit raise WalyzeError {
 fn skip_instruction_immediate_raise(
   parser : Cursor,
   opcode : UInt,
-) -> Unit raise WalyzeError {
+) -> Unit raise WiteError {
   match opcode {
     0x02U | 0x03U | 0x04U => skip_block_type(parser)
     0x0cU
@@ -1712,7 +1712,7 @@ fn skip_instruction_immediate_raise(
     0xd0U => skip_heap_type(parser)
     0x00U | 0x01U | 0x05U | 0x0bU | 0x0fU | 0x1aU | 0x1bU | 0xd1U => ()
     0x45U..=0xc4U => ()
-    _ => raise WalyzeError::InvalidFormat("unsupported opcode in parser")
+    _ => raise WiteError::InvalidFormat("unsupported opcode in parser")
   }
 }
 
@@ -1733,7 +1733,7 @@ priv struct OpenCodeBlock {
 ///|
 fn parse_instruction_spans_raise(
   instr_bytes : Bytes,
-) -> Array[InstrSpan] raise WalyzeError {
+) -> Array[InstrSpan] raise WiteError {
   let parser = Cursor::new(instr_bytes)
   let spans : Array[InstrSpan] = []
   while not(parser.eof()) {
@@ -1806,7 +1806,7 @@ fn collect_direct_callees(
 ///|
 fn collect_direct_callees_from_body_raise(
   body : Bytes,
-) -> (Array[UInt], Bool) raise WalyzeError {
+) -> (Array[UInt], Bool) raise WiteError {
   let prefix_end = parse_local_decl_prefix_end(body)
   let parser = Cursor::new(body)
   parser.set_pos(prefix_end)
@@ -1828,16 +1828,16 @@ fn collect_direct_callees_from_body_raise(
 }
 
 ///|
-fn read_name_bytes(parser : Cursor) -> Bytes raise WalyzeError {
+fn read_name_bytes(parser : Cursor) -> Bytes raise WiteError {
   let name_len_u = parser.read_u32_leb128()
   let name_len = UInt::reinterpret_as_int(name_len_u)
   if name_len < 0 {
-    raise WalyzeError::InvalidFormat("name length overflow")
+    raise WiteError::InvalidFormat("name length overflow")
   }
   let start = parser.get_pos()
   let end_ = start + name_len
   if end_ > parser.bytes.length() {
-    raise WalyzeError::UnexpectedEof
+    raise WiteError::UnexpectedEof
   }
   parser.set_pos(end_)
   parser.bytes[start:end_].to_bytes()
@@ -1853,11 +1853,11 @@ fn append_name_bytes(out : Array[Byte], name : Bytes) -> Unit {
 fn remap_function_index_raise(
   index : UInt,
   index_map : Map[UInt, UInt],
-) -> UInt raise WalyzeError {
+) -> UInt raise WiteError {
   match index_map.get(index) {
     Some(v) => v
     None =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "dce remap missing function index: " + index.to_string(),
       )
   }
@@ -1867,25 +1867,25 @@ fn remap_function_index_raise(
 fn remap_type_index_raise(
   index : UInt,
   type_index_map : Map[UInt, UInt],
-) -> UInt raise WalyzeError {
+) -> UInt raise WiteError {
   match type_index_map.get(index) {
     Some(v) => v
     None =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type remap missing index: " + index.to_string(),
       )
   }
 }
 
 ///|
-fn read_val_type_bytes_raise(parser : Cursor) -> Bytes raise WalyzeError {
+fn read_val_type_bytes_raise(parser : Cursor) -> Bytes raise WiteError {
   let start = parser.get_pos()
   let code = parser.read_byte().to_uint()
   match code {
     0x7fU | 0x7eU | 0x7dU | 0x7cU | 0x7bU | 0x70U | 0x6fU => ()
     0x63U | 0x64U => skip_heap_type(parser)
     _ =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "unsupported value type in global section: " + code.to_string(),
       )
   }
@@ -1894,14 +1894,14 @@ fn read_val_type_bytes_raise(parser : Cursor) -> Bytes raise WalyzeError {
 }
 
 ///|
-fn read_ref_type_bytes_raise(parser : Cursor) -> Bytes raise WalyzeError {
+fn read_ref_type_bytes_raise(parser : Cursor) -> Bytes raise WiteError {
   let start = parser.get_pos()
   let code = parser.read_byte().to_uint()
   match code {
     0x70U | 0x6fU => ()
     0x63U | 0x64U => skip_heap_type(parser)
     _ =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "unsupported reference type in element section: " + code.to_string(),
       )
   }
@@ -1978,7 +1978,7 @@ fn type_bytes_equal_with_gc_canonical_map(
 fn read_storage_type_bytes_raise(
   parser : Cursor,
   context : String,
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let start = parser.get_pos()
   let code = parser.read_byte().to_uint()
   match code {
@@ -1986,7 +1986,7 @@ fn read_storage_type_bytes_raise(
     0x7fU | 0x7eU | 0x7dU | 0x7cU | 0x7bU | 0x70U | 0x6fU => ()
     0x63U | 0x64U => skip_heap_type(parser)
     _ =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "unsupported storage type in " + context + ": " + code.to_string(),
       )
   }
@@ -2010,7 +2010,7 @@ priv struct ParsedGcTypeEntry {
 fn parse_gc_non_function_type_entry_from_raw_raise(
   raw : Bytes,
   context : String,
-) -> ParsedGcTypeEntry raise WalyzeError {
+) -> ParsedGcTypeEntry raise WiteError {
   let parser = Cursor::new(raw)
   let form = parser.read_byte().to_uint()
   let fields : Array[ParsedGcTypeField] = []
@@ -2021,7 +2021,7 @@ fn parse_gc_non_function_type_entry_from_raw_raise(
         let storage_type = read_storage_type_bytes_raise(parser, context)
         let mutability = parser.read_byte().to_uint()
         if mutability > 1U {
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "invalid field mutability in " +
             context +
             ": " +
@@ -2035,7 +2035,7 @@ fn parse_gc_non_function_type_entry_from_raw_raise(
       let storage_type = read_storage_type_bytes_raise(parser, context)
       let mutability = parser.read_byte().to_uint()
       if mutability > 1U {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "invalid array field mutability in " +
           context +
           ": " +
@@ -2045,12 +2045,12 @@ fn parse_gc_non_function_type_entry_from_raw_raise(
       fields.push({ storage_type, mutability: mutability.to_byte() })
     }
     _ =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "unsupported gc type form in " + context + ": " + form.to_string(),
       )
   }
   if not(parser.eof()) {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "trailing bytes in gc type entry in " + context,
     )
   }
@@ -2062,7 +2062,7 @@ fn gc_type_entries_equal_with_canonical_map_raise(
   left_raw : Bytes,
   right_raw : Bytes,
   gc_type_canonical_map : Map[UInt, UInt],
-) -> Bool raise WalyzeError {
+) -> Bool raise WiteError {
   if bytes_equal(left_raw, right_raw) {
     return true
   }
@@ -2096,7 +2096,7 @@ fn gc_type_entries_equal_with_canonical_map_raise(
 fn read_const_expr_bytes_raise(
   parser : Cursor,
   payload : Bytes,
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let start = parser.get_pos()
   while true {
     let opcode = parser.read_byte().to_uint()
@@ -2113,7 +2113,7 @@ fn read_const_expr_bytes_raise(
 fn rewrite_const_expr_function_indices_raise(
   expr_bytes : Bytes,
   index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let spans = parse_instruction_spans_raise(expr_bytes)
   rewrite_instruction_function_indices_raise(expr_bytes, spans, index_map)
 }
@@ -2158,7 +2158,7 @@ fn mark_visited_function_index(visited : Array[Bool], index : UInt) -> Bool {
 ///|
 fn collect_ref_func_indices_from_expr_raise(
   expr_bytes : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let spans = parse_instruction_spans_raise(expr_bytes)
   let out : Array[UInt] = []
   for span in spans {
@@ -2166,7 +2166,7 @@ fn collect_ref_func_indices_from_expr_raise(
       match decode_span_u32_immediate(expr_bytes, span) {
         Some(index) => push_unique_u32(out, index)
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode ref.func immediate in const expr",
           )
       }
@@ -2179,14 +2179,14 @@ fn collect_ref_func_indices_from_expr_raise(
 fn collect_ref_func_indices_from_instruction_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let out : Array[UInt] = []
   for span in spans {
     if span.opcode == 0xd2U {
       match decode_span_u32_immediate(instr_bytes, span) {
         Some(index) => push_unique_u32(out, index)
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode ref.func immediate in code",
           )
       }
@@ -2198,7 +2198,7 @@ fn collect_ref_func_indices_from_instruction_raise(
 ///|
 fn collect_ref_func_indices_from_code_section_raise(
   payload : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let out : Array[UInt] = []
   let bodies = parse_code_bodies(payload)
   for body in bodies {
@@ -2218,7 +2218,7 @@ fn collect_ref_func_indices_from_code_section_raise(
 ///|
 fn collect_global_get_indices_from_expr_raise(
   expr_bytes : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let spans = parse_instruction_spans_raise(expr_bytes)
   let out : Array[UInt] = []
   for span in spans {
@@ -2226,7 +2226,7 @@ fn collect_global_get_indices_from_expr_raise(
       match decode_span_u32_immediate(expr_bytes, span) {
         Some(index) => push_unique_u32(out, index)
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode global.get immediate in const expr",
           )
       }
@@ -2239,11 +2239,11 @@ fn collect_global_get_indices_from_expr_raise(
 fn remap_global_index_raise(
   index : UInt,
   global_index_map : Map[UInt, UInt],
-) -> UInt raise WalyzeError {
+) -> UInt raise WiteError {
   match global_index_map.get(index) {
     Some(v) => v
     None =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "global remap missing index: " + index.to_string(),
       )
   }
@@ -2253,11 +2253,11 @@ fn remap_global_index_raise(
 fn remap_memory_index_raise(
   index : UInt,
   memory_index_map : Map[UInt, UInt],
-) -> UInt raise WalyzeError {
+) -> UInt raise WiteError {
   match memory_index_map.get(index) {
     Some(v) => v
     None =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "memory remap missing index: " + index.to_string(),
       )
   }
@@ -2267,7 +2267,7 @@ fn remap_memory_index_raise(
 fn rewrite_const_expr_global_indices_raise(
   expr_bytes : Bytes,
   global_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let spans = parse_instruction_spans_raise(expr_bytes)
   let out : Array[Byte] = []
   for span in spans {
@@ -2280,7 +2280,7 @@ fn rewrite_const_expr_global_indices_raise(
           )
         }
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode global.get immediate",
           )
       }
@@ -2294,7 +2294,7 @@ fn rewrite_const_expr_global_indices_raise(
 ///|
 fn parse_global_section_function_refs_raise(
   payload : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
@@ -2312,7 +2312,7 @@ fn parse_global_section_function_refs_raise(
 ///|
 fn parse_element_section_function_refs_raise(
   payload : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let out : Array[UInt] = []
@@ -2404,7 +2404,7 @@ fn parse_element_section_function_refs_raise(
         }
       }
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported element segment flags in parser: " + flags.to_string(),
         )
     }
@@ -2415,7 +2415,7 @@ fn parse_element_section_function_refs_raise(
 ///|
 fn collect_used_global_indices_from_element_section_raise(
   payload : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let out : Array[UInt] = []
@@ -2507,7 +2507,7 @@ fn collect_used_global_indices_from_element_section_raise(
         }
       }
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported element segment flags in global parser: " +
           flags.to_string(),
         )
@@ -2520,7 +2520,7 @@ fn collect_used_global_indices_from_element_section_raise(
 fn rewrite_global_section_payload_for_index_map_raise(
   payload : Bytes,
   index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[Byte] = []
@@ -2543,7 +2543,7 @@ fn rewrite_global_section_payload_for_index_map_raise(
 fn rewrite_element_section_payload_for_index_map_raise(
   payload : Bytes,
   index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let out : Array[Byte] = []
@@ -2659,7 +2659,7 @@ fn rewrite_element_section_payload_for_index_map_raise(
         }
       }
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported element segment flags in rewrite: " + flags.to_string(),
         )
     }
@@ -2678,7 +2678,7 @@ priv struct GlobalSectionEntry {
 ///|
 fn parse_global_section_entries_with_refs_raise(
   payload : Bytes,
-) -> Array[GlobalSectionEntry] raise WalyzeError {
+) -> Array[GlobalSectionEntry] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[GlobalSectionEntry] = []
@@ -2701,10 +2701,10 @@ fn rewrite_global_section_payload_for_keep_local_and_global_index_map_raise(
   payload : Bytes,
   keep_local : Array[Bool],
   global_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let entries = parse_global_section_entries_with_refs_raise(payload)
   if entries.length() != keep_local.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "global section length mismatch: global=" +
       entries.length().to_string() +
       " keep=" +
@@ -2734,10 +2734,10 @@ fn rewrite_global_section_payload_for_local_order_and_global_index_map_raise(
   payload : Bytes,
   local_order : Array[UInt],
   global_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let entries = parse_global_section_entries_with_refs_raise(payload)
   if entries.length() != local_order.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "global section length mismatch for reorder: global=" +
       entries.length().to_string() +
       " order=" +
@@ -2749,7 +2749,7 @@ fn rewrite_global_section_payload_for_local_order_and_global_index_map_raise(
   for old_local_index_u in local_order {
     let old_local_index = UInt::reinterpret_as_int(old_local_index_u)
     if old_local_index < 0 || old_local_index >= entries.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "global reorder index out of range: " + old_local_index_u.to_string(),
       )
     }
@@ -2766,7 +2766,7 @@ fn rewrite_global_section_payload_for_local_order_and_global_index_map_raise(
 ///|
 fn parse_memory_section_entries_raise(
   payload : Bytes,
-) -> Array[Bytes] raise WalyzeError {
+) -> Array[Bytes] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[Bytes] = []
@@ -2783,10 +2783,10 @@ fn parse_memory_section_entries_raise(
 fn rewrite_memory_section_payload_for_keep_local_raise(
   payload : Bytes,
   keep_local : Array[Bool],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let entries = parse_memory_section_entries_raise(payload)
   if entries.length() != keep_local.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "memory section length mismatch: memory=" +
       entries.length().to_string() +
       " keep=" +
@@ -2811,10 +2811,10 @@ fn rewrite_memory_section_payload_for_keep_local_raise(
 fn rewrite_memory_section_payload_for_local_order_raise(
   payload : Bytes,
   local_order : Array[UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let entries = parse_memory_section_entries_raise(payload)
   if entries.length() != local_order.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "memory section length mismatch for reorder: memory=" +
       entries.length().to_string() +
       " order=" +
@@ -2826,7 +2826,7 @@ fn rewrite_memory_section_payload_for_local_order_raise(
   for old_local_index_u in local_order {
     let old_local_index = UInt::reinterpret_as_int(old_local_index_u)
     if old_local_index < 0 || old_local_index >= entries.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "memory reorder index out of range: " + old_local_index_u.to_string(),
       )
     }
@@ -2838,7 +2838,7 @@ fn rewrite_memory_section_payload_for_local_order_raise(
 ///|
 fn parse_table_section_entries_raise(
   payload : Bytes,
-) -> Array[Bytes] raise WalyzeError {
+) -> Array[Bytes] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[Bytes] = []
@@ -2856,10 +2856,10 @@ fn parse_table_section_entries_raise(
 fn rewrite_table_section_payload_for_keep_local_raise(
   payload : Bytes,
   keep_local : Array[Bool],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let entries = parse_table_section_entries_raise(payload)
   if entries.length() != keep_local.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "table section length mismatch: table=" +
       entries.length().to_string() +
       " keep=" +
@@ -2886,11 +2886,11 @@ fn rewrite_table_section_payload_for_keep_local_raise(
 fn remap_table_index_raise(
   index : UInt,
   table_index_map : Map[UInt, UInt],
-) -> UInt raise WalyzeError {
+) -> UInt raise WiteError {
   match table_index_map.get(index) {
     Some(v) => v
     None =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "table remap missing index: " + index.to_string(),
       )
   }
@@ -2900,11 +2900,11 @@ fn remap_table_index_raise(
 fn remap_element_segment_index_raise(
   index : UInt,
   element_index_map : Map[UInt, UInt],
-) -> UInt raise WalyzeError {
+) -> UInt raise WiteError {
   match element_index_map.get(index) {
     Some(v) => v
     None =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "element segment remap missing index: " + index.to_string(),
       )
   }
@@ -2914,11 +2914,11 @@ fn remap_element_segment_index_raise(
 fn remap_data_segment_index_raise(
   index : UInt,
   data_index_map : Map[UInt, UInt],
-) -> UInt raise WalyzeError {
+) -> UInt raise WiteError {
   match data_index_map.get(index) {
     Some(v) => v
     None =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "data segment remap missing index: " + index.to_string(),
       )
   }
@@ -2988,13 +2988,13 @@ fn index_count_in_array(counts : Array[UInt], index : UInt) -> UInt {
 fn collect_used_table_indices_from_instruction_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let out : Array[UInt] = []
   for span in spans {
     match span.opcode {
       0x11U => {
         if span.end_ <= span.start + 1 {
-          raise WalyzeError::InvalidFormat("invalid call_indirect immediate")
+          raise WiteError::InvalidFormat("invalid call_indirect immediate")
         }
         let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
         let parser = Cursor::new(imm)
@@ -3005,13 +3005,13 @@ fn collect_used_table_indices_from_instruction_raise(
         match decode_span_u32_immediate(instr_bytes, span) {
           Some(index) => push_unique_u32(out, index)
           None =>
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "failed to decode table index immediate",
             )
         }
       0xfcU => {
         if span.end_ <= span.start + 1 {
-          raise WalyzeError::InvalidFormat("invalid 0xfc immediate")
+          raise WiteError::InvalidFormat("invalid 0xfc immediate")
         }
         let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
         let parser = Cursor::new(imm)
@@ -3073,14 +3073,14 @@ fn opcode_fd_uses_memory(subopcode : UInt) -> Bool {
 fn collect_used_global_indices_from_instruction_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let out : Array[UInt] = []
   for span in spans {
     if span.opcode == 0x23U || span.opcode == 0x24U {
       match decode_span_u32_immediate(instr_bytes, span) {
         Some(index) => push_unique_u32(out, index)
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode global index immediate",
           )
       }
@@ -3093,7 +3093,7 @@ fn collect_used_global_indices_from_instruction_raise(
 fn collect_used_memory_indices_from_instruction_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let out : Array[UInt] = []
   for span in spans {
     match span.opcode {
@@ -3102,13 +3102,13 @@ fn collect_used_memory_indices_from_instruction_raise(
         match decode_span_u32_immediate(instr_bytes, span) {
           Some(index) => push_unique_u32(out, index)
           None =>
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "failed to decode memory.size/memory.grow immediate",
             )
         }
       0xfcU => {
         if span.end_ <= span.start + 1 {
-          raise WalyzeError::InvalidFormat("invalid 0xfc immediate")
+          raise WiteError::InvalidFormat("invalid 0xfc immediate")
         }
         let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
         let parser = Cursor::new(imm)
@@ -3128,7 +3128,7 @@ fn collect_used_memory_indices_from_instruction_raise(
       }
       0xfdU => {
         if span.end_ <= span.start + 1 {
-          raise WalyzeError::InvalidFormat("invalid 0xfd immediate")
+          raise WiteError::InvalidFormat("invalid 0xfd immediate")
         }
         let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
         let parser = Cursor::new(imm)
@@ -3203,13 +3203,13 @@ fn rewrite_instruction_module_indices_raise(
   global_index_map : Map[UInt, UInt],
   element_index_map : Map[UInt, UInt],
   data_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let out : Array[Byte] = []
   for span in spans {
     match span.opcode {
       0x11U => {
         if span.end_ <= span.start + 1 {
-          raise WalyzeError::InvalidFormat("invalid call_indirect immediate")
+          raise WiteError::InvalidFormat("invalid call_indirect immediate")
         }
         let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
         let parser = Cursor::new(imm)
@@ -3234,7 +3234,7 @@ fn rewrite_instruction_module_indices_raise(
             )
           }
           None =>
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "failed to decode global index immediate",
             )
         }
@@ -3247,13 +3247,13 @@ fn rewrite_instruction_module_indices_raise(
             )
           }
           None =>
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "failed to decode table index immediate",
             )
         }
       0x28U..=0x3eU => {
         if remap_memory_index_raise(0U, memory_index_map) != 0U {
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "implicit memory index remapped to non-zero",
           )
         }
@@ -3270,13 +3270,13 @@ fn rewrite_instruction_module_indices_raise(
             )
           }
           None =>
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "failed to decode memory.size/memory.grow immediate",
             )
         }
       0xfcU => {
         if span.end_ <= span.start + 1 {
-          raise WalyzeError::InvalidFormat("invalid 0xfc immediate")
+          raise WiteError::InvalidFormat("invalid 0xfc immediate")
         }
         let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
         let parser = Cursor::new(imm)
@@ -3390,7 +3390,7 @@ fn rewrite_code_body_for_module_index_map_raise(
   global_index_map : Map[UInt, UInt],
   element_index_map : Map[UInt, UInt],
   data_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let prefix_end = parse_local_decl_prefix_end(body)
   let instr_bytes = body[prefix_end:body.length()].to_bytes()
   let spans = parse_instruction_spans_raise(instr_bytes)
@@ -3411,7 +3411,7 @@ fn rewrite_code_section_payload_for_module_index_map_raise(
   global_index_map : Map[UInt, UInt],
   element_index_map : Map[UInt, UInt],
   data_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let bodies = parse_code_bodies(payload)
   let out : Array[Byte] = []
   out.append(encode_u32_leb128(bodies.length().reinterpret_as_uint())[:])
@@ -3432,7 +3432,7 @@ fn rewrite_export_section_payload_for_module_index_maps_raise(
   table_index_map : Map[UInt, UInt],
   memory_index_map : Map[UInt, UInt],
   global_index_map : Map[UInt, UInt],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let parser = Cursor::new(payload)
   let export_count = parser.read_u32_leb128()
   let out : Array[Byte] = []
@@ -3479,7 +3479,7 @@ fn rewrite_export_section_payload_for_module_index_maps_raise(
 ///|
 fn read_function_index_vector_bytes_raise(
   parser : Cursor,
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let start = parser.get_pos()
   let count = parser.read_u32_leb128()
   for _ in 0U..<count {
@@ -3494,7 +3494,7 @@ fn rewrite_const_expr_vector_global_indices_raise(
   parser : Cursor,
   payload : Bytes,
   global_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let count = parser.read_u32_leb128()
   let out : Array[Byte] = []
   out.append(encode_u32_leb128(count)[:])
@@ -3512,7 +3512,7 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
   payload : Bytes,
   table_index_map : Map[UInt, UInt],
   global_index_map : Map[UInt, UInt],
-) -> (Bytes, UInt, Map[UInt, UInt]) raise WalyzeError {
+) -> (Bytes, UInt, Map[UInt, UInt]) raise WiteError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let kept_segments : Array[Bytes] = []
@@ -3630,7 +3630,7 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
         segment_out.append(exprs[:].to_array())
       }
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported element segment flags in table rewrite: " +
           flags.to_string(),
         )
@@ -3657,12 +3657,12 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
 fn read_data_init_bytes_raise(
   parser : Cursor,
   payload : Bytes,
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let start = parser.get_pos()
   let size_u = parser.read_u32_leb128()
   let size = UInt::reinterpret_as_int(size_u)
   if size < 0 {
-    raise WalyzeError::InvalidFormat("data init size overflow")
+    raise WiteError::InvalidFormat("data init size overflow")
   }
   parser.skip(size)
   let end_ = parser.get_pos()
@@ -3672,7 +3672,7 @@ fn read_data_init_bytes_raise(
 ///|
 fn collect_used_memory_and_global_indices_from_data_section_raise(
   payload : Bytes,
-) -> (Array[UInt], Array[UInt]) raise WalyzeError {
+) -> (Array[UInt], Array[UInt]) raise WiteError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let memory_indices : Array[UInt] = []
@@ -3699,7 +3699,7 @@ fn collect_used_memory_and_global_indices_from_data_section_raise(
         ignore(read_data_init_bytes_raise(parser, payload))
       }
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported data segment flags in parser: " + flags.to_string(),
         )
     }
@@ -3712,7 +3712,7 @@ fn rewrite_data_section_payload_for_memory_global_index_map_raise(
   payload : Bytes,
   memory_index_map : Map[UInt, UInt],
   global_index_map : Map[UInt, UInt],
-) -> (Bytes, UInt, Map[UInt, UInt]) raise WalyzeError {
+) -> (Bytes, UInt, Map[UInt, UInt]) raise WiteError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let kept_segments : Array[Bytes] = []
@@ -3773,7 +3773,7 @@ fn rewrite_data_section_payload_for_memory_global_index_map_raise(
         }
       }
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported data segment flags in rewrite: " + flags.to_string(),
         )
     }
@@ -3799,7 +3799,7 @@ fn rewrite_data_section_payload_for_memory_global_index_map_raise(
 fn rewrite_export_section_payload_for_dce_raise(
   payload : Bytes,
   index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let parser = Cursor::new(payload)
   let export_count = parser.read_u32_leb128()
   let kept_entries : Array[Bytes] = []
@@ -3835,7 +3835,7 @@ fn rewrite_export_section_payload_for_dce_raise(
 fn rewrite_export_section_payload_for_keep_names_raise(
   payload : Bytes,
   keep_names : Array[String],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let parser = Cursor::new(payload)
   let export_count = parser.read_u32_leb128()
   let kept_entries : Array[Bytes] = []
@@ -3867,7 +3867,7 @@ fn rewrite_export_section_payload_for_keep_names_raise(
 fn rewrite_start_section_payload_for_dce_raise(
   payload : Bytes,
   index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let parser = Cursor::new(payload)
   let start_index = parser.read_u32_leb128()
   let remapped = remap_function_index_raise(start_index, index_map)
@@ -3877,7 +3877,7 @@ fn rewrite_start_section_payload_for_dce_raise(
 ///|
 fn parse_function_type_indices(
   payload : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
@@ -3918,7 +3918,7 @@ fn read_heap_type_and_collect_refs_raise(
   parser : Cursor,
   referenced_type_indices : Array[UInt],
   context : String,
-) -> Unit raise WalyzeError {
+) -> Unit raise WiteError {
   let bytes : Array[Byte] = []
   let first = parser.read_byte()
   bytes.push(first)
@@ -3929,7 +3929,7 @@ fn read_heap_type_and_collect_refs_raise(
       bytes.push(b)
       consumed += 1
       if consumed > 5 {
-        raise WalyzeError::InvalidFormat("heap type s33 overflow in " + context)
+        raise WiteError::InvalidFormat("heap type s33 overflow in " + context)
       }
       if (b & 0x80) == 0 {
         break
@@ -3944,7 +3944,7 @@ fn read_type_entry_val_type_refs_raise(
   parser : Cursor,
   referenced_type_indices : Array[UInt],
   context : String,
-) -> Unit raise WalyzeError {
+) -> Unit raise WiteError {
   let code = parser.read_byte().to_uint()
   match code {
     0x7fU | 0x7eU | 0x7dU | 0x7cU | 0x7bU | 0x70U | 0x6fU => ()
@@ -3953,7 +3953,7 @@ fn read_type_entry_val_type_refs_raise(
         parser, referenced_type_indices, context,
       )
     _ =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "unsupported value type in " + context + ": " + code.to_string(),
       )
   }
@@ -3964,7 +3964,7 @@ fn read_type_entry_storage_type_refs_raise(
   parser : Cursor,
   referenced_type_indices : Array[UInt],
   context : String,
-) -> Unit raise WalyzeError {
+) -> Unit raise WiteError {
   let code = parser.read_byte().to_uint()
   match code {
     0x78U | 0x77U => ()
@@ -3974,7 +3974,7 @@ fn read_type_entry_storage_type_refs_raise(
         parser, referenced_type_indices, context,
       )
     _ =>
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "unsupported storage type in " + context + ": " + code.to_string(),
       )
   }
@@ -3985,13 +3985,13 @@ fn read_type_entry_field_type_refs_raise(
   parser : Cursor,
   referenced_type_indices : Array[UInt],
   context : String,
-) -> Unit raise WalyzeError {
+) -> Unit raise WiteError {
   read_type_entry_storage_type_refs_raise(
     parser, referenced_type_indices, context,
   )
   let mutability = parser.read_byte().to_uint()
   if mutability > 1U {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "invalid field mutability in " + context + ": " + mutability.to_string(),
     )
   }
@@ -4001,7 +4001,7 @@ fn read_type_entry_field_type_refs_raise(
 fn parse_type_section_entries_with_refs_raise(
   payload : Bytes,
   context : String,
-) -> Array[ParsedTypeSectionEntry] raise WalyzeError {
+) -> Array[ParsedTypeSectionEntry] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[ParsedTypeSectionEntry] = []
@@ -4037,7 +4037,7 @@ fn parse_type_section_entries_with_refs_raise(
           parser, referenced_type_indices, context,
         )
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported type form in " + context + ": " + form.to_string(),
         )
     }
@@ -4054,7 +4054,7 @@ fn parse_type_section_entries_with_refs_raise(
 ///|
 fn parse_type_section_entries_raise(
   payload : Bytes,
-) -> Array[Bytes] raise WalyzeError {
+) -> Array[Bytes] raise WiteError {
   let parsed = parse_type_section_entries_with_refs_raise(
     payload, "type parser",
   )
@@ -4075,14 +4075,14 @@ priv struct FunctionTypeEntry {
 fn parse_function_type_entries_raise(
   payload : Bytes,
   context : String,
-) -> Array[FunctionTypeEntry] raise WalyzeError {
+) -> Array[FunctionTypeEntry] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[FunctionTypeEntry] = []
   for _ in 0U..<count {
     let form = parser.read_byte().to_uint()
     if form != 0x60U {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "unsupported type form in " + context + ": " + form.to_string(),
       )
     }
@@ -4105,11 +4105,11 @@ fn parse_function_type_entries_raise(
 fn parse_function_type_entry_from_raw_raise(
   raw : Bytes,
   context : String,
-) -> FunctionTypeEntry raise WalyzeError {
+) -> FunctionTypeEntry raise WiteError {
   let parser = Cursor::new(raw)
   let form = parser.read_byte().to_uint()
   if form != 0x60U {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "unsupported type form in " + context + ": " + form.to_string(),
     )
   }
@@ -4124,7 +4124,7 @@ fn parse_function_type_entry_from_raw_raise(
     results.push(read_val_type_bytes_raise(parser))
   }
   if not(parser.eof()) {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "trailing bytes in function type raw entry in " + context,
     )
   }
@@ -4135,11 +4135,11 @@ fn parse_function_type_entry_from_raw_raise(
 fn parse_function_type_param_count_from_raw_raise(
   raw : Bytes,
   context : String,
-) -> UInt raise WalyzeError {
+) -> UInt raise WiteError {
   let parser = Cursor::new(raw)
   let form = parser.read_byte().to_uint()
   if form != 0x60U {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "unsupported type form in " + context + ": " + form.to_string(),
     )
   }
@@ -4152,7 +4152,7 @@ fn parse_function_type_param_count_from_raw_raise(
     ignore(read_val_type_bytes_raise(parser))
   }
   if not(parser.eof()) {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "trailing bytes in function type raw entry in " + context,
     )
   }
@@ -4223,10 +4223,10 @@ fn encode_code_section_payload_from_bodies(bodies : Array[Bytes]) -> Bytes {
 fn rewrite_type_section_payload_for_keep_raise(
   payload : Bytes,
   keep_types : Array[Bool],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let entries = parse_type_section_entries_raise(payload)
   if entries.length() != keep_types.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "type section length mismatch: type=" +
       entries.length().to_string() +
       " keep=" +
@@ -4251,10 +4251,10 @@ fn rewrite_type_section_payload_for_keep_raise(
 fn rewrite_function_section_payload_for_dce_raise(
   payload : Bytes,
   keep_local : Array[Bool],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let types = parse_function_type_indices(payload)
   if types.length() != keep_local.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "dce function section length mismatch: function=" +
       types.length().to_string() +
       " keep=" +
@@ -4279,7 +4279,7 @@ fn rewrite_function_section_payload_for_dce_raise(
 fn rewrite_function_section_payload_for_type_index_map_raise(
   payload : Bytes,
   type_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[Byte] = []
@@ -4296,7 +4296,7 @@ fn rewrite_function_section_payload_for_type_index_map_raise(
 ///|
 fn collect_used_type_indices_from_import_section_raise(
   payload : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
@@ -4316,11 +4316,11 @@ fn collect_used_type_indices_from_import_section_raise(
         ignore(parser.read_byte())
       }
       4U =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "tag import is not supported in remove-unused-types",
         )
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported import descriptor kind in remove-unused-types: " +
           kind.to_string(),
         )
@@ -4333,7 +4333,7 @@ fn collect_used_type_indices_from_import_section_raise(
 fn rewrite_import_section_payload_for_type_index_map_raise(
   payload : Bytes,
   type_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[Byte] = []
@@ -4370,11 +4370,11 @@ fn rewrite_import_section_payload_for_type_index_map_raise(
         out.push(parser.read_byte())
       }
       4U =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "tag import is not supported in remove-unused-types",
         )
       _ =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "unsupported import descriptor kind in remove-unused-types: " +
           kind.to_string(),
         )
@@ -4388,18 +4388,18 @@ fn rewrite_instruction_function_indices_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let out : Array[Byte] = []
   for span in spans {
     if span.opcode == 0x10U || span.opcode == 0xd2U {
       if span.end_ <= span.start + 1 {
-        raise WalyzeError::InvalidFormat("invalid call/ref.func immediate")
+        raise WiteError::InvalidFormat("invalid call/ref.func immediate")
       }
       let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
       let old_index = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode function index immediate",
           )
       }
@@ -4417,12 +4417,12 @@ fn rewrite_instruction_function_indices_raise(
 fn rewrite_code_body_for_dce_raise(
   body_bytes : Bytes,
   index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let prefix_end = parse_local_decl_prefix_end(body_bytes)
   let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
-    None => raise WalyzeError::InvalidFormat("unsupported opcode in dce apply")
+    None => raise WiteError::InvalidFormat("unsupported opcode in dce apply")
   }
   let rewritten_instr = rewrite_instruction_function_indices_raise(
     instr_bytes, spans, index_map,
@@ -4437,10 +4437,10 @@ fn rewrite_code_section_payload_for_dce_raise(
   payload : Bytes,
   keep_local : Array[Bool],
   index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let bodies = parse_code_bodies(payload)
   if bodies.length() != keep_local.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "dce code section length mismatch: code=" +
       bodies.length().to_string() +
       " keep=" +
@@ -4469,7 +4469,7 @@ fn decode_call_indirect_immediate(imm : Bytes) -> (UInt, UInt)? {
     let type_index = parser.read_u32_leb128()
     let table_index = parser.read_u32_leb128()
     if not(parser.eof()) {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "call_indirect immediate has trailing bytes",
       )
     }
@@ -4485,18 +4485,18 @@ fn decode_call_indirect_immediate(imm : Bytes) -> (UInt, UInt)? {
 fn collect_used_type_indices_from_instruction_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let out : Array[UInt] = []
   for span in spans {
     if span.opcode == 0x11U {
       if span.end_ <= span.start + 1 {
-        raise WalyzeError::InvalidFormat("invalid call_indirect immediate")
+        raise WiteError::InvalidFormat("invalid call_indirect immediate")
       }
       let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
       match decode_call_indirect_immediate(imm) {
         Some((type_index, _table_index)) => push_unique_u32(out, type_index)
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode call_indirect immediate",
           )
       }
@@ -4508,7 +4508,7 @@ fn collect_used_type_indices_from_instruction_raise(
 ///|
 fn collect_used_type_indices_from_code_section_raise(
   payload : Bytes,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let out : Array[UInt] = []
   let bodies = parse_code_bodies(payload)
   for body in bodies {
@@ -4530,19 +4530,19 @@ fn rewrite_instruction_type_indices_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   type_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let out : Array[Byte] = []
   for span in spans {
     if span.opcode == 0x11U {
       if span.end_ <= span.start + 1 {
-        raise WalyzeError::InvalidFormat("invalid call_indirect immediate")
+        raise WiteError::InvalidFormat("invalid call_indirect immediate")
       }
       let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
       let (old_type_index, table_index) = match
         decode_call_indirect_immediate(imm) {
         Some(v) => v
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode call_indirect immediate",
           )
       }
@@ -4564,7 +4564,7 @@ fn rewrite_instruction_type_indices_raise(
 fn rewrite_code_body_for_type_index_map_raise(
   body_bytes : Bytes,
   type_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let prefix_end = parse_local_decl_prefix_end(body_bytes)
   let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
   let spans = parse_instruction_spans_raise(instr_bytes)
@@ -4580,7 +4580,7 @@ fn rewrite_code_body_for_type_index_map_raise(
 fn rewrite_code_section_payload_for_type_index_map_raise(
   payload : Bytes,
   type_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let bodies = parse_code_bodies(payload)
   let out : Array[Byte] = []
   out.append(encode_u32_leb128(bodies.length().reinterpret_as_uint())[:])
@@ -4599,7 +4599,7 @@ fn collect_used_param_indices_from_instruction_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   param_count : UInt,
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let out : Array[UInt] = []
   for span in spans {
     if span.opcode == 0x20U || span.opcode == 0x21U || span.opcode == 0x22U {
@@ -4609,7 +4609,7 @@ fn collect_used_param_indices_from_instruction_raise(
             push_unique_u32(out, local_index)
           }
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode local index immediate",
           )
       }
@@ -4639,12 +4639,12 @@ fn remap_local_index_for_signature_pruning_raise(
   local_index : UInt,
   old_param_count : UInt,
   removed_param_count : UInt,
-) -> UInt raise WalyzeError {
+) -> UInt raise WiteError {
   if removed_param_count == 0U {
     return local_index
   }
   if old_param_count < removed_param_count {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "invalid signature-prune param count: old=" +
       old_param_count.to_string() +
       " removed=" +
@@ -4656,7 +4656,7 @@ fn remap_local_index_for_signature_pruning_raise(
     return local_index
   }
   if local_index < old_param_count {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "signature-prune touched removed param index: " + local_index.to_string(),
     )
   }
@@ -4669,7 +4669,7 @@ fn rewrite_instruction_local_indices_for_signature_pruning_raise(
   spans : Array[InstrSpan],
   old_param_count : UInt,
   removed_param_count : UInt,
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   if removed_param_count == 0U {
     return instr_bytes
   }
@@ -4677,13 +4677,13 @@ fn rewrite_instruction_local_indices_for_signature_pruning_raise(
   for span in spans {
     if span.opcode == 0x20U || span.opcode == 0x21U || span.opcode == 0x22U {
       if span.end_ <= span.start + 1 {
-        raise WalyzeError::InvalidFormat("invalid local immediate")
+        raise WiteError::InvalidFormat("invalid local immediate")
       }
       let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
       let local_index = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode local index immediate",
           )
       }
@@ -4704,7 +4704,7 @@ fn rewrite_code_body_for_signature_pruning_raise(
   body_bytes : Bytes,
   old_param_count : UInt,
   removed_param_count : UInt,
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   if removed_param_count == 0U {
     return body_bytes
   }
@@ -4724,18 +4724,18 @@ fn rewrite_instruction_calls_for_signature_pruning_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   removed_param_count_by_function : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let out : Array[Byte] = []
   for span in spans {
     if span.opcode == 0x10U {
       if span.end_ <= span.start + 1 {
-        raise WalyzeError::InvalidFormat("invalid call immediate")
+        raise WiteError::InvalidFormat("invalid call immediate")
       }
       let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
-          raise WalyzeError::InvalidFormat("failed to decode call immediate")
+          raise WiteError::InvalidFormat("failed to decode call immediate")
       }
       let removed_param_count = match
         removed_param_count_by_function.get(target) {
@@ -4757,7 +4757,7 @@ fn rewrite_instruction_calls_for_signature_pruning_raise(
 fn rewrite_code_body_calls_for_signature_pruning_raise(
   body_bytes : Bytes,
   removed_param_count_by_function : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let prefix_end = parse_local_decl_prefix_end(body_bytes)
   let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
   let spans = parse_instruction_spans_raise(instr_bytes)
@@ -4792,7 +4792,7 @@ fn is_const_opcode_compatible_with_result(
 fn extract_inlining_replacement_instr_raise(
   body_bytes : Bytes,
   type_entry : FunctionTypeEntry,
-) -> Bytes? raise WalyzeError {
+) -> Bytes? raise WiteError {
   let prefix = parse_local_decl_prefix_raise(body_bytes)
   if prefix.local_types.length() > 0 {
     return None
@@ -4830,19 +4830,19 @@ fn rewrite_instruction_calls_for_inlining_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   replacement_by_function_index : Map[UInt, Bytes],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let out : Array[Byte] = []
   let mut rewritten_call_count = 0U
   for span in spans {
     if span.opcode == 0x10U {
       if span.end_ <= span.start + 1 {
-        raise WalyzeError::InvalidFormat("invalid call immediate in inlining")
+        raise WiteError::InvalidFormat("invalid call immediate in inlining")
       }
       let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode call immediate in inlining",
           )
       }
@@ -4884,7 +4884,7 @@ fn apply_inlining_optimizing(bytes : Bytes) -> InliningApplyResult {
 ///|
 fn apply_inlining_optimizing_raise(
   bytes : Bytes,
-) -> InliningApplyResult raise WalyzeError {
+) -> InliningApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut type_section_payload : Bytes? = None
   let mut function_section_payload : Bytes? = None
@@ -4916,7 +4916,7 @@ fn apply_inlining_optimizing_raise(
   let function_type_indices = parse_function_type_indices(function_payload)
   let code_bodies = parse_code_bodies(code_payload)
   if function_type_indices.length() != code_bodies.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch for inlining: function=" +
       function_type_indices.length().to_string() +
       " code=" +
@@ -4928,13 +4928,13 @@ fn apply_inlining_optimizing_raise(
   for i in 0..<code_bodies.length() {
     let type_index = function_type_indices[i]
     if type_index >= type_count_u {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index out of range in inlining: " + type_index.to_string(),
       )
     }
     let type_pos = UInt::reinterpret_as_int(type_index)
     if type_pos < 0 || type_pos >= type_entries.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index position out of range in inlining: " +
         type_index.to_string(),
       )
@@ -5092,7 +5092,7 @@ fn rewrite_instruction_for_dae_raise(
 ///|
 fn apply_dae_instruction_bytes_raise(
   instr_bytes : Bytes,
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let mut current = instr_bytes
   let mut removed_instr_count = 0U
   let mut rounds = 0
@@ -5127,7 +5127,7 @@ fn apply_dae_optimizing(bytes : Bytes) -> DaeApplyResult {
 ///|
 fn apply_dae_optimizing_raise(
   bytes : Bytes,
-) -> DaeApplyResult raise WalyzeError {
+) -> DaeApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut code_section_payload : Bytes? = None
   for section in sections {
@@ -6228,7 +6228,7 @@ priv struct LocalDeclPrefixParseResult {
 ///|
 fn parse_local_decl_prefix_raise(
   body_bytes : Bytes,
-) -> LocalDeclPrefixParseResult raise WalyzeError {
+) -> LocalDeclPrefixParseResult raise WiteError {
   let parser = Cursor::new(body_bytes)
   let local_group_count = parser.read_u32_leb128()
   let local_types : Array[Byte] = []
@@ -6243,7 +6243,7 @@ fn parse_local_decl_prefix_raise(
 }
 
 ///|
-fn parse_local_decl_prefix_end(body_bytes : Bytes) -> Int raise WalyzeError {
+fn parse_local_decl_prefix_end(body_bytes : Bytes) -> Int raise WiteError {
   parse_local_decl_prefix_raise(body_bytes).prefix_end
 }
 
@@ -6305,7 +6305,7 @@ fn optimize_code_body_bytes(
 fn optimize_code_section_payload_raise(
   payload : Bytes,
   config : OptimizeConfig,
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let parser = Cursor::new(payload)
   let body_count = parser.read_u32_leb128()
   let bodies : Array[Bytes] = []
@@ -6313,12 +6313,12 @@ fn optimize_code_section_payload_raise(
     let body_size_u = parser.read_u32_leb128()
     let body_size = UInt::reinterpret_as_int(body_size_u)
     if body_size < 0 {
-      raise WalyzeError::InvalidFormat("code body size overflow")
+      raise WiteError::InvalidFormat("code body size overflow")
     }
     let start = parser.get_pos()
     let end_ = start + body_size
     if end_ > payload.length() {
-      raise WalyzeError::UnexpectedEof
+      raise WiteError::UnexpectedEof
     }
     let body_bytes = payload[start:end_].to_bytes()
     bodies.push(optimize_code_body_bytes(body_bytes, config))
@@ -6349,14 +6349,14 @@ fn optimize_code_section_payload(
 fn collect_used_local_indices_from_instruction_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
-) -> Array[UInt] raise WalyzeError {
+) -> Array[UInt] raise WiteError {
   let out : Array[UInt] = []
   for span in spans {
     if span.opcode == 0x20U || span.opcode == 0x21U || span.opcode == 0x22U {
       match decode_span_u32_immediate(instr_bytes, span) {
         Some(index) => push_unique_u32(out, index)
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode local immediate in coalesce-locals",
           )
       }
@@ -6371,18 +6371,18 @@ fn rewrite_instruction_local_indices_for_coalesce_raise(
   spans : Array[InstrSpan],
   param_count : UInt,
   local_index_map : Map[UInt, UInt],
-) -> Bytes raise WalyzeError {
+) -> Bytes raise WiteError {
   let out : Array[Byte] = []
   for span in spans {
     if span.opcode == 0x20U || span.opcode == 0x21U || span.opcode == 0x22U {
       if span.end_ <= span.start + 1 {
-        raise WalyzeError::InvalidFormat("invalid local immediate")
+        raise WiteError::InvalidFormat("invalid local immediate")
       }
       let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
       let old_index = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode local index immediate in coalesce-locals",
           )
       }
@@ -6392,7 +6392,7 @@ fn rewrite_instruction_local_indices_for_coalesce_raise(
         match local_index_map.get(old_index) {
           Some(v) => v
           None =>
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "coalesce-locals remap missing local index: " +
               old_index.to_string(),
             )
@@ -6416,7 +6416,7 @@ priv struct CoalesceLocalsApplyResult {
 ///|
 fn apply_coalesce_locals_raise(
   bytes : Bytes,
-) -> CoalesceLocalsApplyResult raise WalyzeError {
+) -> CoalesceLocalsApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut type_section_payload : Bytes? = None
   let mut function_section_payload : Bytes? = None
@@ -6445,7 +6445,7 @@ fn apply_coalesce_locals_raise(
   let function_type_indices = parse_function_type_indices(function_payload)
   let code_bodies = parse_code_bodies(code_payload)
   if function_type_indices.length() != code_bodies.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch for coalesce-locals: function=" +
       function_type_indices.length().to_string() +
       " code=" +
@@ -6461,7 +6461,7 @@ fn apply_coalesce_locals_raise(
     let type_index = function_type_indices[i]
     let type_pos = UInt::reinterpret_as_int(type_index)
     if type_pos < 0 || type_pos >= type_entries.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index out of range in coalesce-locals: " + type_index.to_string(),
       )
     }
@@ -6545,7 +6545,7 @@ fn apply_duplicate_import_elimination(
 ///|
 fn apply_duplicate_import_elimination_raise(
   bytes : Bytes,
-) -> DuplicateImportElimApplyResult raise WalyzeError {
+) -> DuplicateImportElimApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut import_section_payload : Bytes? = None
   let mut function_section_payload : Bytes? = None
@@ -6657,7 +6657,7 @@ fn apply_duplicate_import_elimination_raise(
         if canonical != entry.kind_index {
           let old_pos = UInt::reinterpret_as_int(entry.kind_index)
           if old_pos < 0 || old_pos >= keep_function_imports.length() {
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "function import dedupe index out of range",
             )
           }
@@ -6683,7 +6683,7 @@ fn apply_duplicate_import_elimination_raise(
         if canonical != entry.kind_index {
           let old_pos = UInt::reinterpret_as_int(entry.kind_index)
           if old_pos < 0 || old_pos >= keep_table_imports.length() {
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "table import dedupe index out of range",
             )
           }
@@ -6709,7 +6709,7 @@ fn apply_duplicate_import_elimination_raise(
         if canonical != entry.kind_index {
           let old_pos = UInt::reinterpret_as_int(entry.kind_index)
           if old_pos < 0 || old_pos >= keep_memory_imports.length() {
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "memory import dedupe index out of range",
             )
           }
@@ -6735,7 +6735,7 @@ fn apply_duplicate_import_elimination_raise(
         if canonical != entry.kind_index {
           let old_pos = UInt::reinterpret_as_int(entry.kind_index)
           if old_pos < 0 || old_pos >= keep_global_imports.length() {
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "global import dedupe index out of range",
             )
           }
@@ -6787,7 +6787,7 @@ fn apply_duplicate_import_elimination_raise(
   for i in 0U..<imported_function_count {
     let i_pos = UInt::reinterpret_as_int(i)
     if i_pos < 0 || i_pos >= keep_function_imports.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "function import keep index out of range in dedupe map",
       )
     }
@@ -6799,7 +6799,7 @@ fn apply_duplicate_import_elimination_raise(
   for i in 0U..<imported_function_count {
     let i_pos = UInt::reinterpret_as_int(i)
     if i_pos < 0 || i_pos >= keep_function_imports.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "function import keep index out of range in dedupe map canonical",
       )
     }
@@ -6823,7 +6823,7 @@ fn apply_duplicate_import_elimination_raise(
   for i in 0U..<imported_table_count {
     let i_pos = UInt::reinterpret_as_int(i)
     if i_pos < 0 || i_pos >= keep_table_imports.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "table import keep index out of range in dedupe map",
       )
     }
@@ -6835,7 +6835,7 @@ fn apply_duplicate_import_elimination_raise(
   for i in 0U..<imported_table_count {
     let i_pos = UInt::reinterpret_as_int(i)
     if i_pos < 0 || i_pos >= keep_table_imports.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "table import keep index out of range in dedupe map canonical",
       )
     }
@@ -6859,7 +6859,7 @@ fn apply_duplicate_import_elimination_raise(
   for i in 0U..<imported_memory_count {
     let i_pos = UInt::reinterpret_as_int(i)
     if i_pos < 0 || i_pos >= keep_memory_imports.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "memory import keep index out of range in dedupe map",
       )
     }
@@ -6871,7 +6871,7 @@ fn apply_duplicate_import_elimination_raise(
   for i in 0U..<imported_memory_count {
     let i_pos = UInt::reinterpret_as_int(i)
     if i_pos < 0 || i_pos >= keep_memory_imports.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "memory import keep index out of range in dedupe map canonical",
       )
     }
@@ -6895,7 +6895,7 @@ fn apply_duplicate_import_elimination_raise(
   for i in 0U..<imported_global_count {
     let i_pos = UInt::reinterpret_as_int(i)
     if i_pos < 0 || i_pos >= keep_global_imports.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "global import keep index out of range in dedupe map",
       )
     }
@@ -6907,7 +6907,7 @@ fn apply_duplicate_import_elimination_raise(
   for i in 0U..<imported_global_count {
     let i_pos = UInt::reinterpret_as_int(i)
     if i_pos < 0 || i_pos >= keep_global_imports.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "global import keep index out of range in dedupe map canonical",
       )
     }
@@ -7049,7 +7049,7 @@ fn apply_duplicate_import_elimination_raise(
 ///|
 fn decode_const_expr_i32_const_nonnegative_offset_raise(
   expr_bytes : Bytes,
-) -> UInt? raise WalyzeError {
+) -> UInt? raise WiteError {
   let spans = parse_instruction_spans_raise(expr_bytes)
   if spans.length() != 2 {
     return None
@@ -7064,7 +7064,7 @@ fn decode_const_expr_i32_const_nonnegative_offset_raise(
 fn collect_static_table_function_map_from_element_section_raise(
   payload : Bytes,
   target_table_index : UInt,
-) -> Map[UInt, UInt]? raise WalyzeError {
+) -> Map[UInt, UInt]? raise WiteError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let table_map : Map[UInt, UInt] = {}
@@ -7113,13 +7113,13 @@ fn collect_static_table_function_map_from_element_section_raise(
 fn has_disallowed_table_ops_in_instruction_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
-) -> Bool raise WalyzeError {
+) -> Bool raise WiteError {
   for span in spans {
     match span.opcode {
       0x25U | 0x26U => return true
       0xfcU => {
         if span.end_ <= span.start + 1 {
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "invalid 0xfc immediate in directize",
           )
         }
@@ -7142,7 +7142,7 @@ fn rewrite_instruction_call_indirect_to_direct_raise(
   spans : Array[InstrSpan],
   table_map : Map[UInt, UInt],
   function_type_by_index : Array[UInt],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let out : Array[Byte] = []
   let mut rewritten_call_count = 0U
   let mut i = 0
@@ -7174,7 +7174,7 @@ fn rewrite_instruction_call_indirect_to_direct_raise(
                   }
                 }
               None =>
-                raise WalyzeError::InvalidFormat(
+                raise WiteError::InvalidFormat(
                   "failed to decode call_indirect immediate in directize",
                 )
             }
@@ -7193,7 +7193,7 @@ fn rewrite_code_section_payload_for_directize_raise(
   payload : Bytes,
   table_map : Map[UInt, UInt],
   function_type_by_index : Array[UInt],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let bodies = parse_code_bodies(payload)
   let rewritten_bodies : Array[Bytes] = []
   let mut rewritten_call_count = 0U
@@ -7246,7 +7246,7 @@ priv struct MemoryPackingApplyResult {
 ///|
 fn apply_directize_raise(
   bytes : Bytes,
-) -> DirectizeApplyResult raise WalyzeError {
+) -> DirectizeApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut import_payload : Bytes? = None
   let mut function_payload : Bytes? = None
@@ -7334,7 +7334,7 @@ fn apply_directize_raise(
     function_payload,
   )
   if local_function_type_indices.length() != code_bodies.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch for directize: function=" +
       local_function_type_indices.length().to_string() +
       " code=" +
@@ -7364,7 +7364,7 @@ fn apply_directize_raise(
 fn collect_global_usage_counts_from_code_section_raise(
   payload : Bytes,
   counts : Array[UInt],
-) -> Unit raise WalyzeError {
+) -> Unit raise WiteError {
   let bodies = parse_code_bodies(payload)
   for body in bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
@@ -7375,7 +7375,7 @@ fn collect_global_usage_counts_from_code_section_raise(
         match decode_span_u32_immediate(instr_bytes, span) {
           Some(index) => increment_index_count_in_array(counts, index)
           None =>
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "failed to decode global index immediate in reorder-globals",
             )
         }
@@ -7389,7 +7389,7 @@ fn rewrite_instruction_global_get_to_i32_const_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   global_i32_const_map : Map[UInt, UInt],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let out : Array[Byte] = []
   let mut rewritten_global_get_count = 0U
   for span in spans {
@@ -7409,7 +7409,7 @@ fn rewrite_instruction_global_get_to_i32_const_raise(
             None => ()
           }
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode global.get immediate in simplify-globals",
           )
       }
@@ -7423,7 +7423,7 @@ fn rewrite_instruction_global_get_to_i32_const_raise(
 fn rewrite_code_section_payload_for_simplify_globals_raise(
   payload : Bytes,
   global_i32_const_map : Map[UInt, UInt],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let bodies = parse_code_bodies(payload)
   let rewritten_bodies : Array[Bytes] = []
   let mut rewritten_global_get_count = 0U
@@ -7452,7 +7452,7 @@ fn rewrite_code_section_payload_for_simplify_globals_raise(
 ///|
 fn apply_simplify_globals_raise(
   bytes : Bytes,
-) -> SimplifyGlobalsApplyResult raise WalyzeError {
+) -> SimplifyGlobalsApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut import_payload : Bytes? = None
   let mut global_payload : Bytes? = None
@@ -7537,7 +7537,7 @@ fn apply_simplify_globals(bytes : Bytes) -> SimplifyGlobalsApplyResult {
 ///|
 fn apply_reorder_globals_raise(
   bytes : Bytes,
-) -> ReorderGlobalsApplyResult raise WalyzeError {
+) -> ReorderGlobalsApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut import_payload : Bytes? = None
   let mut table_payload : Bytes? = None
@@ -7757,7 +7757,7 @@ fn is_memory_index_marked_used(used_flags : Array[Bool], index : UInt) -> Bool {
 ///|
 fn apply_memory_packing_raise(
   bytes : Bytes,
-) -> MemoryPackingApplyResult raise WalyzeError {
+) -> MemoryPackingApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut import_payload : Bytes? = None
   let mut table_payload : Bytes? = None
@@ -8176,7 +8176,7 @@ priv struct OptimizeRoundResult {
 fn optimize_for_size_round_raise(
   bytes : Bytes,
   config : OptimizeConfig,
-) -> OptimizeRoundResult raise WalyzeError {
+) -> OptimizeRoundResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let stage1_out : Array[Byte] = bytes[0:8].to_array()
   let removed_sections : Array[String] = []
@@ -8426,7 +8426,7 @@ fn optimize_for_size_round_raise(
 ///|
 pub fn analyze_section_sizes(
   bytes : Bytes,
-) -> Result[Array[SectionSize], WalyzeError] {
+) -> Result[Array[SectionSize], WiteError] {
   try? {
     let sections = parse_core_sections_raise(bytes)
     summarize_sections(sections, false)
@@ -8437,7 +8437,7 @@ pub fn analyze_section_sizes(
 pub fn optimize_for_size(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
-) -> Result[OptimizeResult, WalyzeError] {
+) -> Result[OptimizeResult, WiteError] {
   try? {
     let rounds = if config.pass_rounds == 0U { 1U } else { config.pass_rounds }
     let mut current = bytes
@@ -8472,7 +8472,7 @@ pub fn optimize_for_size(
 }
 
 ///|
-pub fn profile_module(bytes : Bytes) -> Result[ModuleProfile, WalyzeError] {
+pub fn profile_module(bytes : Bytes) -> Result[ModuleProfile, WiteError] {
   try? {
     let sections = parse_core_sections_raise(bytes)
     let mut function_count = 0U
@@ -8509,7 +8509,7 @@ pub fn profile_module(bytes : Bytes) -> Result[ModuleProfile, WalyzeError] {
 ///|
 pub fn analyze_function_sizes(
   bytes : Bytes,
-) -> Result[Array[FunctionSize], WalyzeError] {
+) -> Result[Array[FunctionSize], WiteError] {
   try? {
     let sections = parse_core_sections_raise(bytes)
     let mut imported_function_count = 0U
@@ -8543,7 +8543,7 @@ pub fn analyze_function_sizes(
       }
     }
     if code_body_sizes.length().reinterpret_as_uint() != local_function_count {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "function/code section count mismatch: function=" +
         local_function_count.to_string() +
         " code=" +
@@ -8810,7 +8810,7 @@ pub fn analyze_function_size_gap(
   left_bytes : Bytes,
   right_bytes : Bytes,
   top_limit? : UInt = 20U,
-) -> Result[FunctionGapReport, WalyzeError] {
+) -> Result[FunctionGapReport, WiteError] {
   try? {
     let left_functions = match analyze_function_sizes(left_bytes) {
       Ok(v) => v
@@ -9036,7 +9036,7 @@ fn collect_function_code_blocks(
 ///|
 pub fn analyze_code_block_sizes(
   bytes : Bytes,
-) -> Result[CodeBlockSizeReport, WalyzeError] {
+) -> Result[CodeBlockSizeReport, WiteError] {
   try? {
     let sections = parse_core_sections_raise(bytes)
     let mut imported_function_count = 0U
@@ -9070,7 +9070,7 @@ pub fn analyze_code_block_sizes(
       }
     }
     if code_bodies.length().reinterpret_as_uint() != local_function_count {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "function/code section count mismatch: function=" +
         local_function_count.to_string() +
         " code=" +
@@ -9144,7 +9144,7 @@ pub fn analyze_code_block_sizes(
 fn summarize_custom_sections_raise(
   sections : Array[RawSection],
   bytes : Bytes,
-) -> Array[CustomSectionBreakdown] raise WalyzeError {
+) -> Array[CustomSectionBreakdown] raise WiteError {
   let grouped : Map[String, CustomSectionBreakdown] = {}
   for section in sections {
     if section.section_id != 0U {
@@ -9540,7 +9540,7 @@ fn opcode_stats_from_counters(
 pub fn analyze_wasm_breakdown(
   bytes : Bytes,
   top_limit? : UInt = 0U,
-) -> Result[WasmBreakdownReport, WalyzeError] {
+) -> Result[WasmBreakdownReport, WiteError] {
   try? {
     let sections = parse_core_sections_raise(bytes)
     let section_sizes = summarize_sections(sections, false)
@@ -9611,7 +9611,7 @@ pub fn analyze_wasm_breakdown(
       }
     }
     if code_bodies.length().reinterpret_as_uint() != local_function_count {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "function/code section count mismatch: function=" +
         local_function_count.to_string() +
         " code=" +
@@ -9785,7 +9785,7 @@ fn should_include_export_root(
 fn analyze_call_graph_raise(
   bytes : Bytes,
   export_root_names : Array[String]?,
-) -> CallGraphReport raise WalyzeError {
+) -> CallGraphReport raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut imported_function_count = 0U
   let mut local_function_count = 0U
@@ -9851,7 +9851,7 @@ fn analyze_call_graph_raise(
     }
   }
   if code_bodies.length().reinterpret_as_uint() != local_function_count {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch: function=" +
       local_function_count.to_string() +
       " code=" +
@@ -9891,7 +9891,7 @@ fn analyze_call_graph_raise(
   let total_function_count_u = imported_function_count + local_function_count
   let total_function_count = UInt::reinterpret_as_int(total_function_count_u)
   if total_function_count < 0 {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function count overflow in analyze-call-graph",
     )
   }
@@ -9948,7 +9948,7 @@ fn analyze_call_graph_raise(
 ///|
 fn analyze_call_graph_summary_raise(
   bytes : Bytes,
-) -> CallGraphSummary raise WalyzeError {
+) -> CallGraphSummary raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut imported_function_count = 0U
   let mut local_function_count = 0U
@@ -9998,7 +9998,7 @@ fn analyze_call_graph_summary_raise(
     }
   }
   if code_bodies.length().reinterpret_as_uint() != local_function_count {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch: function=" +
       local_function_count.to_string() +
       " code=" +
@@ -10026,7 +10026,7 @@ fn analyze_call_graph_summary_raise(
   let total_function_count_u = imported_function_count + local_function_count
   let total_function_count = UInt::reinterpret_as_int(total_function_count_u)
   if total_function_count < 0 {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function count overflow in analyze-call-graph-summary",
     )
   }
@@ -10081,14 +10081,14 @@ fn analyze_call_graph_summary_raise(
 ///|
 pub fn analyze_call_graph(
   bytes : Bytes,
-) -> Result[CallGraphReport, WalyzeError] {
+) -> Result[CallGraphReport, WiteError] {
   try? analyze_call_graph_raise(bytes, None)
 }
 
 ///|
 pub fn analyze_call_graph_summary(
   bytes : Bytes,
-) -> Result[CallGraphSummary, WalyzeError] {
+) -> Result[CallGraphSummary, WiteError] {
   try? analyze_call_graph_summary_raise(bytes)
 }
 
@@ -10124,7 +10124,7 @@ fn size_regression_bytes(before_size : UInt, after_size : UInt) -> UInt {
 ///|
 pub fn analyze_host_generated_code(
   bytes : Bytes,
-) -> Result[HostGeneratedCodeReport, WalyzeError] {
+) -> Result[HostGeneratedCodeReport, WiteError] {
   try? {
     let sections = parse_core_sections_raise(bytes)
     let mut type_payload : Bytes? = None
@@ -10180,7 +10180,7 @@ pub fn analyze_host_generated_code(
           .reinterpret_as_uint()
         let code_bodies = parse_code_bodies(code_payload)
         if local_function_type_indices.length() != code_bodies.length() {
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "function/code section count mismatch for analyze-host: function=" +
             local_function_type_indices.length().to_string() +
             " code=" +
@@ -10211,20 +10211,20 @@ pub fn analyze_host_generated_code(
         let function_param_count_by_index : Array[UInt] = []
         for type_index in function_type_by_index {
           if type_index >= type_count_u {
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "type index out of range in analyze-host: " +
               type_index.to_string(),
             )
           }
           let type_pos = UInt::reinterpret_as_int(type_index)
           if type_pos < 0 || type_pos >= parsed_type_entries.length() {
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "type index position out of range in analyze-host: " +
               type_index.to_string(),
             )
           }
           if parsed_type_entries[type_pos].form != 0x60U {
-            raise WalyzeError::InvalidFormat(
+            raise WiteError::InvalidFormat(
               "non-function type index used by function in analyze-host: " +
               type_index.to_string(),
             )
@@ -10477,7 +10477,7 @@ fn collect_function_size_diffs_raise(
   before_bytes : Bytes,
   after_bytes : Bytes,
   limit : UInt,
-) -> (UInt, UInt, Array[FunctionSizeDiff]) raise WalyzeError {
+) -> (UInt, UInt, Array[FunctionSizeDiff]) raise WiteError {
   let before_functions = match analyze_function_sizes(before_bytes) {
     Ok(v) => v
     Err(e) => raise e
@@ -10557,7 +10557,7 @@ fn run_optimize_stage_raise(
   bytes : Bytes,
   config : OptimizeConfig,
   function_diff_limit : UInt,
-) -> OptimizeStageRunResult raise WalyzeError {
+) -> OptimizeStageRunResult raise WiteError {
   let optimized = match optimize_for_size(bytes, config~) {
     Ok(v) => v
     Err(err) => raise err
@@ -10590,7 +10590,7 @@ pub fn analyze_optimize_metadata(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::o1(),
   function_diff_limit? : UInt = 20U,
-) -> Result[OptimizeMetadataReport, WalyzeError] {
+) -> Result[OptimizeMetadataReport, WiteError] {
   try? {
     let strip_stage = run_optimize_stage_raise(
       "strip",
@@ -10648,7 +10648,7 @@ fn export_root_names_from_config(config : OptimizeConfig) -> Array[String]? {
 fn collect_root_reasons_raise(
   bytes : Bytes,
   export_root_names : Array[String]?,
-) -> (Map[UInt, Array[String]], Bool) raise WalyzeError {
+) -> (Map[UInt, Array[String]], Bool) raise WiteError {
   let reasons_map : Map[UInt, Array[String]] = {}
   let sections = parse_core_sections_raise(bytes)
   let mut partial = false
@@ -10733,7 +10733,7 @@ fn compare_retain_path_entry(a : RetainPathEntry, b : RetainPathEntry) -> Int {
 pub fn analyze_keep_reasons(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
-) -> Result[KeepReasonReport, WalyzeError] {
+) -> Result[KeepReasonReport, WiteError] {
   try? {
     let export_root_names = export_root_names_from_config(config)
     let graph = analyze_call_graph_raise(bytes, export_root_names)
@@ -10806,7 +10806,7 @@ pub fn analyze_keep_reasons(
 pub fn analyze_retain_paths(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
-) -> Result[RetainPathReport, WalyzeError] {
+) -> Result[RetainPathReport, WiteError] {
   try? {
     let export_root_names = export_root_names_from_config(config)
     let graph = analyze_call_graph_raise(bytes, export_root_names)
@@ -10883,7 +10883,7 @@ pub fn analyze_retain_paths(
 }
 
 ///|
-pub fn analyze_dce_report(bytes : Bytes) -> Result[DceReport, WalyzeError] {
+pub fn analyze_dce_report(bytes : Bytes) -> Result[DceReport, WiteError] {
   match analyze_call_graph(bytes) {
     Ok(graph) => {
       let removable_functions : Array[FunctionSize] = []
@@ -11235,7 +11235,7 @@ fn is_i32_value_type(value_type : Bytes) -> Bool {
 ///|
 fn collect_gc_type_canonical_map_from_entries_raise(
   parsed_type_entries : Array[ParsedTypeSectionEntry],
-) -> Map[UInt, UInt] raise WalyzeError {
+) -> Map[UInt, UInt] raise WiteError {
   let gc_type_canonical_map : Map[UInt, UInt] = {}
   for i in 0..<parsed_type_entries.length() {
     let old_type_index = i.reinterpret_as_uint()
@@ -11563,19 +11563,19 @@ fn rewrite_instruction_calls_for_call_forwarding_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   alias_map : Map[UInt, UInt],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let out : Array[Byte] = []
   let mut rewritten_call_count = 0U
   for span in spans {
     if span.opcode == 0x10U {
       if span.end_ <= span.start + 1 {
-        raise WalyzeError::InvalidFormat("invalid call immediate in cfp")
+        raise WiteError::InvalidFormat("invalid call immediate in cfp")
       }
       let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode call immediate in cfp",
           )
       }
@@ -11604,19 +11604,19 @@ fn rewrite_instruction_calls_for_const_call_forwarding_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   alias_map : Map[UInt, CfpConstAlias],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let out : Array[Byte] = []
   let mut rewritten_call_count = 0U
   for span in spans {
     if span.opcode == 0x10U {
       if span.end_ <= span.start + 1 {
-        raise WalyzeError::InvalidFormat("invalid call immediate in cfp-const")
+        raise WiteError::InvalidFormat("invalid call immediate in cfp-const")
       }
       let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode call immediate in cfp-const",
           )
       }
@@ -11642,7 +11642,7 @@ fn rewrite_instruction_calls_for_const_call_forwarding_raise(
 fn rewrite_code_section_payload_for_const_call_forwarding_raise(
   payload : Bytes,
   alias_map : Map[UInt, CfpConstAlias],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let bodies = parse_code_bodies(payload)
   let rewritten_bodies : Array[Bytes] = []
   let mut rewritten_call_count = 0U
@@ -11671,7 +11671,7 @@ fn rewrite_code_section_payload_for_const_call_forwarding_raise(
 ///|
 fn apply_const_call_forwarding_propagation_raise(
   bytes : Bytes,
-) -> CfpConstApplyResult raise WalyzeError {
+) -> CfpConstApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut type_payload : Bytes? = None
   let mut import_payload : Bytes? = None
@@ -11704,7 +11704,7 @@ fn apply_const_call_forwarding_propagation_raise(
   )
   let code_bodies = parse_code_bodies(code_payload)
   if local_function_type_indices.length() != code_bodies.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch for cfp-const: function=" +
       local_function_type_indices.length().to_string() +
       " code=" +
@@ -11771,7 +11771,7 @@ fn apply_const_call_forwarding_propagation_raise(
 fn rewrite_code_section_payload_for_call_forwarding_raise(
   payload : Bytes,
   alias_map : Map[UInt, UInt],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let bodies = parse_code_bodies(payload)
   let rewritten_bodies : Array[Bytes] = []
   let mut rewritten_call_count = 0U
@@ -11800,7 +11800,7 @@ fn rewrite_code_section_payload_for_call_forwarding_raise(
 ///|
 fn apply_call_forwarding_propagation_raise(
   bytes : Bytes,
-) -> CfpApplyResult raise WalyzeError {
+) -> CfpApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut type_payload : Bytes? = None
   let mut import_payload : Bytes? = None
@@ -11833,7 +11833,7 @@ fn apply_call_forwarding_propagation_raise(
   )
   let code_bodies = parse_code_bodies(code_payload)
   if local_function_type_indices.length() != code_bodies.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch for cfp: function=" +
       local_function_type_indices.length().to_string() +
       " code=" +
@@ -11871,18 +11871,18 @@ fn apply_call_forwarding_propagation_raise(
   let function_param_count_by_index : Array[UInt] = []
   for type_index in function_type_by_index {
     if type_index >= type_count_u {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index out of range in cfp: " + type_index.to_string(),
       )
     }
     let type_pos = UInt::reinterpret_as_int(type_index)
     if type_pos < 0 || type_pos >= parsed_type_entries.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index position out of range in cfp: " + type_index.to_string(),
       )
     }
     if parsed_type_entries[type_pos].form != 0x60U {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "non-function type index used by function in cfp: " +
         type_index.to_string(),
       )
@@ -11892,7 +11892,7 @@ fn apply_call_forwarding_propagation_raise(
         function_type_entry.params.length().reinterpret_as_uint(),
       )
       None =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "missing function type entry in cfp: " + type_index.to_string(),
         )
     }
@@ -12022,13 +12022,13 @@ fn rewrite_instruction_calls_for_signature_refining_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   alias_map : Map[UInt, SignatureRefineAlias],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let out : Array[Byte] = []
   let mut rewritten_call_count = 0U
   for span in spans {
     if span.opcode == 0x10U {
       if span.end_ <= span.start + 1 {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "invalid call immediate in signature-refine",
         )
       }
@@ -12036,7 +12036,7 @@ fn rewrite_instruction_calls_for_signature_refining_raise(
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "failed to decode call immediate in signature-refine",
           )
       }
@@ -12062,7 +12062,7 @@ fn rewrite_instruction_calls_for_signature_refining_raise(
 fn rewrite_code_section_payload_for_signature_refining_raise(
   payload : Bytes,
   alias_map : Map[UInt, SignatureRefineAlias],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt) raise WiteError {
   let bodies = parse_code_bodies(payload)
   let rewritten_bodies : Array[Bytes] = []
   let mut rewritten_call_count = 0U
@@ -12091,7 +12091,7 @@ fn rewrite_code_section_payload_for_signature_refining_raise(
 ///|
 fn apply_signature_refining_raise(
   bytes : Bytes,
-) -> SignatureRefineApplyResult raise WalyzeError {
+) -> SignatureRefineApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut type_payload : Bytes? = None
   let mut import_payload : Bytes? = None
@@ -12124,7 +12124,7 @@ fn apply_signature_refining_raise(
   )
   let code_bodies = parse_code_bodies(code_payload)
   if local_function_type_indices.length() != code_bodies.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch for signature-refine: function=" +
       local_function_type_indices.length().to_string() +
       " code=" +
@@ -12159,19 +12159,19 @@ fn apply_signature_refining_raise(
   function_type_by_index.append(local_function_type_indices[:])
   for type_index in function_type_by_index {
     if type_index >= type_count_u {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index out of range in signature-refine: " + type_index.to_string(),
       )
     }
     let type_pos = UInt::reinterpret_as_int(type_index)
     if type_pos < 0 || type_pos >= parsed_type_entries.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index position out of range in signature-refine: " +
         type_index.to_string(),
       )
     }
     if parsed_type_entries[type_pos].form != 0x60U {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "non-function type index used by function in signature-refine: " +
         type_index.to_string(),
       )
@@ -12235,7 +12235,7 @@ fn apply_remove_unused_module_elements(
 fn apply_remove_unused_module_elements_raise(
   bytes : Bytes,
   config : OptimizeConfig,
-) -> RumeApplyResult raise WalyzeError {
+) -> RumeApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut import_section_payload : Bytes? = None
   let mut export_section_payload : Bytes? = None
@@ -12415,7 +12415,7 @@ fn apply_remove_unused_module_elements_raise(
   for i in 0U..<imported_table_count {
     let index = UInt::reinterpret_as_int(i)
     if index < 0 || index >= keep_import_tables.length() {
-      raise WalyzeError::InvalidFormat("table import keep index out of range")
+      raise WiteError::InvalidFormat("table import keep index out of range")
     }
     if keep_import_tables[index] {
       table_index_map.set(i, kept_imported_table_count)
@@ -12444,7 +12444,7 @@ fn apply_remove_unused_module_elements_raise(
   for i in 0U..<imported_memory_count {
     let index = UInt::reinterpret_as_int(i)
     if index < 0 || index >= keep_import_memories.length() {
-      raise WalyzeError::InvalidFormat("memory import keep index out of range")
+      raise WiteError::InvalidFormat("memory import keep index out of range")
     }
     if keep_import_memories[index] {
       memory_index_map.set(i, kept_imported_memory_count)
@@ -12473,7 +12473,7 @@ fn apply_remove_unused_module_elements_raise(
   for i in 0U..<imported_global_count {
     let index = UInt::reinterpret_as_int(i)
     if index < 0 || index >= keep_import_globals.length() {
-      raise WalyzeError::InvalidFormat("global import keep index out of range")
+      raise WiteError::InvalidFormat("global import keep index out of range")
     }
     if keep_import_globals[index] {
       global_index_map.set(i, kept_imported_global_count)
@@ -12670,7 +12670,7 @@ fn apply_type_refining(bytes : Bytes) -> TypeRefineApplyResult {
 ///|
 fn apply_type_refining_raise(
   bytes : Bytes,
-) -> TypeRefineApplyResult raise WalyzeError {
+) -> TypeRefineApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut type_section_payload : Bytes? = None
   for section in sections {
@@ -12680,7 +12680,7 @@ fn apply_type_refining_raise(
           bytes[section.payload_start:section.section_end].to_bytes(),
         )
       13U =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "tag section is not supported in type-refine",
         )
       _ => ()
@@ -12740,7 +12740,7 @@ fn apply_type_refining_raise(
       function_type_entry_by_type_index.get(old_type_index) {
       Some(v) => v
       None =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "missing function type entry in type-refine: " +
           old_type_index.to_string(),
         )
@@ -12755,7 +12755,7 @@ fn apply_type_refining_raise(
         function_type_entry_by_type_index.get(candidate_type_index) {
         Some(v) => v
         None =>
-          raise WalyzeError::InvalidFormat(
+          raise WiteError::InvalidFormat(
             "missing candidate function type entry in type-refine: " +
             candidate_type_index.to_string(),
           )
@@ -12852,7 +12852,7 @@ fn apply_signature_pruning(bytes : Bytes) -> SignaturePruneApplyResult {
 ///|
 fn apply_signature_pruning_raise(
   bytes : Bytes,
-) -> SignaturePruneApplyResult raise WalyzeError {
+) -> SignaturePruneApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut imported_function_count = 0U
   let mut type_section_payload : Bytes? = None
@@ -12886,7 +12886,7 @@ fn apply_signature_pruning_raise(
         }
       10U => code_section_payload = Some(payload)
       13U =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "tag section is not supported in signature-prune",
         )
       _ => ()
@@ -12907,7 +12907,7 @@ fn apply_signature_pruning_raise(
   let function_type_indices = parse_function_type_indices(function_payload)
   let code_bodies = parse_code_bodies(code_payload)
   if function_type_indices.length() != code_bodies.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch for signature-prune: function=" +
       function_type_indices.length().to_string() +
       " code=" +
@@ -12932,19 +12932,19 @@ fn apply_signature_pruning_raise(
   }
   for type_index in function_type_indices {
     if type_index >= type_count_u {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index out of range in signature-prune: " + type_index.to_string(),
       )
     }
     let type_pos = UInt::reinterpret_as_int(type_index)
     if type_pos < 0 || type_pos >= parsed_type_entries.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index position out of range in signature-prune: " +
         type_index.to_string(),
       )
     }
     if parsed_type_entries[type_pos].form != 0x60U {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "non-function type index used by function in signature-prune: " +
         type_index.to_string(),
       )
@@ -12973,7 +12973,7 @@ fn apply_signature_pruning_raise(
     let type_entry = match function_type_entry_by_type_index.get(type_index) {
       Some(v) => v
       None =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "non-function type index used by function in signature-prune: " +
           type_index.to_string(),
         )
@@ -12998,7 +12998,7 @@ fn apply_signature_pruning_raise(
     let new_param_count = old_param_count - removed_param_count
     let new_param_count_i = UInt::reinterpret_as_int(new_param_count)
     if new_param_count_i < 0 || new_param_count_i > type_entry.params.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "invalid param trim count in signature-prune: old=" +
         old_param_count.to_string() +
         " removed=" +
@@ -13042,7 +13042,7 @@ fn apply_signature_pruning_raise(
             old_param_count_by_local_pos.get(local_pos) {
             Some(v) => v
             None =>
-              raise WalyzeError::InvalidFormat(
+              raise WiteError::InvalidFormat(
                 "signature-prune local metadata missing",
               )
           }
@@ -13099,7 +13099,7 @@ fn apply_remove_unused_types(bytes : Bytes) -> RemoveUnusedTypesApplyResult {
 ///|
 fn apply_remove_unused_types_raise(
   bytes : Bytes,
-) -> RemoveUnusedTypesApplyResult raise WalyzeError {
+) -> RemoveUnusedTypesApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut type_section_payload : Bytes? = None
   let mut import_section_payload : Bytes? = None
@@ -13113,7 +13113,7 @@ fn apply_remove_unused_types_raise(
       3U => function_section_payload = Some(payload)
       10U => code_section_payload = Some(payload)
       13U =>
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "tag section is not supported in remove-unused-types",
         )
       _ => ()
@@ -13158,7 +13158,7 @@ fn apply_remove_unused_types_raise(
   let type_count_u = type_entries.length().reinterpret_as_uint()
   for type_index in used_type_indices {
     if type_index >= type_count_u {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index out of range in remove-unused-types: " +
         type_index.to_string(),
       )
@@ -13171,14 +13171,14 @@ fn apply_remove_unused_types_raise(
     queue_head += 1
     let current_pos = UInt::reinterpret_as_int(current)
     if current_pos < 0 || current_pos >= type_entries.length() {
-      raise WalyzeError::InvalidFormat(
+      raise WiteError::InvalidFormat(
         "type index position out of range in remove-unused-types: " +
         current.to_string(),
       )
     }
     for dep in type_entries[current_pos].referenced_type_indices {
       if dep >= type_count_u {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "referenced type index out of range in remove-unused-types: " +
           dep.to_string(),
         )
@@ -13252,7 +13252,7 @@ fn apply_remove_unused_types_raise(
 fn apply_dce_raise(
   bytes : Bytes,
   config : OptimizeConfig,
-) -> DceApplyResult raise WalyzeError {
+) -> DceApplyResult raise WiteError {
   let export_root_names = export_root_names_from_config(config)
   let call_graph = analyze_call_graph_raise(bytes, export_root_names)
   if call_graph.partial {
@@ -13265,10 +13265,10 @@ fn apply_dce_raise(
   }
   let local_count = UInt::reinterpret_as_int(call_graph.local_function_count)
   if local_count < 0 {
-    raise WalyzeError::InvalidFormat("local function count overflow")
+    raise WiteError::InvalidFormat("local function count overflow")
   }
   if local_count != call_graph.nodes.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "call graph node length mismatch: expected=" +
       local_count.to_string() +
       " actual=" +
@@ -13378,7 +13378,7 @@ fn apply_dce_raise(
 }
 
 ///|
-fn apply_dfe_raise(bytes : Bytes) -> DfeApplyResult raise WalyzeError {
+fn apply_dfe_raise(bytes : Bytes) -> DfeApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut imported_function_count = 0U
   let mut function_type_indices : Array[UInt] = []
@@ -13393,7 +13393,7 @@ fn apply_dfe_raise(bytes : Bytes) -> DfeApplyResult raise WalyzeError {
     }
   }
   if function_type_indices.length() != code_bodies.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch for dfe: function=" +
       function_type_indices.length().to_string() +
       " code=" +
@@ -13521,7 +13521,7 @@ fn apply_dfe_raise(bytes : Bytes) -> DfeApplyResult raise WalyzeError {
 ///|
 fn apply_merge_similar_functions_raise(
   bytes : Bytes,
-) -> MsfApplyResult raise WalyzeError {
+) -> MsfApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut type_payload : Bytes? = None
   let mut imported_function_type_indices : Array[UInt] = []
@@ -13541,7 +13541,7 @@ fn apply_merge_similar_functions_raise(
     }
   }
   if local_function_type_indices.length() != code_bodies.length() {
-    raise WalyzeError::InvalidFormat(
+    raise WiteError::InvalidFormat(
       "function/code section count mismatch for msf: function=" +
       local_function_type_indices.length().to_string() +
       " code=" +
@@ -13558,7 +13558,7 @@ fn apply_merge_similar_functions_raise(
     let type_payload = match type_payload {
       Some(v) => v
       None =>
-        raise WalyzeError::InvalidFormat("type section is missing for msf")
+        raise WiteError::InvalidFormat("type section is missing for msf")
     }
     let parsed_type_entries = parse_type_section_entries_with_refs_raise(
       type_payload, "msf",
@@ -13566,18 +13566,18 @@ fn apply_merge_similar_functions_raise(
     let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
     for type_index in function_type_by_index {
       if type_index >= type_count_u {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "type index out of range in msf: " + type_index.to_string(),
         )
       }
       let type_pos = UInt::reinterpret_as_int(type_index)
       if type_pos < 0 || type_pos >= parsed_type_entries.length() {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "type index position out of range in msf: " + type_index.to_string(),
         )
       }
       if parsed_type_entries[type_pos].form != 0x60U {
-        raise WalyzeError::InvalidFormat(
+        raise WiteError::InvalidFormat(
           "non-function type index used by function in msf: " +
           type_index.to_string(),
         )
@@ -13862,7 +13862,7 @@ pub fn profile_component(bytes : Bytes) -> Result[ComponentProfile, String] {
   let sections = match sections_result {
     Ok(v) => v
     Err(e) =>
-      return Err("component section parse failed: " + walyze_error_to_string(e))
+      return Err("component section parse failed: " + wite_error_to_string(e))
   }
   let detail = match @mwac_component.parse_component_detail(bytes) {
     Ok(v) => v
@@ -13878,7 +13878,7 @@ pub fn profile_component(bytes : Bytes) -> Result[ComponentProfile, String] {
           "core module profile failed at index " +
           i.to_string() +
           ": " +
-          walyze_error_to_string(e),
+          wite_error_to_string(e),
         )
     }
   }
@@ -13911,7 +13911,7 @@ pub fn analyze_component_function_sizes(
           "core module function-size analysis failed at index " +
           i.to_string() +
           ": " +
-          walyze_error_to_string(e),
+          wite_error_to_string(e),
         )
     }
     let mut total_body_bytes = 0U
@@ -13946,7 +13946,7 @@ pub fn analyze_component_call_graphs(
           "core module call graph failed at index " +
           i.to_string() +
           ": " +
-          walyze_error_to_string(e),
+          wite_error_to_string(e),
         )
     }
     reports.push({ module_index: i.reinterpret_as_uint(), graph })
@@ -13971,7 +13971,7 @@ fn optimize_component_for_size_round(
   let sections = match sections_result {
     Ok(v) => v
     Err(e) =>
-      return Err("component section parse failed: " + walyze_error_to_string(e))
+      return Err("component section parse failed: " + wite_error_to_string(e))
   }
   let out : Array[Byte] = bytes[0:8].to_array()
   let removed_sections : Array[String] = []
@@ -13987,7 +13987,7 @@ fn optimize_component_for_size_round(
             "core module optimize failed at index " +
             core_module_index.to_string() +
             ": " +
-            walyze_error_to_string(e),
+            wite_error_to_string(e),
           )
       }
       append_encoded_section(out, 1U, optimized.bytes)
@@ -14183,7 +14183,7 @@ pub fn optimize_binary_for_size(
   } else {
     match optimize_for_size(bytes, config~) {
       Ok(v) => Ok(v)
-      Err(e) => Err(walyze_error_to_string(e))
+      Err(e) => Err(wite_error_to_string(e))
     }
   }
 }
@@ -14538,7 +14538,7 @@ pub fn analyze_hotness_size_matrix(
     Ok(v) => v
     Err(err) =>
       return Err(
-        "function size analysis failed: " + walyze_error_to_string(err),
+        "function size analysis failed: " + wite_error_to_string(err),
       )
   }
   let export_to_function_index = map_export_name_to_function_index(

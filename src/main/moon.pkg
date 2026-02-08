@@ -1,5 +1,6 @@
 import {
-  "mizchi/walyze" as @walyze,
+  "mizchi/mwac/composer" as @wac,
+  "mizchi/wite" as @wite,
   "mizchi/wit" as @wit,
   "moonbitlang/x/fs" as @fs,
   "moonbitlang/x/sys" as @sys,

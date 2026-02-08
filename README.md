@@ -1,22 +1,22 @@
-# walyze
+# wite
 
-`walyze` is a MoonBit toolkit for WebAssembly binaries with a focus on component-model workflows.
+`wite` is a MoonBit toolkit for WebAssembly binaries with a focus on component-model workflows.
 
-## Positioning (mwac + walyze)
+## Positioning (wac + wite)
 
-- `mwac`: WAC API / composition (bundler role)
-- `walyze`: wasm/component optimizer + profiler (minifier role)
+- `wac` (`mizchi/mwac`): WAC API / composition (bundler role)
+- `wite`: wasm/component optimizer + profiler (minifier role)
 
 責務分離の原則:
 
-- `mwac` は合成（依存解決・instantiate/export 計画）に集中する
-- `walyze` はバイナリ最適化・解析に集中する
-- 依存方向は `walyze -> mwac` のみ（`mwac -> walyze` の直接依存は作らない）
-- 連携は「`mwac` が出力した wasm/component bytes を `walyze` が後段で最適化する」形を基本とする
+- `wac` は合成（依存解決・instantiate/export 計画）に集中する
+- `wite` はバイナリ最適化・解析に集中する
+- 依存方向は `wite -> wac` のみ（`wac -> wite` の直接依存は作らない）
+- 連携は「`wac` が出力した wasm/component bytes を `wite` が後段で最適化する」形を基本とする
 
-### mwac/walyze bytes I/O 契約
+### wac/wite bytes I/O 契約
 
-- 入力: `mwac` の生成物（core wasm bytes / component wasm bytes）
+- 入力: `wac` の生成物（core wasm bytes / component wasm bytes）
 - 出力: 最適化済み bytes（同じバイナリ種別を維持）
 - 不変条件:
   - decode/encode 可能な wasm 形式を維持する
@@ -35,7 +35,7 @@ It provides:
 - core wasm section-size analysis (`twiggy`-style breakdown by section)
 - core wasm deep breakdown analysis (sections/custom-sections/functions/blocks/opcodes/callgraph in one report)
 - core wasm top-function size analysis (`twiggy top`-style by code body size)
-- core wasm function-gap analysis (`walyze` vs `wasm-opt` 等の 2 wasm 比較で TopK 差分)
+- core wasm function-gap analysis (`wite` vs `wasm-opt` 等の 2 wasm 比較で TopK 差分)
 - core wasm code-block size analysis (`function/block/loop/if` bytes + instruction counts)
 - core wasm call graph + dead-body analysis (export/start roots)
 - core wasm call graph roots from global/element `ref.func`
@@ -71,6 +71,16 @@ It provides:
 ## CLI
 
 ```bash
+just run -- build path/to/entry.wac --out path/to/output.component.wasm -Oz
+just run -- build path/to/module.wasm --out path/to/module.min.wasm -O2
+
+just run -- analyze path/to/module.wasm --view=summary
+just run -- analyze path/to/module.wasm --view=deep --limit=20
+just run -- analyze path/to/module.wasm --view=pipeline --opt-level=Oz --diff-limit=20
+just run -- analyze path/to/module.wasm --view=keep --closed-world --closed-world-root=run
+just run -- analyze path/to/module.wasm --view=retain --limit=20 --closed-world --closed-world-root=run
+
+# legacy low-level subcommands (still available)
 just run -- analyze path/to/module.wasm
 just run -- analyze-host path/to/module.wasm 20
 just run -- analyze-opt path/to/module.wasm -O1 20
@@ -100,10 +110,10 @@ just run -- root-policy path/to/component.wasm path/to/wit-dir --exclude=hello
 連携例（bundler + minifier）:
 
 ```bash
-# mwac 側で component を生成
-# (例) mwac compose input.wac -> out.component.wasm
+# wac 側で component を生成
+# (例) wac compose input.wac -> out.component.wasm
 
-# walyze 側で後段最適化
+# wite 側で後段最適化
 just run -- optimize out.component.wasm out.component.opt.wasm -Oz --converge
 ```
 

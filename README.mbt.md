@@ -1,4 +1,4 @@
-# walyze
+# wite
 
 WebAssembly analyzer/optimizer/profiler for core wasm and component model binaries.
 

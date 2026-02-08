@@ -47,30 +47,30 @@ tmp_wasm="$(mktemp)"
 tmp_wasm_opt="$(mktemp)"
 tmp_runtime="$(mktemp)"
 tmp_component="$(mktemp)"
-tmp_zlib_walyze="$(mktemp)"
+tmp_zlib_wite="$(mktemp)"
 tmp_zlib_wasm_opt="$(mktemp)"
 tmp_zlib_before_sections="$(mktemp)"
-tmp_zlib_walyze_sections="$(mktemp)"
+tmp_zlib_wite_sections="$(mktemp)"
 tmp_zlib_wasm_opt_sections="$(mktemp)"
-tmp_zlib_section_delta_walyze="$(mktemp)"
+tmp_zlib_section_delta_wite="$(mktemp)"
 tmp_zlib_section_delta_wasm_opt="$(mktemp)"
 tmp_zlib_fn_before="$(mktemp)"
-tmp_zlib_fn_walyze="$(mktemp)"
+tmp_zlib_fn_wite="$(mktemp)"
 tmp_zlib_fn_wasm_opt="$(mktemp)"
 tmp_zlib_function_gap_raw="$(mktemp)"
 tmp_zlib_block_before="$(mktemp)"
-tmp_zlib_block_walyze="$(mktemp)"
+tmp_zlib_block_wite="$(mktemp)"
 tmp_zlib_block_wasm_opt="$(mktemp)"
 tmp_no_change_triage="$(mktemp)"
 tmp_migration_candidates="$(mktemp)"
 cleanup() {
   rm -f \
     "$tmp_wasm" "$tmp_wasm_opt" "$tmp_runtime" "$tmp_component" \
-    "$tmp_zlib_walyze" "$tmp_zlib_wasm_opt" \
-    "$tmp_zlib_before_sections" "$tmp_zlib_walyze_sections" "$tmp_zlib_wasm_opt_sections" \
-    "$tmp_zlib_section_delta_walyze" "$tmp_zlib_section_delta_wasm_opt" \
-    "$tmp_zlib_fn_before" "$tmp_zlib_fn_walyze" "$tmp_zlib_fn_wasm_opt" "$tmp_zlib_function_gap_raw" \
-    "$tmp_zlib_block_before" "$tmp_zlib_block_walyze" "$tmp_zlib_block_wasm_opt" \
+    "$tmp_zlib_wite" "$tmp_zlib_wasm_opt" \
+    "$tmp_zlib_before_sections" "$tmp_zlib_wite_sections" "$tmp_zlib_wasm_opt_sections" \
+    "$tmp_zlib_section_delta_wite" "$tmp_zlib_section_delta_wasm_opt" \
+    "$tmp_zlib_fn_before" "$tmp_zlib_fn_wite" "$tmp_zlib_fn_wasm_opt" "$tmp_zlib_function_gap_raw" \
+    "$tmp_zlib_block_before" "$tmp_zlib_block_wite" "$tmp_zlib_block_wasm_opt" \
     "$tmp_no_change_triage" "$tmp_migration_candidates"
 }
 trap cleanup EXIT
@@ -429,16 +429,16 @@ generate_zlib_gap_report() {
   zlib_gap_before_bytes="$(wc -c < "$zlib_abs" | tr -d '[:space:]')"
 
   local zlib_o1_output zlib_line parsed_before_after
-  if zlib_o1_output="$(moon run src/main --target js -- optimize "$zlib_rel" "$tmp_zlib_walyze" -O1 --verbose 2>&1)"; then
+  if zlib_o1_output="$(moon run src/main --target js -- optimize "$zlib_rel" "$tmp_zlib_wite" -O1 --verbose 2>&1)"; then
     zlib_line="$(extract_optimized_line "$zlib_o1_output")"
     if [[ -n "${zlib_line:-}" ]] && parsed_before_after="$(parse_optimized_before_after "$zlib_line")"; then
       local zlib_before_from_opt
-      read -r zlib_before_from_opt zlib_gap_walyze_after_bytes <<< "$parsed_before_after"
+      read -r zlib_before_from_opt zlib_gap_wite_after_bytes <<< "$parsed_before_after"
       if is_uint "$zlib_before_from_opt"; then
         zlib_gap_before_bytes="$zlib_before_from_opt"
       fi
-      if is_uint "$zlib_gap_before_bytes" && is_uint "$zlib_gap_walyze_after_bytes"; then
-        zlib_gap_walyze_ratio_pct="$(ratio_pct "$zlib_gap_before_bytes" "$zlib_gap_walyze_after_bytes")"
+      if is_uint "$zlib_gap_before_bytes" && is_uint "$zlib_gap_wite_after_bytes"; then
+        zlib_gap_wite_ratio_pct="$(ratio_pct "$zlib_gap_before_bytes" "$zlib_gap_wite_after_bytes")"
       fi
     fi
   fi
@@ -451,36 +451,36 @@ generate_zlib_gap_report() {
       fi
     fi
   fi
-  if is_uint "$zlib_gap_walyze_after_bytes" && is_uint "$zlib_gap_wasm_opt_after_bytes"; then
-    zlib_gap_to_wasm_opt_bytes=$((zlib_gap_walyze_after_bytes - zlib_gap_wasm_opt_after_bytes))
-    if [[ "$zlib_gap_walyze_ratio_pct" != "NA" && "$zlib_gap_wasm_opt_ratio_pct" != "NA" ]]; then
-      zlib_gap_to_wasm_opt_ratio_pct="$(awk -v w="$zlib_gap_walyze_ratio_pct" -v o="$zlib_gap_wasm_opt_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
+  if is_uint "$zlib_gap_wite_after_bytes" && is_uint "$zlib_gap_wasm_opt_after_bytes"; then
+    zlib_gap_to_wasm_opt_bytes=$((zlib_gap_wite_after_bytes - zlib_gap_wasm_opt_after_bytes))
+    if [[ "$zlib_gap_wite_ratio_pct" != "NA" && "$zlib_gap_wasm_opt_ratio_pct" != "NA" ]]; then
+      zlib_gap_to_wasm_opt_ratio_pct="$(awk -v w="$zlib_gap_wite_ratio_pct" -v o="$zlib_gap_wasm_opt_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
     fi
   fi
 
   zlib_gap_code_before_bytes="$(parse_profile_code_body_bytes "$zlib_rel" || true)"
-  zlib_gap_code_walyze_bytes="$(parse_profile_code_body_bytes "$tmp_zlib_walyze" || true)"
+  zlib_gap_code_wite_bytes="$(parse_profile_code_body_bytes "$tmp_zlib_wite" || true)"
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
     zlib_gap_code_wasm_opt_bytes="$(parse_profile_code_body_bytes "$tmp_zlib_wasm_opt" || true)"
   fi
   if ! is_uint "$zlib_gap_code_before_bytes"; then zlib_gap_code_before_bytes="NA"; fi
-  if ! is_uint "$zlib_gap_code_walyze_bytes"; then zlib_gap_code_walyze_bytes="NA"; fi
+  if ! is_uint "$zlib_gap_code_wite_bytes"; then zlib_gap_code_wite_bytes="NA"; fi
   if ! is_uint "$zlib_gap_code_wasm_opt_bytes"; then zlib_gap_code_wasm_opt_bytes="NA"; fi
 
   zlib_gap_block_before_bytes="$(parse_block_total_instruction_bytes "$zlib_rel" || true)"
-  zlib_gap_block_walyze_bytes="$(parse_block_total_instruction_bytes "$tmp_zlib_walyze" || true)"
+  zlib_gap_block_wite_bytes="$(parse_block_total_instruction_bytes "$tmp_zlib_wite" || true)"
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
     zlib_gap_block_wasm_opt_bytes="$(parse_block_total_instruction_bytes "$tmp_zlib_wasm_opt" || true)"
   fi
   if ! is_uint "$zlib_gap_block_before_bytes"; then zlib_gap_block_before_bytes="NA"; fi
-  if ! is_uint "$zlib_gap_block_walyze_bytes"; then zlib_gap_block_walyze_bytes="NA"; fi
+  if ! is_uint "$zlib_gap_block_wite_bytes"; then zlib_gap_block_wite_bytes="NA"; fi
   if ! is_uint "$zlib_gap_block_wasm_opt_bytes"; then zlib_gap_block_wasm_opt_bytes="NA"; fi
 
   if parse_section_sizes_to_tsv "$zlib_rel" "$tmp_zlib_before_sections"; then
-    if parse_section_sizes_to_tsv "$tmp_zlib_walyze" "$tmp_zlib_walyze_sections"; then
-      build_section_delta_tsv "$tmp_zlib_before_sections" "$tmp_zlib_walyze_sections" "$tmp_zlib_section_delta_walyze"
+    if parse_section_sizes_to_tsv "$tmp_zlib_wite" "$tmp_zlib_wite_sections"; then
+      build_section_delta_tsv "$tmp_zlib_before_sections" "$tmp_zlib_wite_sections" "$tmp_zlib_section_delta_wite"
     else
-      : > "$tmp_zlib_section_delta_walyze"
+      : > "$tmp_zlib_section_delta_wite"
     fi
     if is_uint "$zlib_gap_wasm_opt_after_bytes" && parse_section_sizes_to_tsv "$tmp_zlib_wasm_opt" "$tmp_zlib_wasm_opt_sections"; then
       build_section_delta_tsv "$tmp_zlib_before_sections" "$tmp_zlib_wasm_opt_sections" "$tmp_zlib_section_delta_wasm_opt"
@@ -488,31 +488,31 @@ generate_zlib_gap_report() {
       : > "$tmp_zlib_section_delta_wasm_opt"
     fi
   else
-    : > "$tmp_zlib_section_delta_walyze"
+    : > "$tmp_zlib_section_delta_wite"
     : > "$tmp_zlib_section_delta_wasm_opt"
   fi
 
-  local zlib_code_gain_walyze zlib_code_gain_wasm_opt
-  local zlib_function_gain_walyze zlib_function_gain_wasm_opt
-  local zlib_type_gain_walyze zlib_type_gain_wasm_opt
-  zlib_code_gain_walyze="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_walyze" "code")"
+  local zlib_code_gain_wite zlib_code_gain_wasm_opt
+  local zlib_function_gain_wite zlib_function_gain_wasm_opt
+  local zlib_type_gain_wite zlib_type_gain_wasm_opt
+  zlib_code_gain_wite="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_wite" "code")"
   zlib_code_gain_wasm_opt="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_wasm_opt" "code")"
-  zlib_function_gain_walyze="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_walyze" "function")"
+  zlib_function_gain_wite="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_wite" "function")"
   zlib_function_gain_wasm_opt="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_wasm_opt" "function")"
-  zlib_type_gain_walyze="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_walyze" "type")"
+  zlib_type_gain_wite="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_wite" "type")"
   zlib_type_gain_wasm_opt="$(section_gain_from_delta_tsv "$tmp_zlib_section_delta_wasm_opt" "type")"
-  if is_int "$zlib_code_gain_walyze" && is_int "$zlib_code_gain_wasm_opt"; then
-    zlib_gap_code_section_to_wasm_opt_bytes=$((zlib_code_gain_wasm_opt - zlib_code_gain_walyze))
+  if is_int "$zlib_code_gain_wite" && is_int "$zlib_code_gain_wasm_opt"; then
+    zlib_gap_code_section_to_wasm_opt_bytes=$((zlib_code_gain_wasm_opt - zlib_code_gain_wite))
   fi
-  if is_int "$zlib_function_gain_walyze" && is_int "$zlib_function_gain_wasm_opt"; then
-    zlib_gap_function_section_to_wasm_opt_bytes=$((zlib_function_gain_wasm_opt - zlib_function_gain_walyze))
+  if is_int "$zlib_function_gain_wite" && is_int "$zlib_function_gain_wasm_opt"; then
+    zlib_gap_function_section_to_wasm_opt_bytes=$((zlib_function_gain_wasm_opt - zlib_function_gain_wite))
   fi
-  if is_int "$zlib_type_gain_walyze" && is_int "$zlib_type_gain_wasm_opt"; then
-    zlib_gap_type_section_to_wasm_opt_bytes=$((zlib_type_gain_wasm_opt - zlib_type_gain_walyze))
+  if is_int "$zlib_type_gain_wite" && is_int "$zlib_type_gain_wasm_opt"; then
+    zlib_gap_type_section_to_wasm_opt_bytes=$((zlib_type_gain_wasm_opt - zlib_type_gain_wite))
   fi
 
   moon run src/main --target js -- top-functions "$zlib_rel" 20 > "$tmp_zlib_fn_before" 2>&1 || true
-  moon run src/main --target js -- top-functions "$tmp_zlib_walyze" 20 > "$tmp_zlib_fn_walyze" 2>&1 || true
+  moon run src/main --target js -- top-functions "$tmp_zlib_wite" 20 > "$tmp_zlib_fn_wite" 2>&1 || true
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
     moon run src/main --target js -- top-functions "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_fn_wasm_opt" 2>&1 || true
   else
@@ -520,7 +520,7 @@ generate_zlib_gap_report() {
   fi
   echo -e "rank\tkind\tkey\tleft_idx\tright_idx\tleft_body_bytes\tright_body_bytes\tdelta_bytes\tabs_gap_bytes\tleft_exports\tright_exports" > "$ZLIB_FUNCTION_GAP_TSV"
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
-    moon run src/main --target js -- function-gap "$tmp_zlib_walyze" "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_function_gap_raw" 2>&1 || true
+    moon run src/main --target js -- function-gap "$tmp_zlib_wite" "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_function_gap_raw" 2>&1 || true
     awk -F '\t' '
       /^[[:space:]]*tsv\t/ {
         rank += 1
@@ -537,7 +537,7 @@ generate_zlib_gap_report() {
   fi
 
   moon run src/main --target js -- block-sizes "$zlib_rel" 20 > "$tmp_zlib_block_before" 2>&1 || true
-  moon run src/main --target js -- block-sizes "$tmp_zlib_walyze" 20 > "$tmp_zlib_block_walyze" 2>&1 || true
+  moon run src/main --target js -- block-sizes "$tmp_zlib_wite" 20 > "$tmp_zlib_block_wite" 2>&1 || true
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
     moon run src/main --target js -- block-sizes "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_block_wasm_opt" 2>&1 || true
   else
@@ -552,12 +552,12 @@ generate_zlib_gap_report() {
     echo
     echo "## Summary"
     echo
-    echo "| metric | before | walyze(-O1) | wasm-opt(-Oz) |"
+    echo "| metric | before | wite(-O1) | wasm-opt(-Oz) |"
     echo "| --- | ---: | ---: | ---: |"
-    echo "| module_bytes | $zlib_gap_before_bytes | $zlib_gap_walyze_after_bytes | $zlib_gap_wasm_opt_after_bytes |"
-    echo "| reduction_ratio_pct | - | $zlib_gap_walyze_ratio_pct | $zlib_gap_wasm_opt_ratio_pct |"
-    echo "| code_body_bytes | $zlib_gap_code_before_bytes | $zlib_gap_code_walyze_bytes | $zlib_gap_code_wasm_opt_bytes |"
-    echo "| block_instruction_bytes | $zlib_gap_block_before_bytes | $zlib_gap_block_walyze_bytes | $zlib_gap_block_wasm_opt_bytes |"
+    echo "| module_bytes | $zlib_gap_before_bytes | $zlib_gap_wite_after_bytes | $zlib_gap_wasm_opt_after_bytes |"
+    echo "| reduction_ratio_pct | - | $zlib_gap_wite_ratio_pct | $zlib_gap_wasm_opt_ratio_pct |"
+    echo "| code_body_bytes | $zlib_gap_code_before_bytes | $zlib_gap_code_wite_bytes | $zlib_gap_code_wasm_opt_bytes |"
+    echo "| block_instruction_bytes | $zlib_gap_block_before_bytes | $zlib_gap_block_wite_bytes | $zlib_gap_block_wasm_opt_bytes |"
     echo
     echo "- gap_to_wasm_opt_bytes: $zlib_gap_to_wasm_opt_bytes"
     echo "- gap_to_wasm_opt_ratio_pct: $zlib_gap_to_wasm_opt_ratio_pct"
@@ -565,12 +565,12 @@ generate_zlib_gap_report() {
     echo "- function_gap_top_abs_bytes: $zlib_function_gap_top_abs_bytes"
     echo "- function_gap_positive_sum_bytes: $zlib_function_gap_positive_sum_bytes"
     echo
-    echo "## Section Delta (before -> walyze)"
+    echo "## Section Delta (before -> wite)"
     echo
-    if [[ -s "$tmp_zlib_section_delta_walyze" ]]; then
+    if [[ -s "$tmp_zlib_section_delta_wite" ]]; then
       echo "| section | before_bytes | after_bytes | gain_bytes | gain_ratio_pct |"
       echo "| --- | ---: | ---: | ---: | ---: |"
-      awk -F '\t' '{ printf "| %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5 }' "$tmp_zlib_section_delta_walyze"
+      awk -F '\t' '{ printf "| %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5 }' "$tmp_zlib_section_delta_wite"
     else
       echo "(unavailable)"
     fi
@@ -585,7 +585,7 @@ generate_zlib_gap_report() {
       echo "(unavailable)"
     fi
     echo
-    echo "## Function Gap (walyze -> wasm-opt)"
+    echo "## Function Gap (wite -> wasm-opt)"
     echo
     if [[ "$(awk 'END { print NR }' "$ZLIB_FUNCTION_GAP_TSV")" -gt 1 ]]; then
       echo "| rank | kind | key | left_idx | right_idx | left_body_bytes | right_body_bytes | delta_bytes | abs_gap_bytes | left_exports | right_exports |"
@@ -602,9 +602,9 @@ generate_zlib_gap_report() {
     cat "$tmp_zlib_fn_before"
     echo '```'
     echo
-    echo "### walyze(-O1)"
+    echo "### wite(-O1)"
     echo '```text'
-    cat "$tmp_zlib_fn_walyze"
+    cat "$tmp_zlib_fn_wite"
     echo '```'
     echo
     echo "### wasm-opt(-Oz)"
@@ -619,9 +619,9 @@ generate_zlib_gap_report() {
     cat "$tmp_zlib_block_before"
     echo '```'
     echo
-    echo "### walyze(-O1)"
+    echo "### wite(-O1)"
     echo '```text'
-    cat "$tmp_zlib_block_walyze"
+    cat "$tmp_zlib_block_wite"
     echo '```'
     echo
     echo "### wasm-opt(-Oz)"
@@ -631,7 +631,7 @@ generate_zlib_gap_report() {
   } > "$ZLIB_GAP_MD"
 }
 
-echo -e "file\tbefore_bytes\twalyze_after_bytes\twalyze_reduction_ratio_pct\twasm_opt_after_bytes\twasm_opt_reduction_ratio_pct\tgap_to_wasm_opt_bytes\tgap_to_wasm_opt_ratio_pct\twasm_opt_status" > "$SIZE_TSV"
+echo -e "file\tbefore_bytes\twite_after_bytes\twite_reduction_ratio_pct\twasm_opt_after_bytes\twasm_opt_reduction_ratio_pct\tgap_to_wasm_opt_bytes\tgap_to_wasm_opt_ratio_pct\twasm_opt_status" > "$SIZE_TSV"
 echo -e "file\tbefore_bytes\tpre_dce_after_bytes\tpost_dce_after_bytes\tpost_rume_after_bytes\tdce_gain_bytes\trume_gain_bytes\ttotal_gain_bytes\tdirectize_calls\tstatus" > "$DIRECTIZE_CHAIN_TSV"
 echo -e "file\tbefore_bytes\tafter_bytes\tsection_gain_bytes\tsection_gain_ratio_pct\tfunction_before_bytes\tfunction_after_bytes\tfunction_gain_bytes\tfunction_gain_ratio_pct\tblock_before_instruction_bytes\tblock_after_instruction_bytes\tblock_gain_bytes\tblock_gain_ratio_pct\theat_section\theat_function\theat_block\tstatus" > "$HEATMAP_TSV"
 echo -e "file\tbefore_bytes\tstrip_after_bytes\tcode_after_bytes\tdce_after_bytes\trume_after_bytes\tstrip_gain_bytes\tcode_gain_bytes\tdce_gain_bytes\trume_gain_bytes\ttotal_gain_bytes\tstatus" > "$PASS_WATERFALL_TSV"
@@ -644,11 +644,11 @@ primary_gap_after=0
 primary_gap_file_count=0
 
 wasm_opt_total_before=0
-wasm_opt_total_walyze_after=0
+wasm_opt_total_wite_after=0
 wasm_opt_total_after=0
 wasm_opt_success_files=0
 primary_gap_wasm_opt_total_before=0
-primary_gap_wasm_opt_total_walyze_after=0
+primary_gap_wasm_opt_total_wite_after=0
 primary_gap_wasm_opt_total_after=0
 primary_gap_wasm_opt_success_files=0
 
@@ -684,17 +684,17 @@ waterfall_total_gain=0
 waterfall_success_files=0
 
 zlib_gap_before_bytes="NA"
-zlib_gap_walyze_after_bytes="NA"
+zlib_gap_wite_after_bytes="NA"
 zlib_gap_wasm_opt_after_bytes="NA"
-zlib_gap_walyze_ratio_pct="NA"
+zlib_gap_wite_ratio_pct="NA"
 zlib_gap_wasm_opt_ratio_pct="NA"
 zlib_gap_to_wasm_opt_bytes="NA"
 zlib_gap_to_wasm_opt_ratio_pct="NA"
 zlib_gap_code_before_bytes="NA"
-zlib_gap_code_walyze_bytes="NA"
+zlib_gap_code_wite_bytes="NA"
 zlib_gap_code_wasm_opt_bytes="NA"
 zlib_gap_block_before_bytes="NA"
-zlib_gap_block_walyze_bytes="NA"
+zlib_gap_block_wite_bytes="NA"
 zlib_gap_block_wasm_opt_bytes="NA"
 zlib_gap_code_section_to_wasm_opt_bytes="NA"
 zlib_gap_function_section_to_wasm_opt_bytes="NA"
@@ -887,12 +887,12 @@ while IFS= read -r file; do
         wasm_opt_status="ok"
 
         wasm_opt_total_before=$((wasm_opt_total_before + before))
-        wasm_opt_total_walyze_after=$((wasm_opt_total_walyze_after + after))
+        wasm_opt_total_wite_after=$((wasm_opt_total_wite_after + after))
         wasm_opt_total_after=$((wasm_opt_total_after + wasm_opt_after))
         wasm_opt_success_files=$((wasm_opt_success_files + 1))
         if [[ "$primary_gap_included" -eq 1 ]]; then
           primary_gap_wasm_opt_total_before=$((primary_gap_wasm_opt_total_before + before))
-          primary_gap_wasm_opt_total_walyze_after=$((primary_gap_wasm_opt_total_walyze_after + after))
+          primary_gap_wasm_opt_total_wite_after=$((primary_gap_wasm_opt_total_wite_after + after))
           primary_gap_wasm_opt_total_after=$((primary_gap_wasm_opt_total_after + wasm_opt_after))
           primary_gap_wasm_opt_success_files=$((primary_gap_wasm_opt_success_files + 1))
         fi
@@ -955,25 +955,25 @@ done < <(core_optimize_corpus_files)
 
 total_ratio_pct="$(ratio_pct "$total_before" "$total_after")"
 wasm_opt_total_ratio_pct="NA"
-wasm_opt_total_walyze_ratio_pct="NA"
+wasm_opt_total_wite_ratio_pct="NA"
 wasm_opt_total_gap_bytes="NA"
 wasm_opt_total_gap_ratio_pct="NA"
 primary_gap_ratio_pct="$(ratio_pct "$primary_gap_before" "$primary_gap_after")"
 primary_gap_wasm_opt_ratio_pct="NA"
-primary_gap_wasm_opt_walyze_ratio_pct="NA"
+primary_gap_wasm_opt_wite_ratio_pct="NA"
 primary_gap_to_wasm_opt_bytes="NA"
 primary_gap_to_wasm_opt_ratio_pct="NA"
 if [[ "$wasm_opt_success_files" -gt 0 ]]; then
   wasm_opt_total_ratio_pct="$(ratio_pct "$wasm_opt_total_before" "$wasm_opt_total_after")"
-  wasm_opt_total_walyze_ratio_pct="$(ratio_pct "$wasm_opt_total_before" "$wasm_opt_total_walyze_after")"
-  wasm_opt_total_gap_bytes=$((wasm_opt_total_walyze_after - wasm_opt_total_after))
-  wasm_opt_total_gap_ratio_pct="$(awk -v w="$wasm_opt_total_walyze_ratio_pct" -v o="$wasm_opt_total_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
+  wasm_opt_total_wite_ratio_pct="$(ratio_pct "$wasm_opt_total_before" "$wasm_opt_total_wite_after")"
+  wasm_opt_total_gap_bytes=$((wasm_opt_total_wite_after - wasm_opt_total_after))
+  wasm_opt_total_gap_ratio_pct="$(awk -v w="$wasm_opt_total_wite_ratio_pct" -v o="$wasm_opt_total_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
 fi
 if [[ "$primary_gap_wasm_opt_success_files" -gt 0 ]]; then
   primary_gap_wasm_opt_ratio_pct="$(ratio_pct "$primary_gap_wasm_opt_total_before" "$primary_gap_wasm_opt_total_after")"
-  primary_gap_wasm_opt_walyze_ratio_pct="$(ratio_pct "$primary_gap_wasm_opt_total_before" "$primary_gap_wasm_opt_total_walyze_after")"
-  primary_gap_to_wasm_opt_bytes=$((primary_gap_wasm_opt_total_walyze_after - primary_gap_wasm_opt_total_after))
-  primary_gap_to_wasm_opt_ratio_pct="$(awk -v w="$primary_gap_wasm_opt_walyze_ratio_pct" -v o="$primary_gap_wasm_opt_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
+  primary_gap_wasm_opt_wite_ratio_pct="$(ratio_pct "$primary_gap_wasm_opt_total_before" "$primary_gap_wasm_opt_total_wite_after")"
+  primary_gap_to_wasm_opt_bytes=$((primary_gap_wasm_opt_total_wite_after - primary_gap_wasm_opt_total_after))
+  primary_gap_to_wasm_opt_ratio_pct="$(awk -v w="$primary_gap_wasm_opt_wite_ratio_pct" -v o="$primary_gap_wasm_opt_ratio_pct" 'BEGIN { printf "%.4f", (w - o) }')"
 fi
 
 directize_total_post_rume_reduction_ratio_pct="$(ratio_pct "$directize_total_before" "$directize_total_post_rume_after")"
@@ -1190,7 +1190,7 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   fi
   echo "- zlib_gap_report: \`bench/kpi/zlib_gap.md\`"
   echo "- zlib_gap_before_bytes: $zlib_gap_before_bytes"
-  echo "- zlib_gap_walyze_after_bytes: $zlib_gap_walyze_after_bytes"
+  echo "- zlib_gap_wite_after_bytes: $zlib_gap_wite_after_bytes"
   echo "- zlib_gap_wasm_opt_after_bytes: $zlib_gap_wasm_opt_after_bytes"
   echo "- zlib_gap_to_wasm_opt_bytes: $zlib_gap_to_wasm_opt_bytes"
   echo "- zlib_gap_to_wasm_opt_ratio_pct: $zlib_gap_to_wasm_opt_ratio_pct"
@@ -1199,7 +1199,7 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo "- zlib_function_gap_top_abs_bytes: $zlib_function_gap_top_abs_bytes"
   echo "- zlib_function_gap_positive_sum_bytes: $zlib_function_gap_positive_sum_bytes"
   echo
-  echo "| file | before_bytes | walyze_after_bytes | walyze_reduction_ratio_pct | wasm_opt_after_bytes | wasm_opt_reduction_ratio_pct | gap_to_wasm_opt_bytes | gap_to_wasm_opt_ratio_pct | wasm_opt_status |"
+  echo "| file | before_bytes | wite_after_bytes | wite_reduction_ratio_pct | wasm_opt_after_bytes | wasm_opt_reduction_ratio_pct | gap_to_wasm_opt_bytes | gap_to_wasm_opt_ratio_pct | wasm_opt_status |"
   echo "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |"
   awk -F '\t' 'NR > 1 { printf "| %s | %s | %s | %s | %s | %s | %s | %s | %s |\n", $1, $2, $3, $4, $5, $6, $7, $8, $9 }' "$SIZE_TSV"
   echo
@@ -1216,7 +1216,7 @@ timestamp="$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
   echo
   echo "## Function Gap to wasm-opt (A6)"
   echo
-  echo "- source: \`bench/kpi/zlib_function_gap.tsv\` (left=walyze -O1, right=wasm-opt -Oz, zlib)"
+  echo "- source: \`bench/kpi/zlib_function_gap.tsv\` (left=wite -O1, right=wasm-opt -Oz, zlib)"
   echo "- entry_count: $zlib_function_gap_entry_count"
   echo "- top_abs_gap_bytes: $zlib_function_gap_top_abs_bytes"
   echo "- positive_delta_sum_bytes: $zlib_function_gap_positive_sum_bytes"

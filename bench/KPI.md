@@ -1,6 +1,6 @@
 # KPI Policy
 
-`walyze` の最適化評価は以下の優先順で行う。
+`wite` の最適化評価は以下の優先順で行う。
 
 1. サイズ縮小（第一KPI）
 2. 実行速度（第二KPI）
@@ -25,7 +25,7 @@
   - 実行: `wasm-opt -Oz --all-features --strip-debug --strip-dwarf --strip-target-features`（`wasm-opt` 利用可能時）
   - 算出: `(sum(before_bytes) - sum(wasm_opt_after_bytes)) / sum(before_bytes)`
 - 備考:
-  - `size.tsv` と `latest.md` に `walyze` との差分（bytes / ratio）を併記
+  - `size.tsv` と `latest.md` に `wite` との差分（bytes / ratio）を併記
   - `wasm-opt` がない環境では `NA` として継続実行
 
 ### wasm-opt gap 判定スコープ（固定）
@@ -144,10 +144,10 @@
 - 指標: `zlib_gap_detail`
 - 定義:
   - 対象: `bench/corpus/core/binaryen/zlib.wasm`
-  - 比較: `before` / `walyze -O1` / `wasm-opt -Oz`
+  - 比較: `before` / `wite -O1` / `wasm-opt -Oz`
   - 出力:
     - module/code_body/block_instruction の要約比較
-    - section 差分（before->walyze / before->wasm-opt）
+    - section 差分（before->wite / before->wasm-opt）
     - top-functions / block-sizes のスナップショット
   - 目的:
   - core corpus gap の支配要因（現状ほぼ zlib）を、関数/ブロック/section 単位で帰属する
@@ -182,7 +182,7 @@ just kpi
 成果物:
 
 - `bench/kpi/latest.md`: 人間向けサマリ
-- `bench/kpi/size.tsv`: サイズKPIの明細（walyze + wasm-opt 参考値 + 差分）
+- `bench/kpi/size.tsv`: サイズKPIの明細（wite + wasm-opt 参考値 + 差分）
 - `bench/kpi/heatmap.tsv`: before/after 階層ヒートマップ（section/function/block）
 - `bench/kpi/pass_waterfall.tsv`: pass waterfall の段階別差分
 - `bench/kpi/directize_chain.tsv`: directize→DCE→RUME 連鎖の段階差分

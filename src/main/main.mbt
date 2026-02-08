@@ -1,7 +1,12 @@
 ///|
 fn print_usage() -> Unit {
-  println("walyze commands:")
-  println("  analyze <core.wasm>")
+  println("wite commands:")
+  println(
+    "  analyze <core.wasm> [--view=summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain] [--limit=<n>] [--diff-limit=<n>] [--opt-level=O1] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
+  )
+  println(
+    "  build <entry.(wac|wasm)> [--out=<path>|-o <path>] [--best-effort] [--no-compose-dce] [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
+  )
   println("  analyze-host <core.wasm> [limit]")
   println("  analyze-opt <core.wasm> [opt-level] [diff-limit]")
   println("  deep-analyze <core.wasm> [limit]")
@@ -33,6 +38,84 @@ fn print_usage() -> Unit {
 }
 
 ///|
+priv enum AnalyzeView {
+  Summary
+  Deep
+  Functions
+  Blocks
+  Callgraph
+  Host
+  Pipeline
+  Dce
+  Keep
+  Retain
+}
+
+///|
+fn parse_analyze_view(name : String) -> AnalyzeView? {
+  match name {
+    "summary" => Some(AnalyzeView::Summary)
+    "deep" => Some(AnalyzeView::Deep)
+    "functions" => Some(AnalyzeView::Functions)
+    "top-functions" => Some(AnalyzeView::Functions)
+    "blocks" => Some(AnalyzeView::Blocks)
+    "block-sizes" => Some(AnalyzeView::Blocks)
+    "callgraph" => Some(AnalyzeView::Callgraph)
+    "host" => Some(AnalyzeView::Host)
+    "pipeline" => Some(AnalyzeView::Pipeline)
+    "dce" => Some(AnalyzeView::Dce)
+    "keep" => Some(AnalyzeView::Keep)
+    "retain" => Some(AnalyzeView::Retain)
+    _ => None
+  }
+}
+
+fn normalize_opt_level_token(token : String) -> String {
+  if token.has_prefix("-O") {
+    token
+  } else if token.has_prefix("O") {
+    "-".to_string() + token
+  } else {
+    token
+  }
+}
+
+///|
+fn parse_opt_level_or_exit(token : String) -> @wite.OptimizeConfig {
+  let normalized = normalize_opt_level_token(token)
+  match @wite.optimize_config_from_opt_level(normalized) {
+    Some(config) => config
+    None => {
+      println("invalid opt-level: " + token)
+      @sys.exit(1)
+      @wite.OptimizeConfig::o1()
+    }
+  }
+}
+
+///|
+fn replace_suffix(text : String, from : String, to : String) -> String {
+  if not(text.has_suffix(from)) {
+    return text + to
+  }
+  let prefix = text[:text.length() - from.length()].to_string() catch {
+    _ => text.to_string()
+  }
+  prefix + to
+}
+
+///|
+fn derive_build_output_path(input_path : String) -> String {
+  if input_path.has_suffix(".wac") {
+    replace_suffix(input_path, ".wac", ".wasm")
+  } else if input_path.has_suffix(".wasm") {
+    replace_suffix(input_path, ".wasm", ".min.wasm")
+  } else {
+    input_path + ".wasm"
+  }
+}
+
+///|
 fn read_bytes_or_exit(path : String) -> Bytes {
   @fs.read_file_to_bytes(path) catch {
     e => {
@@ -44,7 +127,7 @@ fn read_bytes_or_exit(path : String) -> Bytes {
 }
 
 ///|
-fn print_section_sizes(sections : Array[@walyze.SectionSize]) -> Unit {
+fn print_section_sizes(sections : Array[@wite.SectionSize]) -> Unit {
   for section in sections {
     println(
       "  " + section.key + ": " + section.total_bytes.to_string() + " bytes",
@@ -74,7 +157,7 @@ fn format_percent(numerator : UInt, denominator : UInt) -> String {
 
 ///|
 fn print_section_sizes_with_share(
-  sections : Array[@walyze.SectionSize],
+  sections : Array[@wite.SectionSize],
   total_bytes : UInt,
 ) -> Unit {
   for section in sections {
@@ -92,7 +175,7 @@ fn print_section_sizes_with_share(
 
 ///|
 fn print_custom_section_breakdown(
-  sections : Array[@walyze.CustomSectionBreakdown],
+  sections : Array[@wite.CustomSectionBreakdown],
   total_bytes : UInt,
   limit : UInt,
 ) -> Unit {
@@ -126,7 +209,7 @@ fn print_custom_section_breakdown(
 
 ///|
 fn print_opcode_stats(
-  stats : Array[@walyze.OpcodeStat],
+  stats : Array[@wite.OpcodeStat],
   total_instruction_bytes : UInt,
   limit : UInt,
 ) -> Unit {
@@ -182,7 +265,7 @@ fn format_root_preview(roots : Array[UInt], limit : UInt) -> String {
 }
 
 ///|
-fn print_call_graph_summary(summary : @walyze.CallGraphSummary) -> Unit {
+fn print_call_graph_summary(summary : @wite.CallGraphSummary) -> Unit {
   println("call graph summary:")
   println(
     "  functions: imported=" +
@@ -217,7 +300,7 @@ fn print_call_graph_summary(summary : @walyze.CallGraphSummary) -> Unit {
 
 ///|
 fn print_host_code_hints(
-  hints : Array[@walyze.HostCodeHint],
+  hints : Array[@wite.HostCodeHint],
   limit : UInt,
 ) -> Unit {
   if hints.length() == 0 {
@@ -263,7 +346,7 @@ fn print_host_code_hints(
 ///|
 fn run_analyze_host(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_host_generated_code(bytes) {
+  match @wite.analyze_host_generated_code(bytes) {
     Ok(report) => {
       println("host/generated code analysis:")
       println(
@@ -295,14 +378,14 @@ fn run_analyze_host(path : String, limit : UInt) -> Unit {
       print_host_code_hints(report.hints, limit)
     }
     Err(e) => {
-      println("analyze-host failed: " + @walyze.error_to_string(e))
+      println("analyze-host failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
 }
 
 ///|
-fn print_optimize_metadata_stage(stage : @walyze.OptimizeStageMetadata) -> Unit {
+fn print_optimize_metadata_stage(stage : @wite.OptimizeStageMetadata) -> Unit {
   println(
     "    " +
     stage.stage +
@@ -370,12 +453,12 @@ fn print_optimize_metadata_stage(stage : @walyze.OptimizeStageMetadata) -> Unit 
 ///|
 fn run_analyze_opt(
   path : String,
-  config : @walyze.OptimizeConfig,
+  config : @wite.OptimizeConfig,
   function_diff_limit : UInt,
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
   match
-    @walyze.analyze_optimize_metadata(bytes, config~, function_diff_limit~) {
+    @wite.analyze_optimize_metadata(bytes, config~, function_diff_limit~) {
     Ok(report) => {
       println("optimize metadata analysis:")
       println(
@@ -394,7 +477,7 @@ fn run_analyze_opt(
       }
     }
     Err(e) => {
-      println("analyze-opt failed: " + @walyze.error_to_string(e))
+      println("analyze-opt failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -403,23 +486,23 @@ fn run_analyze_opt(
 ///|
 fn run_analyze(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_section_sizes(bytes) {
+  match @wite.analyze_section_sizes(bytes) {
     Ok(sections) => {
       println("section size analysis:")
       print_section_sizes_with_share(
         sections,
         bytes.length().reinterpret_as_uint(),
       )
-      match @walyze.analyze_call_graph_summary(bytes) {
+      match @wite.analyze_call_graph_summary(bytes) {
         Ok(summary) => print_call_graph_summary(summary)
         Err(e) => {
-          println("analyze failed: " + @walyze.error_to_string(e))
+          println("analyze failed: " + @wite.error_to_string(e))
           @sys.exit(1)
         }
       }
     }
     Err(e) => {
-      println("analyze failed: " + @walyze.error_to_string(e))
+      println("analyze failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -428,7 +511,7 @@ fn run_analyze(path : String) -> Unit {
 ///|
 fn run_deep_analyze(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_wasm_breakdown(bytes, top_limit=limit) {
+  match @wite.analyze_wasm_breakdown(bytes, top_limit=limit) {
     Ok(report) => {
       println("wasm deep analysis:")
       println("  total_bytes: " + report.total_bytes.to_string())
@@ -473,7 +556,7 @@ fn run_deep_analyze(path : String, limit : UInt) -> Unit {
       print_opcode_stats(report.opcodes, report.instruction_bytes, limit)
     }
     Err(e) => {
-      println("deep-analyze failed: " + @walyze.error_to_string(e))
+      println("deep-analyze failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -482,7 +565,7 @@ fn run_deep_analyze(path : String, limit : UInt) -> Unit {
 ///|
 fn run_profile(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.profile_module(bytes) {
+  match @wite.profile_module(bytes) {
     Ok(profile) => {
       println("core wasm profile:")
       println("  total_bytes: " + profile.total_bytes.to_string())
@@ -495,7 +578,7 @@ fn run_profile(path : String) -> Unit {
       print_section_sizes(profile.sections)
     }
     Err(e) => {
-      println("profile failed: " + @walyze.error_to_string(e))
+      println("profile failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -606,8 +689,8 @@ fn parse_int_or_exit(text : String, name : String) -> Int {
 fn parse_runtime_profile_scenarios(
   args : Array[String],
   start : Int,
-) -> Array[@walyze.RuntimeProfileScenario] {
-  let scenarios : Array[@walyze.RuntimeProfileScenario] = []
+) -> Array[@wite.RuntimeProfileScenario] {
+  let scenarios : Array[@wite.RuntimeProfileScenario] = []
   for i in start..<args.length() {
     match args[i].strip_prefix("--scenario=") {
       Some(spec_text) => {
@@ -636,7 +719,7 @@ fn parse_runtime_profile_scenarios(
           }
         }
         scenarios.push(
-          @walyze.make_runtime_profile_scenario(
+          @wite.make_runtime_profile_scenario(
             export_name,
             args=scenario_args,
           ),
@@ -649,13 +732,14 @@ fn parse_runtime_profile_scenarios(
 }
 
 ///|
-fn run_optimize(args : Array[String]) -> Unit {
-  if args.length() < 4 {
-    print_usage()
-    @sys.exit(1)
-  }
-  let input_path = args[2]
-  let output_path = args[3]
+priv struct OptimizeCliOptions {
+  config : @wite.OptimizeConfig
+  excluded_roots : Array[String]
+  verbose : Bool
+}
+
+///|
+fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
   let mut strip_all_custom = false
   let mut strip_name_section = true
   let mut strip_producers_section = true
@@ -674,8 +758,9 @@ fn run_optimize(args : Array[String]) -> Unit {
   let mut closed_world = false
   let mut safe_mode = false
   let mut verbose = false
-  for i in 4..<args.length() {
-    match @walyze.optimize_config_from_opt_level(args[i]) {
+  for i in 0..<flags.length() {
+    let flag = flags[i]
+    match @wite.optimize_config_from_opt_level(normalize_opt_level_token(flag)) {
       Some(preset) => {
         strip_all_custom = preset.strip_all_custom
         strip_name_section = preset.strip_name_section
@@ -697,64 +782,64 @@ fn run_optimize(args : Array[String]) -> Unit {
       }
       None => ()
     }
-    if args[i] == "--strip-all-custom" {
+    if flag == "--strip-all-custom" {
       strip_all_custom = true
     }
-    if args[i] == "--strip-debug" {
+    if flag == "--strip-debug" {
       strip_debug_sections = true
     }
-    if args[i] == "--strip-dwarf" {
+    if flag == "--strip-dwarf" {
       strip_dwarf_sections = true
     }
-    if args[i] == "--strip-target-features" {
+    if flag == "--strip-target-features" {
       strip_target_features_section = true
     }
-    if args[i] == "--no-peephole" {
+    if flag == "--no-peephole" {
       enable_peephole = false
     }
-    if args[i] == "--no-vacuum" {
+    if flag == "--no-vacuum" {
       enable_vacuum = false
     }
-    if args[i] == "--no-merge-blocks" {
+    if flag == "--no-merge-blocks" {
       enable_merge_blocks = false
     }
-    if args[i] == "--no-remove-unused-brs" {
+    if flag == "--no-remove-unused-brs" {
       enable_remove_unused_brs = false
     }
-    if args[i] == "--converge" {
+    if flag == "--converge" {
       pass_rounds = 8U
     }
-    match args[i].strip_prefix("--rounds=") {
+    match flag.strip_prefix("--rounds=") {
       Some(value) =>
         pass_rounds = parse_uint_or_exit(value.to_string(), "rounds")
       None => ()
     }
-    if args[i] == "--dce-apply" {
+    if flag == "--dce-apply" {
       enable_dce = true
     }
-    if args[i] == "--dfe-apply" {
+    if flag == "--dfe-apply" {
       enable_dfe = true
     }
-    if args[i] == "--msf-apply" {
+    if flag == "--msf-apply" {
       enable_merge_similar_functions = true
     }
-    if args[i] == "--rume-apply" {
+    if flag == "--rume-apply" {
       enable_remove_unused_module_elements = true
     }
-    if args[i] == "--closed-world" {
+    if flag == "--closed-world" {
       closed_world = true
     }
-    if args[i] == "--safe-mode" {
+    if flag == "--safe-mode" {
       safe_mode = true
     }
-    if args[i] == "--verbose" {
+    if flag == "--verbose" {
       verbose = true
     }
   }
-  let keep_custom_sections = parse_keep_custom(args, 4)
-  let closed_world_root_exports = parse_closed_world_roots(args, 4)
-  let excluded_roots = parse_excluded_roots(args, 4)
-  let config = @walyze.make_optimize_config(
+  let keep_custom_sections = parse_keep_custom(flags, 0)
+  let closed_world_root_exports = parse_closed_world_roots(flags, 0)
+  let excluded_roots = parse_excluded_roots(flags, 0)
+  let config = @wite.make_optimize_config(
     strip_all_custom~,
     strip_name_section~,
     strip_producers_section~,
@@ -775,18 +860,41 @@ fn run_optimize(args : Array[String]) -> Unit {
     closed_world_root_exports~,
     safe_mode~,
   )
+  { config, excluded_roots, verbose }
+}
+
+///|
+fn write_output_or_exit(output_path : String, bytes : Bytes) -> Unit {
+  @fs.write_bytes_to_file(output_path, bytes) catch {
+    e => {
+      println("failed to write file: " + output_path + " (" + e.to_string() + ")")
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
+fn run_optimize(args : Array[String]) -> Unit {
+  if args.length() < 4 {
+    print_usage()
+    @sys.exit(1)
+  }
+  let input_path = args[2]
+  let output_path = args[3]
+  let flags : Array[String] = []
+  for i in 4..<args.length() {
+    flags.push(args[i])
+  }
+  let options = parse_optimize_cli_options(flags)
   let bytes = read_bytes_or_exit(input_path)
   match
-    @walyze.optimize_binary_for_size(bytes, config~, exclude=excluded_roots) {
+    @wite.optimize_binary_for_size(
+      bytes,
+      config=options.config,
+      exclude=options.excluded_roots,
+    ) {
     Ok(result) => {
-      @fs.write_bytes_to_file(output_path, result.bytes) catch {
-        e => {
-          println(
-            "failed to write file: " + output_path + " (" + e.to_string() + ")",
-          )
-          @sys.exit(1)
-        }
-      }
+      write_output_or_exit(output_path, result.bytes)
       println(
         "optimized: " +
         result.before_size.to_string() +
@@ -797,7 +905,7 @@ fn run_optimize(args : Array[String]) -> Unit {
       if result.removed_sections.length() > 0 {
         println("removed sections: " + result.removed_sections.join(", "))
       }
-      if verbose && result.no_change_reasons.length() > 0 {
+      if options.verbose && result.no_change_reasons.length() > 0 {
         println("no-change reasons: " + result.no_change_reasons.join(", "))
       }
     }
@@ -809,9 +917,100 @@ fn run_optimize(args : Array[String]) -> Unit {
 }
 
 ///|
+fn run_build(args : Array[String]) -> Unit {
+  if args.length() < 3 {
+    print_usage()
+    @sys.exit(1)
+  }
+  let input_path = args[2]
+  let mut output_path : String? = None
+  let mut best_effort = false
+  let mut compose_dce = true
+  let optimize_flags : Array[String] = []
+  let mut i = 3
+  while i < args.length() {
+    let arg = args[i]
+    if arg == "-o" || arg == "--out" {
+      if i + 1 >= args.length() {
+        println("missing output path after " + arg)
+        @sys.exit(1)
+      }
+      output_path = Some(args[i + 1])
+      i += 2
+      continue
+    }
+    match arg.strip_prefix("--out=") {
+      Some(path) => {
+        output_path = Some(path.to_string())
+        i += 1
+        continue
+      }
+      None => ()
+    }
+    if arg == "--best-effort" {
+      best_effort = true
+      i += 1
+      continue
+    }
+    if arg == "--no-compose-dce" {
+      compose_dce = false
+      i += 1
+      continue
+    }
+    optimize_flags.push(arg)
+    i += 1
+  }
+  let out = match output_path {
+    Some(path) => path
+    None => derive_build_output_path(input_path)
+  }
+  let built = if input_path.has_suffix(".wac") {
+    match @wac.compose_wac_file(input_path, best_effort~, dce=compose_dce) {
+      Ok(bytes) => bytes
+      Err(msg) => {
+        println("build failed: " + msg)
+        @sys.exit(1)
+        b""
+      }
+    }
+  } else {
+    read_bytes_or_exit(input_path)
+  }
+  let options = parse_optimize_cli_options(optimize_flags)
+  match
+    @wite.optimize_binary_for_size(
+      built,
+      config=options.config,
+      exclude=options.excluded_roots,
+    ) {
+    Ok(result) => {
+      write_output_or_exit(out, result.bytes)
+      println(
+        "built: " +
+        result.before_size.to_string() +
+        " -> " +
+        result.after_size.to_string() +
+        " bytes",
+      )
+      if result.removed_sections.length() > 0 {
+        println("removed sections: " + result.removed_sections.join(", "))
+      }
+      if options.verbose && result.no_change_reasons.length() > 0 {
+        println("no-change reasons: " + result.no_change_reasons.join(", "))
+      }
+      println("output: " + out)
+    }
+    Err(msg) => {
+      println("build failed: " + msg)
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
 fn run_dce_report(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_dce_report(bytes) {
+  match @wite.analyze_dce_report(bytes) {
     Ok(report) => {
       println("dce report:")
       println("  roots: " + report.roots.map(i => i.to_string()).join(", "))
@@ -829,7 +1028,7 @@ fn run_dce_report(path : String, limit : UInt) -> Unit {
       }
     }
     Err(e) => {
-      println("dce-report failed: " + @walyze.error_to_string(e))
+      println("dce-report failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -839,10 +1038,10 @@ fn run_dce_report(path : String, limit : UInt) -> Unit {
 fn run_runtime_profile(
   path : String,
   iterations : UInt,
-  scenarios : Array[@walyze.RuntimeProfileScenario],
+  scenarios : Array[@wite.RuntimeProfileScenario],
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.profile_runtime_exports(bytes, iterations~, scenarios~) {
+  match @wite.profile_runtime_exports(bytes, iterations~, scenarios~) {
     Ok(profile) => {
       println("runtime profile:")
       println("  instantiate_ns: " + profile.instantiate_ns.to_string())
@@ -901,7 +1100,7 @@ fn run_runtime_profile(
 
 ///|
 fn print_hotness_size_entries(
-  entries : Array[@walyze.HotnessSizeEntry],
+  entries : Array[@wite.HotnessSizeEntry],
   limit : UInt,
 ) -> Unit {
   if entries.length() == 0 {
@@ -956,7 +1155,7 @@ fn print_hotness_size_entries(
 
 ///|
 fn print_hotness_size_buckets(
-  buckets : Array[@walyze.HotnessSizeBucket],
+  buckets : Array[@wite.HotnessSizeBucket],
 ) -> Unit {
   println("  buckets:")
   for bucket in buckets {
@@ -975,7 +1174,7 @@ fn print_hotness_size_buckets(
 
 ///|
 fn print_hotness_unresolved_reason_counts(
-  counts : Array[@walyze.HotnessUnresolvedReasonCount],
+  counts : Array[@wite.HotnessUnresolvedReasonCount],
 ) -> Unit {
   if counts.length() == 0 {
     return
@@ -991,10 +1190,10 @@ fn run_hot_size(
   path : String,
   iterations : UInt,
   limit : UInt,
-  scenarios : Array[@walyze.RuntimeProfileScenario],
+  scenarios : Array[@wite.RuntimeProfileScenario],
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_hotness_size_matrix(bytes, iterations~, scenarios~) {
+  match @wite.analyze_hotness_size_matrix(bytes, iterations~, scenarios~) {
     Ok(report) => {
       println("hot-size matrix:")
       println("  instantiate_ns: " + report.instantiate_ns.to_string())
@@ -1024,7 +1223,7 @@ fn run_hot_size(
 
 ///|
 fn print_function_sizes(
-  functions : Array[@walyze.FunctionSize],
+  functions : Array[@wite.FunctionSize],
   limit : UInt,
 ) -> Unit {
   let mut printed = 0U
@@ -1072,7 +1271,7 @@ fn format_opt_name(value : String?) -> String {
 
 ///|
 fn print_function_gap_entries(
-  entries : Array[@walyze.FunctionGapEntry],
+  entries : Array[@wite.FunctionGapEntry],
 ) -> Unit {
   if entries.length() == 0 {
     println("  entries: (none)")
@@ -1143,7 +1342,7 @@ fn print_function_gap_entries(
 
 ///|
 fn print_code_block_sizes(
-  blocks : Array[@walyze.CodeBlockSize],
+  blocks : Array[@wite.CodeBlockSize],
   limit : UInt,
 ) -> Unit {
   let mut printed = 0U
@@ -1188,7 +1387,7 @@ fn print_code_block_sizes(
 ///|
 fn run_block_sizes(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_code_block_sizes(bytes) {
+  match @wite.analyze_code_block_sizes(bytes) {
     Ok(report) => {
       println("code block size analysis:")
       println("  partial: " + report.partial.to_string())
@@ -1203,7 +1402,7 @@ fn run_block_sizes(path : String, limit : UInt) -> Unit {
       print_code_block_sizes(report.blocks, limit)
     }
     Err(e) => {
-      println("block-sizes failed: " + @walyze.error_to_string(e))
+      println("block-sizes failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -1212,14 +1411,14 @@ fn run_block_sizes(path : String, limit : UInt) -> Unit {
 ///|
 fn run_top_functions(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_function_sizes(bytes) {
+  match @wite.analyze_function_sizes(bytes) {
     Ok(functions) => {
       println("top functions:")
       println("  count: " + functions.length().to_string())
       print_function_sizes(functions, limit)
     }
     Err(e) => {
-      println("top-functions failed: " + @walyze.error_to_string(e))
+      println("top-functions failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -1234,7 +1433,7 @@ fn run_function_gap(
   let left_bytes = read_bytes_or_exit(left_path)
   let right_bytes = read_bytes_or_exit(right_path)
   match
-    @walyze.analyze_function_size_gap(left_bytes, right_bytes, top_limit=limit) {
+    @wite.analyze_function_size_gap(left_bytes, right_bytes, top_limit=limit) {
     Ok(report) => {
       println("function-gap:")
       println(
@@ -1260,7 +1459,7 @@ fn run_function_gap(
       print_function_gap_entries(report.entries)
     }
     Err(e) => {
-      println("function-gap failed: " + @walyze.error_to_string(e))
+      println("function-gap failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -1268,7 +1467,7 @@ fn run_function_gap(
 
 ///|
 fn print_call_graph_nodes(
-  nodes : Array[@walyze.CallGraphNode],
+  nodes : Array[@wite.CallGraphNode],
   limit : UInt,
 ) -> Unit {
   let mut printed = 0U
@@ -1310,7 +1509,7 @@ fn print_call_graph_nodes(
 ///|
 fn run_callgraph(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_call_graph(bytes) {
+  match @wite.analyze_call_graph(bytes) {
     Ok(report) => {
       println("call graph:")
       println(
@@ -1330,37 +1529,26 @@ fn run_callgraph(path : String, limit : UInt) -> Unit {
       print_call_graph_nodes(report.nodes, limit)
     }
     Err(e) => {
-      println("callgraph failed: " + @walyze.error_to_string(e))
+      println("callgraph failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
 }
 
 ///|
-fn run_keep_reasons(args : Array[String]) -> Unit {
-  if args.length() < 3 {
-    print_usage()
-    @sys.exit(1)
-  }
-  let path = args[2]
+fn run_keep_reasons_with_options(
+  path : String,
+  closed_world : Bool,
+  safe_mode : Bool,
+  closed_world_root_exports : Array[String],
+) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  let mut closed_world = false
-  let mut safe_mode = false
-  for i in 3..<args.length() {
-    if args[i] == "--closed-world" {
-      closed_world = true
-    }
-    if args[i] == "--safe-mode" {
-      safe_mode = true
-    }
-  }
-  let closed_world_root_exports = parse_closed_world_roots(args, 3)
-  let config = @walyze.make_optimize_config(
+  let config = @wite.make_optimize_config(
     closed_world~,
     closed_world_root_exports~,
     safe_mode~,
   )
-  match @walyze.analyze_keep_reasons(bytes, config~) {
+  match @wite.analyze_keep_reasons(bytes, config~) {
     Ok(report) => {
       println("keep reasons:")
       println("  partial: " + report.partial.to_string())
@@ -1391,15 +1579,41 @@ fn run_keep_reasons(args : Array[String]) -> Unit {
       }
     }
     Err(e) => {
-      println("keep-reasons failed: " + @walyze.error_to_string(e))
+      println("keep-reasons failed: " + @wite.error_to_string(e))
       @sys.exit(1)
     }
   }
 }
 
 ///|
+fn run_keep_reasons(args : Array[String]) -> Unit {
+  if args.length() < 3 {
+    print_usage()
+    @sys.exit(1)
+  }
+  let path = args[2]
+  let mut closed_world = false
+  let mut safe_mode = false
+  for i in 3..<args.length() {
+    if args[i] == "--closed-world" {
+      closed_world = true
+    }
+    if args[i] == "--safe-mode" {
+      safe_mode = true
+    }
+  }
+  let closed_world_root_exports = parse_closed_world_roots(args, 3)
+  run_keep_reasons_with_options(
+    path,
+    closed_world,
+    safe_mode,
+    closed_world_root_exports,
+  )
+}
+
+///|
 fn print_retain_path_entries(
-  entries : Array[@walyze.RetainPathEntry],
+  entries : Array[@wite.RetainPathEntry],
   limit : UInt,
 ) -> Unit {
   if entries.length() == 0 {
@@ -1449,13 +1663,44 @@ fn print_retain_path_entries(
 }
 
 ///|
+fn run_retain_path_with_options(
+  path : String,
+  limit : UInt,
+  closed_world : Bool,
+  safe_mode : Bool,
+  closed_world_root_exports : Array[String],
+) -> Unit {
+  let bytes = read_bytes_or_exit(path)
+  let config = @wite.make_optimize_config(
+    closed_world~,
+    closed_world_root_exports~,
+    safe_mode~,
+  )
+  match @wite.analyze_retain_paths(bytes, config~) {
+    Ok(report) => {
+      println("retain-path analysis:")
+      println("  partial: " + report.partial.to_string())
+      if report.roots.length() == 0 {
+        println("  roots: (none)")
+      } else {
+        println("  roots: " + report.roots.map(i => i.to_string()).join(", "))
+      }
+      print_retain_path_entries(report.entries, limit)
+    }
+    Err(e) => {
+      println("retain-path failed: " + @wite.error_to_string(e))
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
 fn run_retain_path(args : Array[String]) -> Unit {
   if args.length() < 3 {
     print_usage()
     @sys.exit(1)
   }
   let path = args[2]
-  let bytes = read_bytes_or_exit(path)
   let mut limit = 20U
   let mut closed_world = false
   let mut safe_mode = false
@@ -1475,33 +1720,19 @@ fn run_retain_path(args : Array[String]) -> Unit {
     }
   }
   let closed_world_root_exports = parse_closed_world_roots(args, 3)
-  let config = @walyze.make_optimize_config(
-    closed_world~,
-    closed_world_root_exports~,
-    safe_mode~,
+  run_retain_path_with_options(
+    path,
+    limit,
+    closed_world,
+    safe_mode,
+    closed_world_root_exports,
   )
-  match @walyze.analyze_retain_paths(bytes, config~) {
-    Ok(report) => {
-      println("retain-path analysis:")
-      println("  partial: " + report.partial.to_string())
-      if report.roots.length() == 0 {
-        println("  roots: (none)")
-      } else {
-        println("  roots: " + report.roots.map(i => i.to_string()).join(", "))
-      }
-      print_retain_path_entries(report.entries, limit)
-    }
-    Err(e) => {
-      println("retain-path failed: " + @walyze.error_to_string(e))
-      @sys.exit(1)
-    }
-  }
 }
 
 ///|
 fn run_component_profile(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.profile_component(bytes) {
+  match @wite.profile_component(bytes) {
     Ok(profile) => {
       println("component profile:")
       println("  total_bytes: " + profile.total_bytes.to_string())
@@ -1539,7 +1770,7 @@ fn run_component_profile(path : String) -> Unit {
 ///|
 fn run_component_top_functions(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_component_function_sizes(bytes) {
+  match @wite.analyze_component_function_sizes(bytes) {
     Ok(reports) => {
       println("component top functions:")
       println("  core_modules: " + reports.length().to_string())
@@ -1565,7 +1796,7 @@ fn run_component_top_functions(path : String, limit : UInt) -> Unit {
 ///|
 fn run_component_callgraph(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @walyze.analyze_component_call_graphs(bytes) {
+  match @wite.analyze_component_call_graphs(bytes) {
     Ok(reports) => {
       println("component call graph:")
       println("  core_modules: " + reports.length().to_string())
@@ -1628,7 +1859,7 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
     None => None
   }
   let policy = match
-    @walyze.analyze_component_root_policy(
+    @wite.analyze_component_root_policy(
       bytes,
       resolved_wit~,
       exclude=excludes,
@@ -1644,7 +1875,7 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
   roots.append(parse_closed_world_roots(args, 3)[:])
   roots.sort()
   roots.dedup()
-  let config = @walyze.make_optimize_config(
+  let config = @wite.make_optimize_config(
     strip_all_custom=false,
     strip_name_section=false,
     strip_producers_section=false,
@@ -1666,7 +1897,7 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
     closed_world_root_exports=roots,
     safe_mode~,
   )
-  match @walyze.analyze_component_core_optimize(bytes, config~) {
+  match @wite.analyze_component_core_optimize(bytes, config~) {
     Ok(report) => {
       println("component dce kpi:")
       println(
@@ -1725,7 +1956,7 @@ fn run_contract(component_path : String, wit_path : String) -> Unit {
   let bytes = read_bytes_or_exit(component_path)
   match @wit.resolve_path(wit_path) {
     Ok(resolved) =>
-      match @walyze.analyze_component_contract(bytes, resolved) {
+      match @wite.analyze_component_contract(bytes, resolved) {
         Ok(report) => {
           println("component imports: " + report.component_imports.join(", "))
           println("component exports: " + report.component_exports.join(", "))
@@ -1780,7 +2011,7 @@ fn run_root_policy(args : Array[String]) -> Unit {
     None => None
   }
   match
-    @walyze.analyze_component_root_policy(
+    @wite.analyze_component_root_policy(
       bytes,
       resolved_wit~,
       exclude=excludes,
@@ -1802,6 +2033,148 @@ fn run_root_policy(args : Array[String]) -> Unit {
 }
 
 ///|
+fn run_analyze_command(args : Array[String]) -> Unit {
+  if args.length() < 3 {
+    print_usage()
+    @sys.exit(1)
+  }
+  let path = args[2]
+  let mut view = AnalyzeView::Summary
+  let mut limit = 20U
+  let mut diff_limit = 20U
+  let mut config = @wite.OptimizeConfig::o1()
+  let mut closed_world = false
+  let mut safe_mode = false
+  let closed_world_root_exports : Array[String] = []
+  let positional : Array[String] = []
+  for i in 3..<args.length() {
+    let arg = args[i]
+    match arg.strip_prefix("--view=") {
+      Some(name) =>
+        match parse_analyze_view(name.to_string()) {
+          Some(v) => view = v
+          None => {
+            println("unknown analyze view: " + name.to_string())
+            @sys.exit(1)
+          }
+        }
+      None =>
+        match arg.strip_prefix("--limit=") {
+          Some(v) => limit = parse_uint_or_exit(v.to_string(), "limit")
+          None =>
+            match arg.strip_prefix("--diff-limit=") {
+              Some(v) =>
+                diff_limit = parse_uint_or_exit(v.to_string(), "diff-limit")
+              None =>
+                match arg.strip_prefix("--opt-level=") {
+                  Some(v) => config = parse_opt_level_or_exit(v.to_string())
+                  None =>
+                    match arg.strip_prefix("--closed-world-root=") {
+                      Some(root_name) =>
+                        if not(root_name.is_empty()) {
+                          closed_world_root_exports.push(root_name.to_string())
+                        }
+                      None =>
+                        if arg == "--closed-world" {
+                          closed_world = true
+                        } else if arg == "--safe-mode" {
+                          safe_mode = true
+                        } else if arg.has_prefix("--") {
+                          println("unknown analyze option: " + arg)
+                          @sys.exit(1)
+                        } else {
+                          positional.push(arg)
+                        }
+                    }
+                }
+            }
+        }
+    }
+  }
+  match view {
+    AnalyzeView::Summary =>
+      if positional.length() > 0 {
+        println("unexpected analyze argument: " + positional[0])
+        @sys.exit(1)
+      }
+    AnalyzeView::Deep | AnalyzeView::Functions | AnalyzeView::Blocks |
+    AnalyzeView::Callgraph | AnalyzeView::Host | AnalyzeView::Dce => {
+      if positional.length() > 1 {
+        println("unexpected analyze argument: " + positional[1])
+        @sys.exit(1)
+      }
+      if positional.length() == 1 {
+        limit = parse_uint_or_exit(positional[0], "limit")
+      }
+    }
+    AnalyzeView::Pipeline => {
+      if positional.length() > 2 {
+        println("unexpected analyze argument: " + positional[2])
+        @sys.exit(1)
+      }
+      if positional.length() >= 1 {
+        match @wite.optimize_config_from_opt_level(
+          normalize_opt_level_token(positional[0]),
+        ) {
+          Some(v) => {
+            config = v
+            if positional.length() == 2 {
+              diff_limit = parse_uint_or_exit(positional[1], "diff-limit")
+            }
+          }
+          None => {
+            diff_limit = parse_uint_or_exit(positional[0], "diff-limit")
+            if positional.length() == 2 {
+              println("unexpected analyze argument: " + positional[1])
+              @sys.exit(1)
+            }
+          }
+        }
+      }
+    }
+    AnalyzeView::Keep =>
+      if positional.length() > 0 {
+        println("unexpected analyze argument: " + positional[0])
+        @sys.exit(1)
+      }
+    AnalyzeView::Retain => {
+      if positional.length() > 1 {
+        println("unexpected analyze argument: " + positional[1])
+        @sys.exit(1)
+      }
+      if positional.length() == 1 {
+        limit = parse_uint_or_exit(positional[0], "limit")
+      }
+    }
+  }
+  match view {
+    AnalyzeView::Summary => run_analyze(path)
+    AnalyzeView::Deep => run_deep_analyze(path, limit)
+    AnalyzeView::Functions => run_top_functions(path, limit)
+    AnalyzeView::Blocks => run_block_sizes(path, limit)
+    AnalyzeView::Callgraph => run_callgraph(path, limit)
+    AnalyzeView::Host => run_analyze_host(path, limit)
+    AnalyzeView::Pipeline => run_analyze_opt(path, config, diff_limit)
+    AnalyzeView::Dce => run_dce_report(path, limit)
+    AnalyzeView::Keep =>
+      run_keep_reasons_with_options(
+        path,
+        closed_world,
+        safe_mode,
+        closed_world_root_exports,
+      )
+    AnalyzeView::Retain =>
+      run_retain_path_with_options(
+        path,
+        limit,
+        closed_world,
+        safe_mode,
+        closed_world_root_exports,
+      )
+  }
+}
+
+///|
 fn main {
   let args = @sys.get_cli_args()
   if args.length() < 2 {
@@ -1809,13 +2182,8 @@ fn main {
     @sys.exit(1)
   }
   match args[1] {
-    "analyze" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      run_analyze(args[2])
-    }
+    "analyze" => run_analyze_command(args)
+    "build" => run_build(args)
     "analyze-host" => {
       if args.length() < 3 {
         print_usage()
@@ -1833,10 +2201,10 @@ fn main {
         print_usage()
         @sys.exit(1)
       }
-      let mut config = @walyze.OptimizeConfig::o1()
+      let mut config = @wite.OptimizeConfig::o1()
       let mut diff_limit = 20U
       if args.length() >= 4 {
-        match @walyze.optimize_config_from_opt_level(args[3]) {
+        match @wite.optimize_config_from_opt_level(args[3]) {
           Some(v) => {
             config = v
             if args.length() >= 5 {

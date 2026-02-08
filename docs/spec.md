@@ -1,29 +1,47 @@
-# walyze 仕様（実装済み）
+# wite 仕様（実装済み + 合意方針）
 
-このドキュメントは、`TODO.md` の完了項目（`[x]`）を仕様として固定化したもの。
+このドキュメントは、`TODO.md` の完了項目（`[x]`）と、直近で合意した API/アーキテクチャ方針を仕様として固定化したもの。
 
 分析運用の知見と拡張方針は `docs/analyze.md` を参照。
 
 ## 基本方針
 
-- 役割分離: `mwac` は bundler、`walyze` は minifier/optimizer
-- 依存方向: `walyze -> mwac` のみ（`mwac -> walyze` を禁止）
-- 連携単位: core/component wasm bytes の入出力契約
+- 外部向けのプロダクト名は `wite` とし、`vite` 的な高水準インターフェースを提供する
+- `wite` は bundler + minifier + analyzer を一体で提供するフロントドアとする
+- 内部実装は `wac`（compose/bundle, 現在は `mizchi/mwac`）を利用しつつ、最適化/解析ロジックは `wite` 側で提供する
+- 連携単位は core/component wasm bytes の入出力契約を維持する
+- 公開パッケージ名・CLI 名は `wite` 名前空間に統一する
+
+## wite API 体系（合意）
+
+- Canonical CLI は `build` / `analyze` / `profile` / `diff` / `component` とする
+- `build` は「bundle + optimize + emit」を 1 コマンドで実行する
+- `analyze` は `--view` で `summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain` を切り替える
+- `profile` は `--view runtime|hot-size` と `--scenario=<export>[:arg1,arg2,...]` を標準化する
+- `diff` は `--view function|section|block` を提供し、`wite` vs `wasm-opt` 比較を標準運用にする
+- `component` は `roots|contract|kpi` を提供し、component-model closed-world 運用を集約する
+- 設定ファイルは `wite.config.jsonc` を標準とし、`build/analyze/profile` を単一設定で扱う
+- 互換エイリアスは提供せず、`wite` の canonical CLI へ集約する
 
 
 ## Next Up (2026-02-08)
 
+- W0 (P0): `wite` 名での CLI エントリを追加し、公開名を `wite` に統一する
+- W1 (Done): `wite build` を実装し、`wac` compose + `wite` optimize を単一導線で実行可能
+- W2 (Done): `wite analyze --view` へ既存 analyze サブコマンド群を統合
+- W3 (P1): `wite.config.jsonc` ローダーを実装し、CLI 引数とのマージ規則を定義する
+- W4 (P1): `wite diff --baseline wasm-opt` を実装し、KPI と直結する比較導線を用意する
 - P2 (P1): `cfp` phase1（forward call 伝播）を導入し、DCE の callgraph 精度を上げる
 - P5 (P1): `precompute` を拡張（`eqz(eqz(x))+br_if`）して code セクション gap を削る
 - P2 (P1): `cfp` phase2（param-forwarding thunk 伝播）を導入し、DCE の callgraph 精度を上げる
 - P2 (P1): `signature-refining` phase3 を導入し、closed-world/GC 文脈の callgraph 精度を上げる
 - N5 (P2): GC hierarchy を考慮した `type-refining` に着手し、closed-world と組み合わせた差分を測る
 - N8 (P1): `remove-unused-module-elements` と index rewrite の境界テストを拡充する
-- N9 (Guardrails): `mwac` 連携点の bytes I/O 契約（入出力）を文書化する
+- N9 (Guardrails): `wac` 連携点の bytes I/O 契約（入出力）を文書化する
 
 ## Analysis Next (2026-02-08)
 
-- A1: `zlib.wasm` 専用の gap 詳細レポートを追加し、`before/walyze/wasm-opt` の差分を section/function/block で見える化する
+- A1: `zlib.wasm` 専用の gap 詳細レポートを追加し、`before/wite/wasm-opt` の差分を section/function/block で見える化する
 - A2: no-change 理由を「実装対象 / 非対象」に分類し、優先度と工数見積もりを TODO に接続する（`bench/kpi/no_change_triage.tsv`）
 - A3: pass waterfall の寄与をもとに、`code` / `dce` の追加移植候補を Top3 に絞る（`bench/kpi/migration_top3.md`）
 
@@ -38,13 +56,14 @@
 - PR5 (P1): roots/callees dedup を `Map/Set` ベースへ置換する（`contains` 依存を削減）
 - PR6 (Bug): `deep-analyze` の `%` 表示オーバーフローを修正する（`numerator * 10000` 回避）
 
-## Architecture Guardrails（mwac / walyze）
+## Architecture Guardrails（wite / wac）
 
-- 役割を bundler (`mwac`) / minifier (`walyze`) として整理する
-- 依存方向を `walyze -> mwac` に固定する（`mwac -> walyze` 依存を禁止）
-- `mwac` 連携点は bytes I/O 契約（生成物の入出力）として定義する
-- `walyze` 側の component 最適化 API を「WAC計画型非依存」で拡張する
-- 固定点最適化は `component bytes -> core module optimize -> component bytes` の形で設計する
+- `wite` を唯一の公開エントリにする（ユーザーは原則 `wite` のみを触る）
+- `wite` は内部で `wac` を使って bundle/compose し、同一パッケージ内の optimizer/analyzer を使って optimize/analyze/profile を行う
+- 依存方向は `wite -> wac` を許可し、`wac -> wite` の直接依存は持たない
+- 連携点は bytes I/O 契約（`component bytes -> core module optimize -> component bytes`）として定義する
+- `closed-world root policy` は `wite component roots` で決定し、optimize/analyze に同じ設定を渡す
+- `wite` の低レベル API は再利用可能な optimizer/analyzer ライブラリとして維持する
 
 ## P0: Core Size ギャップ解消（最優先）
 

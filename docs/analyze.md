@@ -1,6 +1,6 @@
 # Analyze 運用知見 (2026-02-08)
 
-このドキュメントは、`zlib.wasm` の `walyze` vs `wasm-opt` gap 追跡で得た知見を、今後の analyze 拡張方針として固定化する。
+このドキュメントは、`zlib.wasm` の `wite` vs `wasm-opt` gap 追跡で得た知見を、今後の analyze 拡張方針として固定化する。
 
 ## 目的
 
@@ -23,7 +23,7 @@
 ## 今回露出した不足
 
 - section 解析は表示フォーマット変化に脆く、レポート欠落が起きうる
-- `walyze` と `wasm-opt` の差分を function 粒度で比較できない
+- `wite` と `wasm-opt` の差分を function 粒度で比較できない
 - analyze 結果と TODO 優先度の接続がまだ手動寄り
 
 ## 実装済みアップデート (2026-02-08)
@@ -33,7 +33,7 @@
 - `runtime-profile` に scenario 入力を追加（`--scenario=<export>[:arg1,arg2,...]`）し、引数付き export の複数ケース計測を可能化
 - `hot-size` に unresolved 理由集計（reason 別 count）を追加
 - `hot-size` に scenario 入力を追加（`--scenario=<export>[:arg1,arg2,...]`）し、引数付き export の分類に対応
-- `function-gap`（`walyze` vs `wasm-opt`）を追加し、`zlib` の支配関数 gap を TopK 可視化
+- `function-gap`（`wite` vs `wasm-opt`）を追加し、`zlib` の支配関数 gap を TopK 可視化
 - `migration_top3` を function-gap 指標つきで再スコア化（`fn_gap_top` / `fn_gap_positive`）
 
 ## runtime/hot-size シナリオ運用
@@ -41,10 +41,10 @@
 - 形式: `runtime-profile <core.wasm> [iterations] [--scenario=<export>[:arg1,arg2,...]]`
 - 形式: `hot-size <core.wasm> [iterations] [limit] [--scenario=<export>[:arg1,arg2,...]]`
 - 例:
-  - `walyze runtime-profile foo.wasm 20 --scenario=run`
-  - `walyze runtime-profile foo.wasm 20 --scenario=add1:0 --scenario=add1:41`
-  - `walyze hot-size foo.wasm 20 30 --scenario=run`
-  - `walyze hot-size foo.wasm 20 30 --scenario=add1:0 --scenario=add1:41`
+  - `wite runtime-profile foo.wasm 20 --scenario=run`
+  - `wite runtime-profile foo.wasm 20 --scenario=add1:0 --scenario=add1:41`
+  - `wite hot-size foo.wasm 20 30 --scenario=run`
+  - `wite hot-size foo.wasm 20 30 --scenario=add1:0 --scenario=add1:41`
 - 挙動:
   - `--scenario` 指定時は指定ケースのみ計測する
   - `hot-size` でも scenario 表示名（例: `add1(41)`）のまま `code` サイズ分類に接続される
