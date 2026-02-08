@@ -51,3 +51,5 @@
 - [x] KPI: `migration_top3` のスコアに function-gap 指標（`fn_gap_top` / `fn_gap_positive`）を統合
 - [x] Perf: `analyze_call_graph_summary` を full callgraph 構築から分離し、summary 専用経路を追加（巨大 wasm の `analyze` 実行時間/メモリを削減）
 - [x] Perf: export index 抽出で name 文字列デコードを回避（`skip_name_string`）し、重複排除を `seen` map で O(n) 化
+- [x] Perf: `optimize_for_size` の fixed-point 反復で「サイズ回帰ラウンド」を早期終了し、巨大 wasm の O1 実行時間を削減
+- [x] Bench: `pglite/duckdb` を `moon bench` に追加し、`analyze summary` / `optimize -O1` の速度を継続観測可能にした

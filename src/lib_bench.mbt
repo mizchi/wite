@@ -58,6 +58,19 @@ fn must_analyze_wasm_breakdown_score(bytes : Bytes, top_limit : UInt) -> UInt {
 }
 
 ///|
+fn must_analyze_call_graph_summary_score(bytes : Bytes) -> UInt {
+  match analyze_call_graph_summary(bytes) {
+    Ok(summary) =>
+      summary.reachable_function_count + summary.reachable_body_bytes
+    Err(err) => {
+      println("analyze_call_graph_summary failed: " + error_to_string(err))
+      panic()
+      0U
+    }
+  }
+}
+
+///|
 test "bench: core profile binaryen zlib" (b : @bench.T) {
   let bytes = read_fixture_or_fail("bench/corpus/core/binaryen/zlib.wasm")
   b.bench(fn() { b.keep(must_profile_module_total(bytes)) })
@@ -67,6 +80,13 @@ test "bench: core profile binaryen zlib" (b : @bench.T) {
 test "bench: core optimize -O2 binaryen zlib" (b : @bench.T) {
   let bytes = read_fixture_or_fail("bench/corpus/core/binaryen/zlib.wasm")
   let config = OptimizeConfig::o2()
+  b.bench(fn() { b.keep(must_optimize_after_size(bytes, config)) })
+}
+
+///|
+test "bench: core optimize -O1 binaryen zlib" (b : @bench.T) {
+  let bytes = read_fixture_or_fail("bench/corpus/core/binaryen/zlib.wasm")
+  let config = OptimizeConfig::o1()
   b.bench(fn() { b.keep(must_optimize_after_size(bytes, config)) })
 }
 
@@ -107,4 +127,25 @@ test "bench: component top functions wac dummy_wasi_http_0.2.3" (b : @bench.T) {
 test "bench: core deep analyze binaryen zlib (top20)" (b : @bench.T) {
   let bytes = read_fixture_or_fail("bench/corpus/core/binaryen/zlib.wasm")
   b.bench(fn() { b.keep(must_analyze_wasm_breakdown_score(bytes, 20U)) })
+}
+
+///|
+test "bench: core analyze summary pglite" (b : @bench.T) {
+  let bytes = read_fixture_or_fail("bench/corpus/core/pglite/pglite.wasm")
+  b.bench(fn() { b.keep(must_analyze_call_graph_summary_score(bytes)) })
+}
+
+///|
+test "bench: core optimize -O1 pglite" (b : @bench.T) {
+  let bytes = read_fixture_or_fail("bench/corpus/core/pglite/pglite.wasm")
+  let config = OptimizeConfig::o1()
+  b.bench(fn() { b.keep(must_optimize_after_size(bytes, config)) })
+}
+
+///|
+test "bench: core analyze summary duckdb-mvp" (b : @bench.T) {
+  let bytes = read_fixture_or_fail(
+    "bench/corpus/core-analyze/duckdb/duckdb-mvp.wasm",
+  )
+  b.bench(fn() { b.keep(must_analyze_call_graph_summary_score(bytes)) })
 }

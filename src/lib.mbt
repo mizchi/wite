@@ -8350,11 +8350,18 @@ pub fn optimize_for_size(
     let mut current = bytes
     let removed_sections : Array[String] = []
     for _ in 0U..<rounds {
+      let before_round_size = current.length().reinterpret_as_uint()
       let round = optimize_for_size_round_raise(current, config)
+      let after_round_size = round.bytes.length().reinterpret_as_uint()
       let changed = not(bytes_equal(round.bytes, current))
       current = round.bytes
       removed_sections.append(round.removed_sections[:])
       if not(changed) {
+        break
+      }
+      // Stop fixed-point rounds once a round regresses size.
+      // Keep size-neutral rounds because they can unlock later DCE.
+      if after_round_size > before_round_size {
         break
       }
     }
