@@ -21,6 +21,8 @@
 
 ## Recent Progress
 
+- [x] P2/P5: forwarding thunk の終端パターン `call; return; end` を `cfp/cfp-const/signature-refine` で検出可能に拡張
+- [x] テスト追加: `call+return` 形 thunk の `cfp/cfp-const/signature-refining` カバレッジを追加
 - [x] P2/P5: forwarding thunk が `unused local` を持つ場合でも `cfp/cfp-const/signature-refine` を適用可能に拡張
 - [x] テスト追加: `cfp/cfp-const/signature-refining` の `unused local` thunk ケースを追加
 - [x] P5: `optimize-instructions` に const-first 形（`i32.const 0/-1; local/global.get; op`）の簡約を追加

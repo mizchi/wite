@@ -9548,6 +9548,33 @@ fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
   true
 }
 
+fn detect_forward_call_span_position(
+  spans : Array[InstrSpan],
+  min_prefix_span_count : Int,
+) -> Int? {
+  if spans.length() < min_prefix_span_count + 2 {
+    return None
+  }
+  let end_pos = spans.length() - 1
+  if spans[end_pos].opcode != 0x0bU {
+    return None
+  }
+  let direct_call_pos = end_pos - 1
+  if direct_call_pos >= min_prefix_span_count &&
+    spans[direct_call_pos].opcode == 0x10U {
+    return Some(direct_call_pos)
+  }
+  if direct_call_pos <= min_prefix_span_count ||
+    spans[direct_call_pos].opcode != 0x0fU {
+    return None
+  }
+  let call_pos = direct_call_pos - 1
+  if call_pos >= min_prefix_span_count && spans[call_pos].opcode == 0x10U {
+    return Some(call_pos)
+  }
+  None
+}
+
 fn parse_forward_call_target_with_param_count(
   body_bytes : Bytes,
   param_count : UInt,
@@ -9572,11 +9599,11 @@ fn parse_forward_call_target_with_param_count(
     Some(v) => v
     None => return None
   }
-  if spans.length() != param_count_i + 2 {
-    return None
+  let call_pos = match detect_forward_call_span_position(spans, param_count_i) {
+    Some(v) => v
+    None => return None
   }
-  let call_pos = spans.length() - 2
-  if spans[call_pos].opcode != 0x10U || spans[call_pos + 1].opcode != 0x0bU {
+  if call_pos != param_count_i {
     return None
   }
   for i in 0..<param_count_i {
@@ -9620,12 +9647,9 @@ fn parse_forward_call_target_with_prefix_param_count(
     Some(v) => v
     None => return None
   }
-  if spans.length() < 2 {
-    return None
-  }
-  let call_pos = spans.length() - 2
-  if spans[call_pos].opcode != 0x10U || spans[call_pos + 1].opcode != 0x0bU {
-    return None
+  let call_pos = match detect_forward_call_span_position(spans, 0) {
+    Some(v) => v
+    None => return None
   }
   for i in 0..<call_pos {
     if spans[i].opcode != 0x20U {
@@ -9666,18 +9690,16 @@ fn parse_forward_call_target_with_appended_i32_consts(
     Some(v) => v
     None => return None
   }
-  if spans.length() < 3 {
-    return None
-  }
   let wrapper_param_count_i = UInt::reinterpret_as_int(wrapper_param_count)
   if wrapper_param_count_i < 0 {
     return None
   }
-  let call_pos = spans.length() - 2
-  if call_pos <= wrapper_param_count_i {
-    return None
+  let call_pos = match
+    detect_forward_call_span_position(spans, wrapper_param_count_i) {
+    Some(v) => v
+    None => return None
   }
-  if spans[call_pos].opcode != 0x10U || spans[call_pos + 1].opcode != 0x0bU {
+  if call_pos <= wrapper_param_count_i {
     return None
   }
   for i in 0..<wrapper_param_count_i {
