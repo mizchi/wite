@@ -3358,6 +3358,34 @@ fn parse_function_type_entries_raise(
 }
 
 ///|
+fn parse_function_type_param_count_from_raw_raise(
+  raw : Bytes,
+  context : String,
+) -> UInt raise WalyzeError {
+  let parser = Cursor::new(raw)
+  let form = parser.read_byte().to_uint()
+  if form != 0x60U {
+    raise WalyzeError::InvalidFormat(
+      "unsupported type form in " + context + ": " + form.to_string(),
+    )
+  }
+  let param_count = parser.read_u32_leb128()
+  for _ in 0U..<param_count {
+    ignore(read_val_type_bytes_raise(parser))
+  }
+  let result_count = parser.read_u32_leb128()
+  for _ in 0U..<result_count {
+    ignore(read_val_type_bytes_raise(parser))
+  }
+  if not(parser.eof()) {
+    raise WalyzeError::InvalidFormat(
+      "trailing bytes in function type raw entry in " + context,
+    )
+  }
+  param_count
+}
+
+///|
 fn encode_function_type_entry(
   params : Array[Bytes],
   results : Array[Bytes],
@@ -4735,6 +4763,29 @@ fn apply_precompute_i32_eqz_const(instr_bytes : Bytes) -> Bytes {
 }
 
 ///|
+fn apply_precompute_i32_double_eqz_br_if(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 2 < spans.length() &&
+      spans[i].opcode == 0x45U &&
+      spans[i + 1].opcode == 0x45U &&
+      spans[i + 2].opcode == 0x0dU {
+      out.append(instr_bytes[spans[i + 2].start:spans[i + 2].end_].to_array())
+      i += 3
+      continue
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn is_local_const_propagation_barrier(opcode : UInt) -> Bool {
   opcode == 0x00U || // unreachable
   opcode == 0x02U || // block
@@ -5227,8 +5278,10 @@ fn optimize_instruction_bytes(
       current_bytes = apply_precompute_i32_add(current_bytes)
       current_bytes = apply_precompute_i32_identity_ops(current_bytes)
       current_bytes = apply_precompute_i32_eqz_const(current_bytes)
+      current_bytes = apply_precompute_i32_double_eqz_br_if(current_bytes)
       current_bytes = apply_precompute_local_const_propagation(current_bytes)
       current_bytes = apply_precompute_i32_add(current_bytes)
+      current_bytes = apply_precompute_i32_double_eqz_br_if(current_bytes)
       current_bytes = apply_precompute_br_if_const(current_bytes)
       current_bytes = apply_optimize_instructions_i32_identity_ops(
         current_bytes,
@@ -6098,6 +6151,11 @@ fn optimize_for_size_round_raise(
         "directize:calls:" + directize.rewritten_call_count.to_string(),
       )
     }
+    let cfp = apply_call_forwarding_propagation_raise(optimized_bytes)
+    optimized_bytes = cfp.bytes
+    if cfp.rewritten_call_count > 0U {
+      removed_sections.push("cfp:calls:" + cfp.rewritten_call_count.to_string())
+    }
     let dce = apply_dce_raise(optimized_bytes, config)
     optimized_bytes = dce.bytes
     if dce.removed_function_count > 0U {
@@ -6937,6 +6995,12 @@ priv struct DfeApplyResult {
 }
 
 ///|
+priv struct CfpApplyResult {
+  bytes : Bytes
+  rewritten_call_count : UInt
+}
+
+///|
 priv struct MsfApplyResult {
   bytes : Bytes
   removed_function_count : UInt
@@ -6990,9 +7054,30 @@ fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
 
 ///|
 fn parse_forward_call_target(body_bytes : Bytes) -> UInt? {
-  let prefix_end_result = try? parse_local_decl_prefix_end(body_bytes)
-  let prefix_end = match prefix_end_result {
+  parse_forward_call_target_with_param_count(body_bytes, 0U)
+}
+
+///|
+fn parse_forward_call_target_with_param_count(
+  body_bytes : Bytes,
+  param_count : UInt,
+) -> UInt? {
+  let prefix_result = try? parse_local_decl_prefix_raise(body_bytes)
+  let prefix = match prefix_result {
     Ok(v) => v
+    Err(_) => return None
+  }
+  if prefix.local_types.length() > 0 {
+    return None
+  }
+  let prefix_end = prefix.prefix_end
+  let param_count_i = UInt::reinterpret_as_int(param_count)
+  if param_count_i < 0 {
+    return None
+  }
+  let prefix_end_result = try? parse_local_decl_prefix_end(body_bytes)
+  match prefix_end_result {
+    Ok(v) => if v != prefix_end { return None }
     Err(_) => return None
   }
   let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
@@ -7000,13 +7085,264 @@ fn parse_forward_call_target(body_bytes : Bytes) -> UInt? {
     Some(v) => v
     None => return None
   }
-  if spans.length() != 2 {
+  if spans.length() != param_count_i + 2 {
     return None
   }
-  if spans[0].opcode != 0x10U || spans[1].opcode != 0x0bU {
+  let call_pos = spans.length() - 2
+  if spans[call_pos].opcode != 0x10U || spans[call_pos + 1].opcode != 0x0bU {
     return None
   }
-  decode_span_u32_immediate(instr_bytes, spans[0])
+  for i in 0..<param_count_i {
+    if spans[i].opcode != 0x20U {
+      return None
+    }
+    match decode_span_u32_immediate(instr_bytes, spans[i]) {
+      Some(local_index) =>
+        if local_index != i.reinterpret_as_uint() {
+          return None
+        }
+      None => return None
+    }
+  }
+  decode_span_u32_immediate(instr_bytes, spans[call_pos])
+}
+
+///|
+fn collect_call_forwarding_alias_map(
+  code_bodies : Array[Bytes],
+  imported_function_count : UInt,
+  function_type_by_index : Array[UInt],
+  function_param_count_by_index : Array[UInt],
+) -> Map[UInt, UInt] {
+  let alias_candidate : Map[UInt, UInt] = {}
+  for i in 0..<code_bodies.length() {
+    let old_index = imported_function_count + i.reinterpret_as_uint()
+    let old_pos = UInt::reinterpret_as_int(old_index)
+    if old_pos < 0 ||
+      old_pos >= function_type_by_index.length() ||
+      old_pos >= function_param_count_by_index.length() {
+      continue
+    }
+    let param_count = function_param_count_by_index[old_pos]
+    match parse_forward_call_target_with_param_count(code_bodies[i], param_count) {
+      Some(target) =>
+        if target != old_index {
+          let target_pos = UInt::reinterpret_as_int(target)
+          if target_pos >= 0 &&
+            target_pos < function_type_by_index.length() &&
+            function_type_by_index[old_pos] == function_type_by_index[target_pos] {
+            alias_candidate.set(old_index, target)
+          }
+        }
+      None => ()
+    }
+  }
+  let resolved_alias : Map[UInt, UInt] = {}
+  for i in 0..<code_bodies.length() {
+    let old_index = imported_function_count + i.reinterpret_as_uint()
+    match alias_candidate.get(old_index) {
+      Some(initial_target) => {
+        let seen : Map[UInt, Bool] = {}
+        let mut current = initial_target
+        let mut valid = true
+        while true {
+          if current == old_index {
+            valid = false
+            break
+          }
+          if seen.get(current) is Some(_) {
+            valid = false
+            break
+          }
+          seen.set(current, true)
+          match alias_candidate.get(current) {
+            Some(next) => current = next
+            None => break
+          }
+        }
+        if valid {
+          resolved_alias.set(old_index, current)
+        }
+      }
+      None => ()
+    }
+  }
+  resolved_alias
+}
+
+///|
+fn rewrite_instruction_calls_for_call_forwarding_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  alias_map : Map[UInt, UInt],
+) -> (Bytes, UInt) raise WalyzeError {
+  let out : Array[Byte] = []
+  let mut rewritten_call_count = 0U
+  for span in spans {
+    if span.opcode == 0x10U {
+      if span.end_ <= span.start + 1 {
+        raise WalyzeError::InvalidFormat("invalid call immediate in cfp")
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let target = match decode_u32_leb128_bytes(imm) {
+        Some(v) => v
+        None =>
+          raise WalyzeError::InvalidFormat(
+            "failed to decode call immediate in cfp",
+          )
+      }
+      let rewritten_target = match alias_map.get(target) {
+        Some(v) => v
+        None => target
+      }
+      if rewritten_target != target {
+        rewritten_call_count += 1U
+      }
+      out.push(0x10U.to_byte())
+      out.append(encode_u32_leb128(rewritten_target)[:])
+    } else {
+      out.append(instr_bytes[span.start:span.end_].to_array())
+    }
+  }
+  (Bytes::from_array(out[:]), rewritten_call_count)
+}
+
+///|
+fn rewrite_code_section_payload_for_call_forwarding_raise(
+  payload : Bytes,
+  alias_map : Map[UInt, UInt],
+) -> (Bytes, UInt) raise WalyzeError {
+  let bodies = parse_code_bodies(payload)
+  let rewritten_bodies : Array[Bytes] = []
+  let mut rewritten_call_count = 0U
+  for body in bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    let (rewritten_instr, rewritten_count) = rewrite_instruction_calls_for_call_forwarding_raise(
+      instr_bytes, spans, alias_map,
+    )
+    rewritten_call_count += rewritten_count
+    if rewritten_count > 0U {
+      let rewritten_body : Array[Byte] = body[0:prefix_end].to_array()
+      rewritten_body.append(rewritten_instr[:].to_array())
+      rewritten_bodies.push(Bytes::from_array(rewritten_body[:]))
+    } else {
+      rewritten_bodies.push(body)
+    }
+  }
+  (
+    encode_code_section_payload_from_bodies(rewritten_bodies),
+    rewritten_call_count,
+  )
+}
+
+///|
+fn apply_call_forwarding_propagation_raise(
+  bytes : Bytes,
+) -> CfpApplyResult raise WalyzeError {
+  let sections = parse_core_sections_raise(bytes)
+  let mut type_payload : Bytes? = None
+  let mut import_payload : Bytes? = None
+  let mut function_payload : Bytes? = None
+  let mut code_payload : Bytes? = None
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      1U => type_payload = Some(payload)
+      2U => import_payload = Some(payload)
+      3U => function_payload = Some(payload)
+      10U => code_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let type_payload = match type_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let function_payload = match function_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let code_payload = match code_payload {
+    Some(v) => v
+    None => return { bytes, rewritten_call_count: 0U }
+  }
+  let local_function_type_indices = parse_function_type_indices(function_payload)
+  let code_bodies = parse_code_bodies(code_payload)
+  if local_function_type_indices.length() != code_bodies.length() {
+    raise WalyzeError::InvalidFormat(
+      "function/code section count mismatch for cfp: function=" +
+      local_function_type_indices.length().to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let imported_function_type_indices = match import_payload {
+    Some(payload) => parse_import_function_type_indices(payload)
+    None => []
+  }
+  let imported_function_count = imported_function_type_indices
+    .length()
+    .reinterpret_as_uint()
+  let parsed_type_entries = parse_type_section_entries_with_refs_raise(
+    type_payload, "cfp",
+  )
+  let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
+  let function_type_by_index = imported_function_type_indices.copy()
+  function_type_by_index.append(local_function_type_indices[:])
+  let function_param_count_by_index : Array[UInt] = []
+  for type_index in function_type_by_index {
+    if type_index >= type_count_u {
+      raise WalyzeError::InvalidFormat(
+        "type index out of range in cfp: " + type_index.to_string(),
+      )
+    }
+    let type_pos = UInt::reinterpret_as_int(type_index)
+    if type_pos < 0 || type_pos >= parsed_type_entries.length() {
+      raise WalyzeError::InvalidFormat(
+        "type index position out of range in cfp: " + type_index.to_string(),
+      )
+    }
+    if parsed_type_entries[type_pos].form != 0x60U {
+      raise WalyzeError::InvalidFormat(
+        "non-function type index used by function in cfp: " +
+        type_index.to_string(),
+      )
+    }
+    function_param_count_by_index.push(
+      parse_function_type_param_count_from_raw_raise(
+        parsed_type_entries[type_pos].raw,
+        "cfp",
+      ),
+    )
+  }
+  let alias_map = collect_call_forwarding_alias_map(
+    code_bodies,
+    imported_function_count,
+    function_type_by_index,
+    function_param_count_by_index,
+  )
+  let mut has_alias = false
+  alias_map.each((_, _target) => has_alias = true)
+  if not(has_alias) {
+    return { bytes, rewritten_call_count: 0U }
+  }
+  let (rewritten_code_payload, rewritten_call_count) = rewrite_code_section_payload_for_call_forwarding_raise(
+    code_payload, alias_map,
+  )
+  if rewritten_call_count == 0U {
+    return { bytes, rewritten_call_count: 0U }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    if section.section_id == 10U {
+      append_encoded_section(out, 10U, rewritten_code_payload)
+    } else {
+      out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  { bytes: Bytes::from_array(out[:]), rewritten_call_count }
 }
 
 ///|

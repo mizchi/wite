@@ -1264,6 +1264,35 @@ fn sample_module_with_br_if_const_nonzero_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_double_eqz_br_if_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // block
+  //   local.get 0
+  //   i32.eqz
+  //   i32.eqz
+  //   br_if 0
+  // end
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0b, 0x00, 0x02, 0x40, 0x20, 0x00, 0x45, 0x45, 0x0d, 0x00, 0x0b, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_local_const_propagation_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1484,6 +1513,31 @@ fn sample_module_with_similar_thunks_bytes() -> Bytes {
     bytes_of([
       0x04, 0x06, 0x00, 0x10, 0x01, 0x10, 0x02, 0x0b, 0x04, 0x00, 0x10, 0x03, 0x0b,
       0x04, 0x00, 0x10, 0x03, 0x0b, 0x02, 0x00, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_param_forwarding_thunk_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 3 local functions (indices 0..2)
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0; call 1; end
+  // #1: local.get 0; call 2; end (param-forwarding thunk)
+  // #2: local.get 0; i32.const 1; i32.add; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x06, 0x00, 0x20, 0x00, 0x10, 0x01, 0x0b, 0x06, 0x00, 0x20, 0x00, 0x10,
+      0x02, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6a, 0x0b,
     ]),
   )
   Bytes::from_array(out[:])
@@ -2958,6 +3012,86 @@ test "optimize with merge-similar-functions removes forwarding thunks" {
 }
 
 ///|
+test "optimize cfp rewrites forwarding calls and enables dce without msf" {
+  let bytes = sample_module_with_similar_thunks_bytes()
+  guard profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 4U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.removed_sections.any(s => s.contains("cfp:calls:2")))
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 3U)
+  guard analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_graph.nodes.length(), 3)
+  assert_eq(after_graph.nodes[0].direct_callees.length(), 1)
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "main", []))
+}
+
+///|
+test "optimize cfp phase2 rewrites param-forwarding thunk and enables dce" {
+  let bytes = sample_module_with_param_forwarding_thunk_bytes()
+  guard profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 3U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.removed_sections.any(s => s.contains("cfp:calls:1")))
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+    -7, -1, 0, 1, 42, 123456,
+  ]))
+}
+
+///|
 test "optimize peephole removes nop and const-drop" {
   let bytes = sample_module_with_peephole_bytes()
   guard profile_module(bytes) is Ok(before) else {
@@ -3502,6 +3636,47 @@ test "optimize precompute rewrites i32.const nonzero + br_if to br" {
   )
   assert_true(
     not(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x0d, 0x00])),
+  )
+}
+
+///|
+test "optimize precompute removes i32.eqz+i32.eqz before br_if" {
+  let bytes = sample_module_with_double_eqz_br_if_bytes()
+  guard profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 11U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 9U)
+  assert_true(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x0d, 0x00]))
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x45, 0x45, 0x0d, 0x00])),
+  )
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [-7, -1, 0, 1, 42]),
   )
 }
 
