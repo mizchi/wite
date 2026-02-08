@@ -1641,6 +1641,36 @@ fn sample_module_with_unused_table_and_element_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_table_init_elem_reindex_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // table section: 2 local funcref tables
+  append_section(out, 4U, bytes_of([0x02, 0x70, 0x00, 0x01, 0x70, 0x00, 0x01]))
+  // export section: export function index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // element section:
+  // seg0: active on table 0 (removed with table 0)
+  // seg1: passive (kept); table.init references this with elemidx=1
+  append_section(
+    out,
+    9U,
+    bytes_of([0x02, 0x02, 0x00, 0x41, 0x00, 0x0b, 0x00, 0x01, 0x00, 0x01, 0x00, 0x01, 0x00]),
+  )
+  // code section:
+  // #0: i32.const 0; i32.const 0; i32.const 1; table.init elem=1 table=1; end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x01, 0x0c, 0x00, 0x41, 0x00, 0x41, 0x00, 0x41, 0x01, 0xfc, 0x0c, 0x01, 0x01, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_unused_import_memory_global_table_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -2476,6 +2506,30 @@ test "optimize with rume apply removes unused table and element segment" {
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x00]))
   assert_true(not(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x01])))
+}
+
+///|
+test "optimize with rume apply rewrites table.init elem index after element removal" {
+  let bytes = sample_module_with_table_init_elem_reindex_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_remove_unused_module_elements=true,
+  )
+  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(optimized.removed_sections.any(s => s.contains("tables:1")))
+  assert_true(optimized.removed_sections.any(s => s.contains("elements:1")))
+  assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x0c, 0x00, 0x00]))
+  assert_true(not(bytes_contains_seq(optimized.bytes, [0xfc, 0x0c, 0x01, 0x00])))
+  assert_true(runtime_zero_arg_export_behaviors_equal(bytes, optimized.bytes))
 }
 
 ///|

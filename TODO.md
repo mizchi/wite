@@ -18,7 +18,7 @@
 - [x] P2 (P1): `cfp` phase2（param-forwarding thunk 伝播）を導入し、DCE の callgraph 精度を上げる
 - [ ] P2 (P1): `signature-refining` phase3 を導入し、closed-world/GC 文脈の callgraph 精度を上げる
 - [ ] N5 (P2): GC hierarchy を考慮した `type-refining` に着手し、closed-world と組み合わせた差分を測る
-- [ ] N8 (P1): `remove-unused-module-elements` と index rewrite の境界テストを拡充する
+- [x] N8 (P1): `remove-unused-module-elements` と index rewrite の境界テストを拡充する
 - [ ] N9 (Guardrails): `mwac` 連携点の bytes I/O 契約（入出力）を文書化する
 
 ## Analysis Next (2026-02-08)
@@ -103,7 +103,7 @@
 - [x] directize 後に DCE / RUME が追加で効くことを検証する（KPI 可視化を追加）
 - [x] directize が効く core corpus を追加し、`directize_calls_total > 0` を継続観測できるようにする
 - [x] RUME が効く core corpus を追加し、`rume_gain_bytes > 0` を継続観測できるようにする
-- [ ] `remove-unused-module-elements` と index rewrite の境界テストを拡充する
+- [x] `remove-unused-module-elements` と index rewrite の境界テストを拡充する
 
 ## P4: 固定点最適化（component + core 連携）
 

@@ -2322,6 +2322,34 @@ fn remap_table_index_raise(
 }
 
 ///|
+fn remap_element_segment_index_raise(
+  index : UInt,
+  element_index_map : Map[UInt, UInt],
+) -> UInt raise WalyzeError {
+  match element_index_map.get(index) {
+    Some(v) => v
+    None =>
+      raise WalyzeError::InvalidFormat(
+        "element segment remap missing index: " + index.to_string(),
+      )
+  }
+}
+
+///|
+fn remap_data_segment_index_raise(
+  index : UInt,
+  data_index_map : Map[UInt, UInt],
+) -> UInt raise WalyzeError {
+  match data_index_map.get(index) {
+    Some(v) => v
+    None =>
+      raise WalyzeError::InvalidFormat(
+        "data segment remap missing index: " + index.to_string(),
+      )
+  }
+}
+
+///|
 fn collect_used_table_indices_from_instruction_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
@@ -2538,6 +2566,8 @@ fn rewrite_instruction_module_indices_raise(
   table_index_map : Map[UInt, UInt],
   memory_index_map : Map[UInt, UInt],
   global_index_map : Map[UInt, UInt],
+  element_index_map : Map[UInt, UInt],
+  data_index_map : Map[UInt, UInt],
 ) -> Bytes raise WalyzeError {
   let out : Array[Byte] = []
   for span in spans {
@@ -2623,10 +2653,22 @@ fn rewrite_instruction_module_indices_raise(
           8U => {
             let data_index = parser.read_u32_leb128()
             let memory_index = parser.read_u32_leb128()
-            out.append(encode_u32_leb128(data_index)[:])
+            out.append(
+              encode_u32_leb128(
+                remap_data_segment_index_raise(data_index, data_index_map),
+              )[:],
+            )
             out.append(
               encode_u32_leb128(
                 remap_memory_index_raise(memory_index, memory_index_map),
+              )[:],
+            )
+          }
+          9U => {
+            let data_index = parser.read_u32_leb128()
+            out.append(
+              encode_u32_leb128(
+                remap_data_segment_index_raise(data_index, data_index_map),
               )[:],
             )
           }
@@ -2655,10 +2697,22 @@ fn rewrite_instruction_module_indices_raise(
           12U => {
             let elem_index = parser.read_u32_leb128()
             let table_index = parser.read_u32_leb128()
-            out.append(encode_u32_leb128(elem_index)[:])
+            out.append(
+              encode_u32_leb128(
+                remap_element_segment_index_raise(elem_index, element_index_map),
+              )[:],
+            )
             out.append(
               encode_u32_leb128(
                 remap_table_index_raise(table_index, table_index_map),
+              )[:],
+            )
+          }
+          13U => {
+            let elem_index = parser.read_u32_leb128()
+            out.append(
+              encode_u32_leb128(
+                remap_element_segment_index_raise(elem_index, element_index_map),
               )[:],
             )
           }
@@ -2699,12 +2753,20 @@ fn rewrite_code_body_for_module_index_map_raise(
   table_index_map : Map[UInt, UInt],
   memory_index_map : Map[UInt, UInt],
   global_index_map : Map[UInt, UInt],
+  element_index_map : Map[UInt, UInt],
+  data_index_map : Map[UInt, UInt],
 ) -> Bytes raise WalyzeError {
   let prefix_end = parse_local_decl_prefix_end(body)
   let instr_bytes = body[prefix_end:body.length()].to_bytes()
   let spans = parse_instruction_spans_raise(instr_bytes)
   let rewritten_instr = rewrite_instruction_module_indices_raise(
-    instr_bytes, spans, table_index_map, memory_index_map, global_index_map,
+    instr_bytes,
+    spans,
+    table_index_map,
+    memory_index_map,
+    global_index_map,
+    element_index_map,
+    data_index_map,
   )
   let out : Array[Byte] = body[0:prefix_end].to_array()
   out.append(rewritten_instr[:].to_array())
@@ -2717,13 +2779,20 @@ fn rewrite_code_section_payload_for_module_index_map_raise(
   table_index_map : Map[UInt, UInt],
   memory_index_map : Map[UInt, UInt],
   global_index_map : Map[UInt, UInt],
+  element_index_map : Map[UInt, UInt],
+  data_index_map : Map[UInt, UInt],
 ) -> Bytes raise WalyzeError {
   let bodies = parse_code_bodies(payload)
   let out : Array[Byte] = []
   out.append(encode_u32_leb128(bodies.length().reinterpret_as_uint())[:])
   for body in bodies {
     let rewritten = rewrite_code_body_for_module_index_map_raise(
-      body, table_index_map, memory_index_map, global_index_map,
+      body,
+      table_index_map,
+      memory_index_map,
+      global_index_map,
+      element_index_map,
+      data_index_map,
     )
     out.append(encode_u32_leb128(rewritten.length().reinterpret_as_uint())[:])
     out.append(rewritten[:].to_array())
@@ -2817,12 +2886,13 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
   payload : Bytes,
   table_index_map : Map[UInt, UInt],
   global_index_map : Map[UInt, UInt],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt, Map[UInt, UInt]) raise WalyzeError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let kept_segments : Array[Bytes] = []
+  let element_index_map : Map[UInt, UInt] = {}
   let mut removed_segment_count = 0U
-  for _ in 0U..<segment_count {
+  for old_segment_index in 0U..<segment_count {
     let flags = parser.read_u32_leb128()
     let segment_out : Array[Byte] = []
     let mut keep_segment = true
@@ -2940,6 +3010,10 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
         )
     }
     if keep_segment {
+      element_index_map.set(
+        old_segment_index,
+        kept_segments.length().reinterpret_as_uint(),
+      )
       kept_segments.push(Bytes::from_array(segment_out[:]))
     } else {
       removed_segment_count += 1U
@@ -2950,7 +3024,7 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
   for segment in kept_segments {
     out.append(segment[:].to_array())
   }
-  (Bytes::from_array(out[:]), removed_segment_count)
+  (Bytes::from_array(out[:]), removed_segment_count, element_index_map)
 }
 
 ///|
@@ -3012,12 +3086,13 @@ fn rewrite_data_section_payload_for_memory_global_index_map_raise(
   payload : Bytes,
   memory_index_map : Map[UInt, UInt],
   global_index_map : Map[UInt, UInt],
-) -> (Bytes, UInt) raise WalyzeError {
+) -> (Bytes, UInt, Map[UInt, UInt]) raise WalyzeError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let kept_segments : Array[Bytes] = []
+  let data_index_map : Map[UInt, UInt] = {}
   let mut removed_segment_count = 0U
-  for _ in 0U..<segment_count {
+  for old_segment_index in 0U..<segment_count {
     let flags = parser.read_u32_leb128()
     let segment_out : Array[Byte] = []
     let mut keep_segment = true
@@ -3077,6 +3152,10 @@ fn rewrite_data_section_payload_for_memory_global_index_map_raise(
         )
     }
     if keep_segment {
+      data_index_map.set(
+        old_segment_index,
+        kept_segments.length().reinterpret_as_uint(),
+      )
       kept_segments.push(Bytes::from_array(segment_out[:]))
     } else {
       removed_segment_count += 1U
@@ -3087,7 +3166,7 @@ fn rewrite_data_section_payload_for_memory_global_index_map_raise(
   for segment in kept_segments {
     out.append(segment[:].to_array())
   }
-  (Bytes::from_array(out[:]), removed_segment_count)
+  (Bytes::from_array(out[:]), removed_segment_count, data_index_map)
 }
 
 ///|
@@ -8291,25 +8370,33 @@ fn apply_remove_unused_module_elements_raise(
   }
   let mut removed_element_count = 0U
   let mut rewritten_element_payload : Bytes? = None
+  let element_index_map : Map[UInt, UInt] = {}
   match element_section_payload {
     Some(payload) => {
-      let (rewritten, removed_segments) = rewrite_element_section_payload_for_table_index_map_raise(
-        payload, table_index_map, global_index_map,
+      let (rewritten, removed_segments, segment_index_map) = rewrite_element_section_payload_for_table_index_map_raise(
+        payload,
+        table_index_map,
+        global_index_map,
       )
       rewritten_element_payload = Some(rewritten)
       removed_element_count = removed_segments
+      segment_index_map.each((key, value) => element_index_map.set(key, value))
     }
     None => ()
   }
   let mut removed_data_count = 0U
   let mut rewritten_data_payload : Bytes? = None
+  let data_index_map : Map[UInt, UInt] = {}
   match data_section_payload {
     Some(payload) => {
-      let (rewritten, removed_segments) = rewrite_data_section_payload_for_memory_global_index_map_raise(
-        payload, memory_index_map, global_index_map,
+      let (rewritten, removed_segments, segment_index_map) = rewrite_data_section_payload_for_memory_global_index_map_raise(
+        payload,
+        memory_index_map,
+        global_index_map,
       )
       rewritten_data_payload = Some(rewritten)
       removed_data_count = removed_segments
+      segment_index_map.each((key, value) => data_index_map.set(key, value))
     }
     None => ()
   }
@@ -8403,7 +8490,12 @@ fn apply_remove_unused_module_elements_raise(
           out,
           10U,
           rewrite_code_section_payload_for_module_index_map_raise(
-            payload, table_index_map, memory_index_map, global_index_map,
+            payload,
+            table_index_map,
+            memory_index_map,
+            global_index_map,
+            element_index_map,
+            data_index_map,
           ),
         )
       11U =>
