@@ -1,45 +1,42 @@
-# moonbit-wasi: moonbit-host | wasi-guest
+# moonbit-wasi
 
-MoonBit ホストが WASI 依存を利用するパターンです。
+MoonBit で WASI preview1 の `fd_write` を直接呼び出し、Component Model 経由で JS からも実行できるサンプルです。
 
-## 設定
-
-```jsonc
-{
-  "component": {
-    "entry": "example:app"
-  },
-  "deps": {
-    "wasi:cli": "https://wa.dev/wasi:cli@0.2.0",
-    "example:app": "./guest/moonbit/target/wasm/release/build/app.wasm"
-  }
-}
-```
-
-- `component.entry` — 合成のルートコンポーネント。省略時は deps が 1 つなら自動選択。
-- `deps` — レジストリ URL またはローカルパス。`wite install` でレジストリ依存を `deps/` にダウンロード。
-
-## フロー
+## ビルド・実行
 
 ```bash
-# MoonBit ゲストをビルド
-(cd guest/moonbit && moon build --target wasm)
-
-# レジストリ依存をダウンロード
-wite install
-
-# 合成 + 最適化
-wite build -Oz
+make          # build → component → transpile
+make run      # wasmtime で core module 実行
+make run-component  # wasmtime で component 実行
+make run-js   # Node.js で transpiled JS 実行
+make clean    # ビルド成果物を削除
 ```
 
-## main.wac への脱出
+## パイプライン
 
-設定ベースをやめて wac を直接管理したい場合:
-
-```bash
-# 現在の設定から wac を出力
-wite build --print-wac > main.wac
-
-# 以降は wac を直接指定
-wite build main.wac -Oz
 ```
+main.mbt
+  ↓ moon build --target wasm
+core module (_build/wasm/release/build/app.wasm)
+  ↓ wasm-tools component new --adapt (WASI P1→P2 adapter)
+component (dist/app.component.wasm)
+  ↓ jco transpile
+JS (dist/js/)
+```
+
+## 仕組み
+
+MoonBit の `println` は wasm ターゲットで `spectest.print_char` を import します。
+ホスト側で実装すれば `println` も使えますが、
+このサンプルでは WASI preview1 の `fd_write` を直接 FFI で呼びます。
+
+- `moon.pkg` で `"export-memory-name": "memory"` を設定（wasmtime が要求）
+- `wasm-tools component new` で WASI P1 adapter を使い component 化
+- `jco transpile` で `@bytecodealliance/preview2-shim` を使う JS に変換
+
+## 必要ツール
+
+- [MoonBit](https://www.moonbitlang.com/) (`moon`)
+- [wasm-tools](https://github.com/bytecodealliance/wasm-tools)
+- [jco](https://github.com/bytecodealliance/jco) (`npm i -g @bytecodealliance/jco`)
+- [wasmtime](https://wasmtime.dev/) (実行確認用)

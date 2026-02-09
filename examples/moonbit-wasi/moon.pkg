@@ -1,0 +1,11 @@
+options(
+  "is-main": true,
+  "link": {
+    "wasm": {
+      "export-memory-name": "memory",
+    },
+    "wasm-gc": {
+      "export-memory-name": "memory",
+    },
+  },
+)

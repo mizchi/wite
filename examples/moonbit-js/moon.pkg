@@ -1,0 +1,8 @@
+options(
+  "link": {
+    "wasm": {
+      "exports": ["add", "fib"],
+      "export-memory-name": "memory",
+    },
+  },
+)

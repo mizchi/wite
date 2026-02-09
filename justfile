@@ -106,16 +106,19 @@ example-moonbit-mixed: example-moonbit-mixed-deps
     mkdir -p examples/moonbit-mixed/dist
     moon run src/main --target {{target}} -- build ./examples/moonbit-mixed/main.wac --config=./examples/moonbit-mixed/wite.config.jsonc -o ./examples/moonbit-mixed/dist/composed.wasm
 
-# Fetch WASI registry deps for moonbit-wasi example (requires: wkg)
-example-moonbit-wasi-deps:
+# Build moonbit-wasi guest, fetch WASI deps, optimize, and run (requires: moon, wasmtime)
+example-moonbit-wasi:
+    cd examples/moonbit-wasi && moon build --target wasm
     moon run src/main --target {{target}} -- deps sync --config=./examples/moonbit-wasi/wite.config.jsonc --dir=./examples/moonbit-wasi/deps --fail-fast
+    moon run src/main --target {{target}} -- build --config=./examples/moonbit-wasi/wite.config.jsonc
+    wasmtime run examples/moonbit-wasi/dist/app.min.wasm
 
 # Build sample app component bundle under examples/sample_app
 example-sample-app:
     moon run src/main --target {{target}} -- build ./examples/sample_app/main.wac --no-config -o ./examples/sample_app/sample.composed.wasm
 
 # Test all buildable examples
-test-examples: example-minimal example-wat-moonbit-deps example-moonbit-rust example-moonbit-mixed example-moonbit-wasi-deps
+test-examples: example-minimal example-wat-moonbit-deps example-moonbit-rust example-moonbit-mixed example-moonbit-wasi
     test -f examples/minimal/dist/composed.wasm
     wasm-tools print examples/minimal/dist/composed.wasm > /dev/null
     test -f examples/wat-moonbit/deps/example/add.wasm
@@ -124,7 +127,10 @@ test-examples: example-minimal example-wat-moonbit-deps example-moonbit-rust exa
     wasm-tools print examples/moonbit-rust/dist/composed.wasm > /dev/null
     test -f examples/moonbit-mixed/dist/composed.wasm
     wasm-tools print examples/moonbit-mixed/dist/composed.wasm > /dev/null
-    test -d examples/moonbit-wasi/deps/cli
+    test -f examples/moonbit-wasi/_build/wasm/release/build/app.wasm
+    test -d examples/moonbit-wasi/deps/wasi_cli
+    test -f examples/moonbit-wasi/dist/app.min.wasm
+    wasmtime run examples/moonbit-wasi/dist/app.min.wasm | grep -q "hello from moonbit-wasi"
     @echo "all example tests passed"
 
 # Generate type definition files

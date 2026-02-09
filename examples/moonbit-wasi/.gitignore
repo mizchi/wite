@@ -1,2 +1,5 @@
 deps/
 dist/
+_build/
+target/
+*.command.wasm
