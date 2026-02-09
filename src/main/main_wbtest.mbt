@@ -425,7 +425,8 @@ test "new --rust generates cargo-component template and build command works" {
   if result.status != 0 {
     let known_env_issue = result.stderr.contains("wasm32-wasip1") ||
       result.stderr.contains("wasm32-wasip2") ||
-      result.stderr.contains("rustup is not available")
+      result.stderr.contains("rustup is not available") ||
+      result.stderr.contains("no such command")
     if known_env_issue {
       let fallback_raw = js_run_command_in_dir(
         "cargo", "build\t--quiet", rust_dir,
