@@ -6,4 +6,5 @@ target
 .moonagent/
 .jj/
 deps/
+!src/deps/
 wite.config.jsonc

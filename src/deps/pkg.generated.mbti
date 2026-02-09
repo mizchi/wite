@@ -1,0 +1,46 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/wite/deps"
+
+// Values
+pub fn config_has_dep_entries_or_exit(String) -> Bool
+
+pub fn materialize_wac_dependencies_from_config(String, String, Bool) -> Result[UInt, String]
+
+pub fn noop_usage_printer() -> Unit
+
+pub async fn run_add_command(Array[String], () -> Unit) -> Unit
+
+pub async fn run_deps_command(Array[String], () -> Unit) -> Unit
+
+pub async fn run_deps_sync_command(Array[String], () -> Unit) -> Unit
+
+// Errors
+
+// Types and methods
+pub struct DepConfigEntry {
+  name : String
+  url : String
+}
+
+pub enum DependencyProtocol {
+  Wkg
+  Warg
+  Oci
+}
+
+pub struct WacConfiguredDependency {
+  url : String
+  host : String
+  spec : WasmDependencySpec
+}
+
+pub struct WasmDependencySpec {
+  ns : String
+  name : String
+  version : String
+}
+
+// Type aliases
+
+// Traits
+
