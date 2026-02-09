@@ -5,7 +5,7 @@
 ## Quickstart
 
 ```bash
-just run -- init
+just run -- new --moonbit
 just run -- add dep:a
 just run -- add dep:b
 # edit main.wac
@@ -14,6 +14,8 @@ just run -- build
 ```
 
 `init` は `wite.config.jsonc` と `main.wac` のひな型を生成します。
+`new --moonbit` は上記に加えて `guest/moonbit/` の雛形を生成します。
+`new --rust` は `guest/rust/` の cargo-component 雛形を生成します。
 `build` は入力省略時に `main.wac`（なければ `main.wasm`）を使います。
 
 ## Positioning (wac + wite)
@@ -132,6 +134,7 @@ just run -- dce-report path/to/module.wasm 20
 just run -- runtime-profile path/to/module.wasm 100
 just run -- hot-size path/to/module.wasm 100 20
 just run -- optimize in.wasm out.wasm -Oz --strip-dwarf --strip-target-features --converge --rume-apply --verbose
+just run -- optimize in.wasm out.wasm --optimize-level=2 --shrink-level=2 --all-features --dce --duplicate-function-elimination --merge-similar-functions --remove-unused-module-elements
 just run -- optimize in.component.wasm out.component.wasm --kind=component -Oz --converge
 just run -- component-profile path/to/component.wasm
 just run -- component-top-functions path/to/component.wasm 20
@@ -142,6 +145,7 @@ just run -- root-policy path/to/component.wasm path/to/wit-dir --exclude=hello
 ```
 
 `optimize` は入力ヘッダから core/component を自動判定し、component では固定点ループ（`--converge` / `--rounds=<n>`）を適用します。
+`optimize` は `wasm-opt` 互換フラグ（`--optimize-level` / `--shrink-level` / `--dce` / `--duplicate-function-elimination` / `--merge-similar-functions` / `--remove-unused-module-elements` / `--all-features` など）を直接受け付けます。
 `runtime-profile` / `hot-size` は JS runtime が必要なため `--target js` でのみ動作し、`native/wasm` ではエラーを返します。
 `build` / `analyze` / `profile` はカレントディレクトリの `wite.config.jsonc` を自動読込します（存在しない場合は無視）。
 `build` は入力省略時に `main.wac`（優先）または `main.wasm` を使います。入力省略かつ `main.wac` を使った場合の既定出力は `composed.wasm` です。
@@ -156,7 +160,8 @@ CLI マージ規則は「config の flags を先に適用し、CLI 引数で後�
 `deps verify` は `wite.config.jsonc` の `deps` 全件を同じ検証ロジックで再確認します。`--fail-fast` で最初の失敗で停止します。
 `deps sync` は `wite.config.jsonc` の `deps` 全件を `wkg get` でローカル展開します。既定は `deps/<dep-name>/` で、`dep-name` は安全なファイル名へ正規化されます（`/` は `_` へ変換）。
 `build` / `analyze` / `profile` は config 読み込み時に `deps` が存在すれば自動で `deps sync --fail-fast` を実行します（`--no-config` 指定時は無効）。
-最小設定例は `examplesl/minimal/` を参照してください。`just example-minimal` で実行できます。
+最小設定例は `examples/minimal/` を参照してください。`just example-minimal` で実行できます。
+`wite new --moonbit` から bundle まで確認するサンプルは `examples/sample_app/` を参照してください。`just example-sample-app` で実行できます。
 
 ```jsonc
 {
@@ -211,6 +216,35 @@ Main APIs are in `src/lib.mbt`:
 - `analyze_component_contract(bytes, resolved_wit)`
 - `analyze_component_root_policy(bytes, resolved_wit=..., exclude=[...])`
 
+Subpackage APIs:
+
+- `@mizchi/wite/optimize` (`src/optimize/`):
+  - `optimize_with_kind(bytes, kind, config, exclude=[...])`
+  - `optimize_auto_for_size(bytes, config, exclude=[...])`
+  - `optimize_core_for_size(bytes, config)`
+  - `optimize_component_for_size(bytes, config, exclude=[...])`
+- `@mizchi/wite/bundle` (`src/bundle/`):
+  - `compose_wac_file(path, best_effort=false, dce=true)`
+  - `compose_wac_source(source, base_dir, best_effort=false, dce=true)`
+  - `collect_wac_new_package_names(source)`
+  - `build_wac_dep_target_path(base_dir, ns, name)`
+- `@mizchi/wite/analyze` (`src/analyze/`):
+  - `run_analyze(path)` / `run_deep_analyze(path, limit)` / `run_analyze_opt(path, config, diff_limit)`
+  - `run_top_functions(path, limit)` / `run_block_sizes(path, limit)` / `run_callgraph(path, limit)`
+  - `run_function_gap(left, right, limit)` / `run_section_gap(left, right, limit)` / `run_block_gap(left, right, limit)`
+  - `run_runtime_profile(path, iterations, scenarios)` / `run_hot_size(path, iterations, limit, scenarios)`
+- `@mizchi/wite/component` (`src/component/`):
+  - `run_component_profile(path)` / `run_component_top_functions(path, limit)` / `run_component_callgraph(path, limit)`
+  - `run_component_dce_kpi_with_options(component_path, wit_path, excludes, closed_world_root_exports, safe_mode, verbose)`
+  - `run_contract(component_path, wit_path)` / `run_root_policy_with_options(component_path, wit_path, excludes)`
+- `@mizchi/wite/config` (`src/config/`):
+  - `parse_wite_config_text(text)` / `parse_config_selection_flags(flags)` / `merge_command_flags(defaults, cli_flags)`
+  - `resolve_wite_config_or_default(selection)` / `build_auto_sync_deps_command_args(config_path)`
+- `@mizchi/wite/deps` (`src/deps/`):
+  - `run_add_command(args, usage_printer)` / `run_deps_command(args, usage_printer)` / `run_deps_sync_command(args, usage_printer)`
+  - `materialize_wac_dependencies_from_config(config_path, wac_path, best_effort)`
+  - `config_has_dep_entries_or_exit(config_path)`
+
 ## Development
 
 ```bash
@@ -221,7 +255,8 @@ just test      # run tests
 just bench     # run benchmark suite
 just deps-verify # verify deps in wite.config.jsonc
 just deps-sync # sync deps in wite.config.jsonc to deps/
-just example-minimal # run minimal config example under examplesl/minimal
+just example-minimal # run minimal config example under examples/minimal
+just example-sample-app # run sample app bundle under examples/sample_app
 just bench-sync # sync benchmark corpus fixtures from upstream
 just kpi       # collect KPI report (size first, runtime second, wasm-opt ref + heatmap/waterfall/no-change diagnostics)
 just run       # run CLI (src/main)

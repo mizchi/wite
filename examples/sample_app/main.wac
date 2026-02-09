@@ -1,0 +1,5 @@
+package example:sample-app;
+
+let hello = new example:hello {};
+
+export hello.hello;

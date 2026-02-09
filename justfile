@@ -46,9 +46,13 @@ deps-verify:
 deps-sync:
     moon run src/main --target {{target}} -- deps sync --config=./wite.config.jsonc --verify --fail-fast
 
-# Run minimal example config under examplesl/minimal
+# Run minimal example config under examples/minimal
 example-minimal:
-    moon run src/main --target {{target}} -- analyze bench/corpus/core/binaryen/br_to_exit.wasm --config=./examplesl/minimal/wite.config.jsonc
+    moon run src/main --target {{target}} -- analyze bench/corpus/core/binaryen/br_to_exit.wasm --config=./examples/minimal/wite.config.jsonc
+
+# Build sample app component bundle under examples/sample_app
+example-sample-app:
+    moon run src/main --target {{target}} -- build ./examples/sample_app/main.wac --no-config -o ./examples/sample_app/sample.composed.wasm
 
 # Generate type definition files
 info:
