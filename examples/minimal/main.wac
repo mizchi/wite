@@ -1,0 +1,7 @@
+package example:minimal;
+
+let add = new example:add {};
+let mul = new example:mul {};
+
+export add.add;
+export mul.mul;

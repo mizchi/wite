@@ -1,0 +1,5 @@
+package example:rust-guest;
+
+world guest {
+    export add: func(a: s32, b: s32) -> s32;
+}

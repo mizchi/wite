@@ -1,0 +1,5 @@
+package example:moonbit-mixed;
+
+let rust = new example:rust-guest {};
+
+export rust.mul;

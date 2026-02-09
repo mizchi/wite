@@ -1,0 +1,7 @@
+package example:wat-moonbit;
+
+let add = new example:add {};
+let moonbit-guest = new example:moonbit-guest {};
+
+export add.add;
+export moonbit-guest;

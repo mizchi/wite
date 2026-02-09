@@ -1,2 +1,5 @@
+deps/
+target/
+.mooncakes/
 composed.wasm
 sample.composed.wasm

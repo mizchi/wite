@@ -1,0 +1,5 @@
+package example:moonbit-rust;
+
+let guest = new example:rust-guest {};
+
+export guest.add;
