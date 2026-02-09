@@ -7,4 +7,5 @@ target
 .jj/
 deps/
 !src/deps/
+!bench/corpus/**/deps/
 wite.config.jsonc
