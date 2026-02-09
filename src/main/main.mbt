@@ -15,6 +15,9 @@ fn print_usage() -> Unit {
   println(
     "  add <dep-spec> [--protocol=wkg|warg|oci] [--registry=<host>] [--name=<id>] [--config=<path>] [--verify]  # dep-spec: wkg:mizchi/markdown | mizchi/markdown | wasi:http | https://wa.dev/mizchi:tmgrammar",
   )
+  println(
+    "  install [--config=<path>|--config <path>] [--dir=<path>|--dir <path>] [--verify] [--fail-fast]",
+  )
   println("  deps verify [--config=<path>|--config <path>] [--fail-fast]")
   println(
     "  deps sync [--config=<path>|--config <path>] [--dir=<path>|--dir <path>] [--verify] [--fail-fast]",
@@ -636,6 +639,16 @@ fn run_new_command(args : Array[String]) -> Unit {
       println("  wite build")
     }
   }
+}
+
+///|
+async fn run_install_command(args : Array[String]) -> Unit {
+  // Rewrite args as: [bin, "deps", "sync", ...rest]
+  let synth : Array[String] = [args[0], "deps", "sync"]
+  for i in 2..<args.length() {
+    synth.push(args[i])
+  }
+  @wite_deps.run_deps_sync_command(synth, print_usage)
 }
 
 ///|
@@ -4003,6 +4016,7 @@ async fn main {
     "init" => run_init_command(args)
     "new" => run_new_command(args)
     "add" => @wite_deps.run_add_command(args, print_usage)
+    "install" => run_install_command(args)
     "analyze" => run_analyze_command(args)
     "build" => run_build(args)
     "deps" => @wite_deps.run_deps_command(args, print_usage)
