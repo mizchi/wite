@@ -8,4 +8,5 @@ target
 deps/
 !src/deps/
 !bench/corpus/**/deps/
+!examples/**/deps/
 wite.config.jsonc
