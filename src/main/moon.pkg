@@ -18,4 +18,10 @@ import {
 
 options(
   "is-main": true,
+  targets: {
+    "main_ffi_js.mbt": ["js"],
+    "main_ffi_native.mbt": ["native"],
+    "main_wbtest.mbt": ["js"],
+  },
+  "native-stub": ["ffi_native.c"],
 )

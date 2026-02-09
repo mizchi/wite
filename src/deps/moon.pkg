@@ -8,3 +8,11 @@ import {
   "moonbitlang/x/json5" as @json5,
   "moonbitlang/x/sys" as @sys,
 }
+
+options(
+  targets: {
+    "deps_ffi_js.mbt": ["js"],
+    "deps_ffi_native.mbt": ["native"],
+  },
+  "native-stub": ["ffi_native.c"],
+)
