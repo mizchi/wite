@@ -1,0 +1,39 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/wite/optimize"
+
+import {
+  "mizchi/wite",
+}
+
+// Values
+pub fn optimize_auto_for_size(Bytes, @wite.OptimizeConfig, exclude? : Array[String]) -> Result[@wite.OptimizeResult, String]
+
+pub fn optimize_component_for_size(Bytes, @wite.OptimizeConfig, exclude? : Array[String]) -> Result[@wite.OptimizeResult, String]
+
+pub fn optimize_core_for_size(Bytes, @wite.OptimizeConfig) -> Result[@wite.OptimizeResult, String]
+
+pub fn optimize_kind_auto() -> OptimizeKind
+
+pub fn optimize_kind_component() -> OptimizeKind
+
+pub fn optimize_kind_core() -> OptimizeKind
+
+pub fn optimize_kind_name(OptimizeKind) -> String
+
+pub fn optimize_with_kind(Bytes, OptimizeKind, @wite.OptimizeConfig, exclude? : Array[String]) -> Result[@wite.OptimizeResult, String]
+
+pub fn parse_optimize_kind(String) -> OptimizeKind?
+
+// Errors
+
+// Types and methods
+pub enum OptimizeKind {
+  Auto
+  Core
+  Component
+}
+
+// Type aliases
+
+// Traits
+

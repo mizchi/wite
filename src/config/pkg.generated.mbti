@@ -1,0 +1,61 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/wite/config"
+
+// Values
+pub fn binary_kind_name(BinaryKind) -> String
+
+pub fn build_auto_sync_deps_command_args(String) -> Array[String]
+
+pub fn empty_wite_config_file() -> WiteConfigFile
+
+pub fn load_wite_config_or_exit(String) -> WiteConfigFile
+
+pub fn merge_command_flags(Array[String], Array[String]) -> Array[String]
+
+pub fn parse_binary_kind(String) -> BinaryKind?
+
+pub fn parse_binary_kind_or_exit(String, String) -> BinaryKind
+
+pub fn parse_config_selection_flags(Array[String]) -> ConfigSelectionFlags
+
+pub fn parse_json_string_array(Json, String) -> Result[Array[String], String]
+
+pub fn parse_wite_config_json(Json) -> Result[WiteConfigFile, String]
+
+pub fn parse_wite_config_section(Json, String) -> Result[(Array[String], BinaryKind), String]
+
+pub fn parse_wite_config_text(String) -> Result[WiteConfigFile, String]
+
+pub fn resolve_wite_config_or_default(ConfigSelectionFlags) -> WiteConfigFile
+
+pub fn should_auto_sync_deps(Bool, Bool) -> Bool
+
+// Errors
+
+// Types and methods
+pub enum BinaryKind {
+  Auto
+  Core
+  Component
+}
+
+pub struct ConfigSelectionFlags {
+  config_path : String
+  explicit_config_path : Bool
+  use_config : Bool
+  remaining_flags : Array[String]
+}
+
+pub struct WiteConfigFile {
+  build_flags : Array[String]
+  analyze_flags : Array[String]
+  profile_flags : Array[String]
+  build_kind : BinaryKind
+  analyze_kind : BinaryKind
+  profile_kind : BinaryKind
+}
+
+// Type aliases
+
+// Traits
+

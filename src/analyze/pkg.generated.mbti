@@ -1,0 +1,54 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/wite/analyze"
+
+import {
+  "mizchi/wite",
+}
+
+// Values
+pub fn print_call_graph_nodes(Array[@wite.CallGraphNode], UInt) -> Unit
+
+pub fn print_function_sizes(Array[@wite.FunctionSize], UInt) -> Unit
+
+pub fn print_section_sizes(Array[@wite.SectionSize]) -> Unit
+
+pub fn run_analyze(String) -> Unit
+
+pub fn run_analyze_host(String, UInt) -> Unit
+
+pub fn run_analyze_opt(String, @wite.OptimizeConfig, UInt) -> Unit
+
+pub fn run_block_gap(String, String, UInt) -> Unit
+
+pub fn run_block_sizes(String, UInt) -> Unit
+
+pub fn run_callgraph(String, UInt) -> Unit
+
+pub fn run_dce_report(String, UInt) -> Unit
+
+pub fn run_deep_analyze(String, UInt) -> Unit
+
+pub fn run_function_gap(String, String, UInt) -> Unit
+
+pub fn run_hot_size(String, UInt, UInt, Array[@wite.RuntimeProfileScenario]) -> Unit
+
+pub fn run_keep_reasons_with_options(String, Bool, Bool, Array[String]) -> Unit
+
+pub fn run_profile(String) -> Unit
+
+pub fn run_retain_path_with_options(String, UInt, Bool, Bool, Array[String]) -> Unit
+
+pub fn run_runtime_profile(String, UInt, Array[@wite.RuntimeProfileScenario]) -> Unit
+
+pub fn run_section_gap(String, String, UInt) -> Unit
+
+pub fn run_top_functions(String, UInt) -> Unit
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+

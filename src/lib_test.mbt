@@ -687,8 +687,8 @@ fn sample_module_with_runtime_scenarios_bytes() -> Bytes {
     out,
     7U,
     bytes_of([
-      0x02, 0x04, 0x61, 0x64, 0x64, 0x31, 0x00, 0x00, 0x03, 0x72, 0x75, 0x6e,
-      0x00, 0x01,
+      0x02, 0x04, 0x61, 0x64, 0x64, 0x31, 0x00, 0x00, 0x03, 0x72, 0x75, 0x6e, 0x00,
+      0x01,
     ]),
   )
   // code section:
@@ -698,8 +698,8 @@ fn sample_module_with_runtime_scenarios_bytes() -> Bytes {
     out,
     10U,
     bytes_of([
-      0x02, 0x07, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6a, 0x0b, 0x05, 0x00, 0x41,
-      0x00, 0x1a, 0x0b,
+      0x02, 0x07, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6a, 0x0b, 0x05, 0x00, 0x41, 0x00,
+      0x1a, 0x0b,
     ]),
   )
   Bytes::from_array(out[:])
@@ -1989,9 +1989,7 @@ fn sample_module_with_param_forwarding_thunk_with_duplicate_type_indices_bytes()
   append_section(
     out,
     1U,
-    bytes_of([
-      0x02, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x01, 0x7f, 0x01, 0x7f,
-    ]),
+    bytes_of([0x02, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x01, 0x7f, 0x01, 0x7f]),
   )
   // function section: 3 local functions (indices 0..2) with type idx [0,0,1]
   append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x01]))
@@ -2005,8 +2003,8 @@ fn sample_module_with_param_forwarding_thunk_with_duplicate_type_indices_bytes()
     out,
     10U,
     bytes_of([
-      0x03, 0x06, 0x00, 0x20, 0x00, 0x10, 0x01, 0x0b, 0x06, 0x00, 0x20, 0x00,
-      0x10, 0x02, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6a, 0x0b,
+      0x03, 0x06, 0x00, 0x20, 0x00, 0x10, 0x01, 0x0b, 0x06, 0x00, 0x20, 0x00, 0x10,
+      0x02, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6a, 0x0b,
     ]),
   )
   Bytes::from_array(out[:])
@@ -2139,9 +2137,9 @@ fn sample_module_with_cfp_const_size_regression_guard_bytes() -> Bytes {
     out,
     7U,
     bytes_of([
-      0x03, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00, 0x07, 0x77, 0x72, 0x61,
-      0x70, 0x70, 0x65, 0x72, 0x00, 0x01, 0x06, 0x74, 0x61, 0x72, 0x67, 0x65,
-      0x74, 0x00, 0x02,
+      0x03, 0x04, 0x6d, 0x61, 0x69, 0x6e, 0x00, 0x00, 0x07, 0x77, 0x72, 0x61, 0x70,
+      0x70, 0x65, 0x72, 0x00, 0x01, 0x06, 0x74, 0x61, 0x72, 0x67, 0x65, 0x74, 0x00,
+      0x02,
     ]),
   )
   // code section:
@@ -2152,11 +2150,10 @@ fn sample_module_with_cfp_const_size_regression_guard_bytes() -> Bytes {
     out,
     10U,
     bytes_of([
-      0x03, 0x22, 0x00, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10,
-      0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10,
-      0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x0b,
-      0x06, 0x00, 0x41, 0x05, 0x10, 0x02, 0x0b, 0x04, 0x00, 0x20, 0x00, 0x1a,
-      0x0b,
+      0x03, 0x22, 0x00, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01,
+      0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10,
+      0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x10, 0x01, 0x0b, 0x06, 0x00, 0x41,
+      0x05, 0x10, 0x02, 0x0b, 0x04, 0x00, 0x20, 0x00, 0x1a, 0x0b,
     ]),
   )
   Bytes::from_array(out[:])
@@ -5030,7 +5027,9 @@ test "optimize cfp skips rewrites that increase call immediate leb size" {
     return
   }
   assert_true(optimized.after_size <= optimized.before_size)
-  assert_true(not(optimized.removed_sections.any(s => s.contains("cfp:calls:"))))
+  assert_true(
+    not(optimized.removed_sections.any(s => s.contains("cfp:calls:"))),
+  )
   guard profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
@@ -5327,12 +5326,12 @@ test "optimize dce cluster rolls back when passes regress size" {
   }
   assert_true(optimized.after_size <= optimized.before_size)
   assert_true(
-    optimized.removed_sections.any(s =>
-      s.contains("dce-cluster:rollback:size-regress")),
+    optimized.removed_sections.any(s => s.contains(
+      "dce-cluster:rollback:size-regress",
+    )),
   )
   assert_true(
-    not(optimized.removed_sections.any(s =>
-      s.contains("cfp-const:calls:"))),
+    not(optimized.removed_sections.any(s => s.contains("cfp-const:calls:"))),
   )
   guard profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
@@ -6282,12 +6281,12 @@ test "runtime profiler reports signature mismatch in argument scenarios" {
     return
   }
   assert_true(
-    profile.unresolved_exports.any(u =>
-      u.export_name == "add1" && u.reason == "signature-mismatch"),
+    profile.unresolved_exports.any(u => u.export_name == "add1" &&
+      u.reason == "signature-mismatch"),
   )
   assert_true(
-    profile.unresolved_exports.any(u =>
-      u.export_name == "missing(1)" && u.reason == "export-not-found"),
+    profile.unresolved_exports.any(u => u.export_name == "missing(1)" &&
+      u.reason == "export-not-found"),
   )
 }
 
@@ -6390,7 +6389,8 @@ test "analyze hotness-size matrix supports argument scenarios" {
     make_runtime_profile_scenario("add1", args=[41]),
     make_runtime_profile_scenario("run"),
   ]
-  guard analyze_hotness_size_matrix(bytes, iterations=4U, scenarios~) is Ok(report) else {
+  guard analyze_hotness_size_matrix(bytes, iterations=4U, scenarios~)
+    is Ok(report) else {
     assert_true(false)
     return
   }
@@ -6421,17 +6421,18 @@ test "analyze hotness-size matrix reports scenario unresolved reasons" {
     make_runtime_profile_scenario("add1"),
     make_runtime_profile_scenario("missing", args=[1]),
   ]
-  guard analyze_hotness_size_matrix(bytes, iterations=2U, scenarios~) is Ok(report) else {
+  guard analyze_hotness_size_matrix(bytes, iterations=2U, scenarios~)
+    is Ok(report) else {
     assert_true(false)
     return
   }
   assert_true(
-    report.entries.any(entry =>
-      entry.export_name == "add1" && entry.unresolved_reason == Some("signature-mismatch")),
+    report.entries.any(entry => entry.export_name == "add1" &&
+      entry.unresolved_reason == Some("signature-mismatch")),
   )
   assert_true(
-    report.entries.any(entry =>
-      entry.export_name == "missing(1)" && entry.unresolved_reason == Some("export-not-found")),
+    report.entries.any(entry => entry.export_name == "missing(1)" &&
+      entry.unresolved_reason == Some("export-not-found")),
   )
   guard find_hotness_unresolved_reason(
       report.unresolved_reason_counts,

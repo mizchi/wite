@@ -14,9 +14,10 @@
 
 ## wite API 体系（合意）
 
-- Canonical CLI は `build` / `analyze` / `profile` / `diff` / `add` / `deps` / `component` とする
+- Canonical CLI は `new` / `build` / `analyze` / `profile` / `diff` / `add` / `deps` / `component` とする
 - `build` は「bundle + optimize + emit」を 1 コマンドで実行する
 - `init` は quickstart 用の `wite.config.jsonc` / `main.wac` ひな型を生成する
+- `new` は `--moonbit` / `--rust` を受け付け、`wite.config.jsonc` / `main.wac` に加えて guest テンプレートを生成する
 - `build` は入力省略時に `main.wac`（優先）または `main.wasm` を自動選択する
 - `build` が入力省略で `main.wac` を使う場合、既定出力は `composed.wasm` とする
 - `analyze` は `--view` で `summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain` を切り替える
@@ -38,8 +39,8 @@
 - `wite.config.jsonc` は `deps`（object）を受け付け、`add` で URL を upsert する
 - `build/analyze/profile` は `deps` が存在する場合に `deps sync --fail-fast` を自動実行して `deps/` を最新化する（`--no-config` では無効）
 - リポジトリ root に `wite.config.jsonc` テンプレートを置き、`just deps-verify` / `just deps-sync` で運用できるようにする
-- `examplesl/minimal` に最小設定例を置き、`just example-minimal` で動作確認できるようにする
-- 互換エイリアスは提供せず、`wite` の canonical CLI へ集約する
+- `examples/minimal` に最小設定例を置き、`just example-minimal` で動作確認できるようにする
+- CLI は `wite` に集約するが、`optimize` は移植・比較容易化のため `wasm-opt` 互換フラグを受け付ける
 
 
 ## Next Up (2026-02-08)
@@ -54,11 +55,13 @@
 - W7 (Done): `wite deps sync` を実装し、`deps` 全件をローカル `deps/` へ実体化できるようにする
 - W8 (Done): `build/analyze/profile` 実行時に `deps` 自動同期（`deps sync --fail-fast`）を追加する
 - W9 (Done): root `wite.config.jsonc` テンプレートと `just deps-verify` / `just deps-sync` タスクを追加する
-- W10 (Done): `examplesl/minimal` 最小設定例と `just example-minimal` タスクを追加する
+- W10 (Done): `examples/minimal` 最小設定例と `just example-minimal` タスクを追加する
 - W11 (Done): `build/analyze/profile` に `kind`（auto/core/component）を導入し、config/CLI で指定可能にする
 - W12 (Done): `optimize` に `--kind`（auto/core/component）を追加し、core/component 経路を明示可能にする
 - W13 (Done): `wite init` を追加し、quickstart ひな型（`wite.config.jsonc` / `main.wac`）を生成可能にする
 - W14 (Done): `wite build` の入力省略を許可し、`main.wac` / `main.wasm` 自動選択を追加する
+- W15 (Done): `wite new --moonbit|--rust` を追加し、MoonBit / cargo-component の guest テンプレート生成と build smoke を追加する
+- W16 (Done): `wite optimize` に `wasm-opt` 互換フラグ（`--optimize-level` / `--shrink-level` / pass alias / feature flags）を追加し、単体最適化導線を強化する
 - P2 (P1): `cfp` phase1（forward call 伝播）を導入し、DCE の callgraph 精度を上げる
 - P5 (P1): `precompute` を拡張（`eqz(eqz(x))+br_if`）して code セクション gap を削る
 - P2 (P1): `cfp` phase2（param-forwarding thunk 伝播）を導入し、DCE の callgraph 精度を上げる
@@ -92,6 +95,8 @@
 - 連携点は bytes I/O 契約（`component bytes -> core module optimize -> component bytes`）として定義する
 - `closed-world root policy` は `wite component roots` で決定し、optimize/analyze に同じ設定を渡す
 - `wite` の低レベル API は再利用可能な optimizer/analyzer ライブラリとして維持する
+- `src/optimize`（最適化実行）と `src/bundle`（WAC compose/依存解析）を独立パッケージとして維持し、CLI 依存なしで再利用可能にする
+- `src/analyze`（解析実行/表示）, `src/component`（component 専用操作）, `src/config`（config 解決）, `src/deps`（依存解決/同期）を独立パッケージとして維持する
 
 ## P0: Core Size ギャップ解消（最優先）
 

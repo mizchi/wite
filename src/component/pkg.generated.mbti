@@ -1,0 +1,26 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/wite/component"
+
+// Values
+pub fn read_bytes_or_exit(String) -> Bytes
+
+pub fn run_component_callgraph(String, UInt) -> Unit
+
+pub fn run_component_dce_kpi_with_options(String, String?, Array[String], Array[String], Bool, Bool) -> Unit
+
+pub fn run_component_profile(String) -> Unit
+
+pub fn run_component_top_functions(String, UInt) -> Unit
+
+pub fn run_contract(String, String) -> Unit
+
+pub fn run_root_policy_with_options(String, String?, Array[String]) -> Unit
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+

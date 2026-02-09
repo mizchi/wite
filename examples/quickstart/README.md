@@ -1,4 +1,4 @@
-# quickstart example (`examplesl/quickstart`)
+# quickstart example (`examples/quickstart`)
 
 `wite` の最小フローを手順化したサンプルです。
 

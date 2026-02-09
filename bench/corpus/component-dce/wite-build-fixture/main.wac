@@ -1,0 +1,8 @@
+package example:composition;
+
+let hello = new example:hello {};
+let greeter = new example:greeter {
+  hello: hello.hello,
+};
+
+export greeter.greet;

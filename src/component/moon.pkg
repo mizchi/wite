@@ -1,0 +1,7 @@
+import {
+  "mizchi/wite/analyze" as @wite_analyze,
+  "mizchi/wite" as @wite,
+  "mizchi/wit" as @wit,
+  "moonbitlang/x/fs" as @fs,
+  "moonbitlang/x/sys" as @sys,
+}

@@ -1,4 +1,4 @@
-# minimal example (`examplesl/minimal`)
+# minimal example (`examples/minimal`)
 
 最小の `wite.config.jsonc` で `analyze` を動かすサンプルです。
 
@@ -13,7 +13,7 @@ just example-minimal
 これは内部的に次を実行します:
 
 ```bash
-moon run src/main --target js -- analyze bench/corpus/core/binaryen/br_to_exit.wasm --config=./examplesl/minimal/wite.config.jsonc
+moon run src/main --target js -- analyze bench/corpus/core/binaryen/br_to_exit.wasm --config=./examples/minimal/wite.config.jsonc
 ```
 
 ## 期待される挙動

@@ -1002,9 +1002,7 @@ fn parse_vec_count(payload : Bytes) -> UInt raise WiteError {
 }
 
 ///|
-fn parse_code_section_metrics(
-  payload : Bytes,
-) -> (UInt, UInt) raise WiteError {
+fn parse_code_section_metrics(payload : Bytes) -> (UInt, UInt) raise WiteError {
   let parser = Cursor::new(payload)
   let body_count = parser.read_u32_leb128()
   let mut total_body_bytes = 0U
@@ -1245,17 +1243,13 @@ fn rewrite_import_section_payload_for_keep_raise(
     } else if entry.kind == 2U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_memory_imports.length() {
-        raise WiteError::InvalidFormat(
-          "memory import keep index out of range",
-        )
+        raise WiteError::InvalidFormat("memory import keep index out of range")
       }
       keep = keep_memory_imports[index]
     } else if entry.kind == 3U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_global_imports.length() {
-        raise WiteError::InvalidFormat(
-          "global import keep index out of range",
-        )
+        raise WiteError::InvalidFormat("global import keep index out of range")
       }
       keep = keep_global_imports[index]
     }
@@ -1303,17 +1297,13 @@ fn rewrite_import_section_payload_for_keep_kinds_raise(
     } else if entry.kind == 2U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_memory_imports.length() {
-        raise WiteError::InvalidFormat(
-          "memory import keep index out of range",
-        )
+        raise WiteError::InvalidFormat("memory import keep index out of range")
       }
       keep = keep_memory_imports[index]
     } else if entry.kind == 3U {
       let index = UInt::reinterpret_as_int(entry.kind_index)
       if index < 0 || index >= keep_global_imports.length() {
-        raise WiteError::InvalidFormat(
-          "global import keep index out of range",
-        )
+        raise WiteError::InvalidFormat("global import keep index out of range")
       }
       keep = keep_global_imports[index]
     }
@@ -1406,16 +1396,12 @@ fn parse_export_table_indices(payload : Bytes) -> Array[UInt] raise WiteError {
 }
 
 ///|
-fn parse_export_memory_indices(
-  payload : Bytes,
-) -> Array[UInt] raise WiteError {
+fn parse_export_memory_indices(payload : Bytes) -> Array[UInt] raise WiteError {
   parse_export_indices_by_kind(payload, 2U)
 }
 
 ///|
-fn parse_export_global_indices(
-  payload : Bytes,
-) -> Array[UInt] raise WiteError {
+fn parse_export_global_indices(payload : Bytes) -> Array[UInt] raise WiteError {
   parse_export_indices_by_kind(payload, 3U)
 }
 
@@ -1450,9 +1436,7 @@ fn merge_export_function_names(
 }
 
 ///|
-fn parse_custom_section_name_prefix_end(
-  payload : Bytes,
-) -> Int raise WiteError {
+fn parse_custom_section_name_prefix_end(payload : Bytes) -> Int raise WiteError {
   let parser = Cursor::new(payload)
   let name_len_u = parser.read_u32_leb128()
   let name_len = UInt::reinterpret_as_int(name_len_u)
@@ -1766,11 +1750,7 @@ fn decode_u32_leb128_bytes(bytes : Bytes) -> UInt? {
 }
 
 ///|
-fn decode_u32_leb128_range(
-  bytes : Bytes,
-  start : Int,
-  end_ : Int,
-) -> UInt? {
+fn decode_u32_leb128_range(bytes : Bytes, start : Int, end_ : Int) -> UInt? {
   if start < 0 || start >= end_ || end_ > bytes.length() {
     return None
   }
@@ -3875,9 +3855,7 @@ fn rewrite_start_section_payload_for_dce_raise(
 }
 
 ///|
-fn parse_function_type_indices(
-  payload : Bytes,
-) -> Array[UInt] raise WiteError {
+fn parse_function_type_indices(payload : Bytes) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
@@ -5125,9 +5103,7 @@ fn apply_dae_optimizing(bytes : Bytes) -> DaeApplyResult {
 }
 
 ///|
-fn apply_dae_optimizing_raise(
-  bytes : Bytes,
-) -> DaeApplyResult raise WiteError {
+fn apply_dae_optimizing_raise(bytes : Bytes) -> DaeApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut code_section_payload : Bytes? = None
   for section in sections {
@@ -7119,9 +7095,7 @@ fn has_disallowed_table_ops_in_instruction_raise(
       0x25U | 0x26U => return true
       0xfcU => {
         if span.end_ <= span.start + 1 {
-          raise WiteError::InvalidFormat(
-            "invalid 0xfc immediate in directize",
-          )
+          raise WiteError::InvalidFormat("invalid 0xfc immediate in directize")
         }
         let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
         let parser = Cursor::new(imm)
@@ -7244,9 +7218,7 @@ priv struct MemoryPackingApplyResult {
 }
 
 ///|
-fn apply_directize_raise(
-  bytes : Bytes,
-) -> DirectizeApplyResult raise WiteError {
+fn apply_directize_raise(bytes : Bytes) -> DirectizeApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut import_payload : Bytes? = None
   let mut function_payload : Bytes? = None
@@ -10079,9 +10051,7 @@ fn analyze_call_graph_summary_raise(
 }
 
 ///|
-pub fn analyze_call_graph(
-  bytes : Bytes,
-) -> Result[CallGraphReport, WiteError] {
+pub fn analyze_call_graph(bytes : Bytes) -> Result[CallGraphReport, WiteError] {
   try? analyze_call_graph_raise(bytes, None)
 }
 
@@ -10237,12 +10207,8 @@ pub fn analyze_host_generated_code(
           )
         }
         let param_alias_map = collect_call_forwarding_alias_map(
-          code_bodies,
-          imported_function_count,
-          function_type_by_index,
-          function_type_entry_by_type_index,
-          function_param_count_by_index,
-          gc_type_canonical_map,
+          code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+          function_param_count_by_index, gc_type_canonical_map,
         )
         param_alias_map.each((function_index, target_function_index) => {
           param_forwarding_thunk_count += 1U
@@ -10261,10 +10227,7 @@ pub fn analyze_host_generated_code(
           })
         })
         let const_alias_map = collect_const_call_forwarding_alias_map(
-          code_bodies,
-          imported_function_count,
-          function_type_by_index,
-          function_type_entry_by_type_index,
+          code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
           gc_type_canonical_map,
         )
         const_alias_map.each((function_index, alias_info) => {
@@ -10286,10 +10249,7 @@ pub fn analyze_host_generated_code(
           })
         })
         let signature_alias_map = collect_signature_refine_alias_map(
-          code_bodies,
-          imported_function_count,
-          function_type_by_index,
-          function_type_entry_by_type_index,
+          code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
           gc_type_canonical_map,
         )
         signature_alias_map.each((function_index, alias_info) => {
@@ -11278,9 +11238,7 @@ fn can_const_forward_with_appended_i32_to_target(
   }
   if not(
       function_type_results_equal_with_gc_canonical_map(
-        wrapper_type,
-        target_type,
-        gc_type_canonical_map,
+        wrapper_type, target_type, gc_type_canonical_map,
       ),
     ) {
     return false
@@ -11356,9 +11314,7 @@ fn can_signature_refine_forward_to_target(
   }
   if not(
       function_type_results_equal_with_gc_canonical_map(
-        wrapper_type,
-        target_type,
-        gc_type_canonical_map,
+        wrapper_type, target_type, gc_type_canonical_map,
       ),
     ) {
     return None
@@ -11510,9 +11466,7 @@ fn collect_call_forwarding_alias_map(
                 match function_type_entry_by_type_index.get(target_type_index) {
                   Some(target_type) =>
                     if function_type_entries_equal_with_gc_canonical_map(
-                        wrapper_type,
-                        target_type,
-                        gc_type_canonical_map,
+                        wrapper_type, target_type, gc_type_canonical_map,
                       ) {
                       alias_candidate.set(old_index, target)
                     }
@@ -11739,10 +11693,7 @@ fn apply_const_call_forwarding_propagation_raise(
     .length()
     .reinterpret_as_uint()
   let alias_map = collect_const_call_forwarding_alias_map(
-    code_bodies,
-    imported_function_count,
-    function_type_by_index,
-    function_type_entry_by_type_index,
+    code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
     gc_type_canonical_map,
   )
   let mut has_alias = false
@@ -11888,9 +11839,10 @@ fn apply_call_forwarding_propagation_raise(
       )
     }
     match function_type_entry_by_type_index.get(type_index) {
-      Some(function_type_entry) => function_param_count_by_index.push(
-        function_type_entry.params.length().reinterpret_as_uint(),
-      )
+      Some(function_type_entry) =>
+        function_param_count_by_index.push(
+          function_type_entry.params.length().reinterpret_as_uint(),
+        )
       None =>
         raise WiteError::InvalidFormat(
           "missing function type entry in cfp: " + type_index.to_string(),
@@ -11898,12 +11850,8 @@ fn apply_call_forwarding_propagation_raise(
     }
   }
   let alias_map = collect_call_forwarding_alias_map(
-    code_bodies,
-    imported_function_count,
-    function_type_by_index,
-    function_type_entry_by_type_index,
-    function_param_count_by_index,
-    gc_type_canonical_map,
+    code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+    function_param_count_by_index, gc_type_canonical_map,
   )
   let mut has_alias = false
   alias_map.each((_, _target) => has_alias = true)
@@ -11958,10 +11906,7 @@ fn collect_signature_refine_alias_map(
               Some(target_type) =>
                 match
                   can_signature_refine_forward_to_target(
-                    wrapper_type,
-                    target_type,
-                    forwarded_param_count,
-                    gc_type_canonical_map,
+                    wrapper_type, target_type, forwarded_param_count, gc_type_canonical_map,
                   ) {
                   Some(dropped_param_count) =>
                     alias_candidate.set(old_index, {
@@ -12181,10 +12126,7 @@ fn apply_signature_refining_raise(
     .length()
     .reinterpret_as_uint()
   let alias_map = collect_signature_refine_alias_map(
-    code_bodies,
-    imported_function_count,
-    function_type_by_index,
-    function_type_entry_by_type_index,
+    code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
     gc_type_canonical_map,
   )
   let mut has_alias = false
@@ -13557,8 +13499,7 @@ fn apply_merge_similar_functions_raise(
   if function_type_by_index.length() > 0 {
     let type_payload = match type_payload {
       Some(v) => v
-      None =>
-        raise WiteError::InvalidFormat("type section is missing for msf")
+      None => raise WiteError::InvalidFormat("type section is missing for msf")
     }
     let parsed_type_entries = parse_type_section_entries_with_refs_raise(
       type_payload, "msf",
@@ -14537,9 +14478,7 @@ pub fn analyze_hotness_size_matrix(
   let function_sizes = match analyze_function_sizes(bytes) {
     Ok(v) => v
     Err(err) =>
-      return Err(
-        "function size analysis failed: " + wite_error_to_string(err),
-      )
+      return Err("function size analysis failed: " + wite_error_to_string(err))
   }
   let export_to_function_index = map_export_name_to_function_index(
     function_sizes,
@@ -14555,7 +14494,8 @@ pub fn analyze_hotness_size_matrix(
   let resolved_body_bytes : Array[UInt] = []
   let unresolved_exports : Array[String] = []
   for fn_profile in runtime.functions {
-    let lookup_name = match scenario_display_to_export_name.get(fn_profile.name) {
+    let lookup_name = match
+      scenario_display_to_export_name.get(fn_profile.name) {
       Some(v) => v
       None => fn_profile.name
     }
@@ -14575,7 +14515,8 @@ pub fn analyze_hotness_size_matrix(
   let large_threshold_bytes = average_u32(resolved_body_bytes)
   let entries : Array[HotnessSizeEntry] = []
   for fn_profile in runtime.functions {
-    let lookup_name = match scenario_display_to_export_name.get(fn_profile.name) {
+    let lookup_name = match
+      scenario_display_to_export_name.get(fn_profile.name) {
       Some(v) => v
       None => fn_profile.name
     }

@@ -1,0 +1,22 @@
+// Generated using `moon info`, DON'T EDIT IT
+package "mizchi/wite/bundle"
+
+// Values
+pub fn build_wac_dep_target_path(String, String, String) -> String
+
+pub fn collect_wac_new_package_names(String) -> Result[Array[String], String]
+
+pub fn compose_wac_file(String, best_effort? : Bool, dce? : Bool) -> Result[Bytes, String]
+
+pub fn compose_wac_source(String, String, best_effort? : Bool, dce? : Bool) -> Result[Bytes, String]
+
+pub fn parse_wac_package_name(String) -> (String, String)?
+
+// Errors
+
+// Types and methods
+
+// Type aliases
+
+// Traits
+

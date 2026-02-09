@@ -1085,7 +1085,7 @@ fn write_config_json_for_add(path : String, config : Json) -> Unit {
 }
 
 ///|
-async fn run_add_command(args : Array[String]) -> Unit {
+pub async fn run_add_command(args : Array[String]) -> Unit {
   let options = match parse_add_command_options(args) {
     Ok(value) => value
     Err(msg) => {
@@ -1350,7 +1350,7 @@ async fn run_deps_sync_command(args : Array[String]) -> Unit {
 }
 
 ///|
-async fn run_deps_command(args : Array[String]) -> Unit {
+pub async fn run_deps_command(args : Array[String]) -> Unit {
   if args.length() < 3 {
     println("deps requires subcommand")
     print_usage()

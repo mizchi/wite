@@ -7,6 +7,7 @@
 - `core-analyze/duckdb`: duckdb-wasm の巨大 core wasm（analyze 専用）
 - `component/wac`: wac の component wasm テスト素材
 - `component-dce/mwac`: component-model DCE KPI 専用の mwac component 素材
+- `component-dce/wite-build-fixture`: `wite build` 結合テスト用の local fixture（`main.wac` + local deps）
 - `core/binaryen/rume_gain_fixture.wasm`: `directize→DCE→RUME` 診断で `rume_gain_bytes` を観測するためのローカル fixture
 - `core/binaryen/directize_gain_fixture.wasm`: `directize→DCE→RUME` 診断で `directize_calls_total` を観測するためのローカル fixture
 
@@ -18,7 +19,7 @@ just bench-sync
 
 `bench/corpus/manifest.tsv` にある commit/path/sha256 を使って再取得し、ハッシュ検証します。
 
-`rume_gain_fixture.wasm` と `directize_gain_fixture.wasm` はローカル管理 fixture のため `bench-sync` では再取得しません。
+`rume_gain_fixture.wasm` / `directize_gain_fixture.wasm` / `component-dce/wite-build-fixture` はローカル管理 fixture のため `bench-sync` では再取得しません。
 
 ## ライセンス
 

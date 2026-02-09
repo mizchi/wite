@@ -39,7 +39,7 @@
 - [x] W7: `wite deps sync` を追加し、`wite.config.jsonc` の `deps` 全件を `deps/<name>/` へ実体化可能にした（`--dir` / `--verify` / `--fail-fast`）
 - [x] W8: `build/analyze/profile` 実行時に config 内 `deps` を自動同期する導線を追加した（`deps sync --fail-fast`）
 - [x] W9: root `wite.config.jsonc` テンプレートと `just deps-verify` / `just deps-sync` タスクを追加した
-- [x] W10: `examplesl/minimal` の最小設定例と `just example-minimal` 実行タスクを追加した
+- [x] W10: `examples/minimal` の最小設定例と `just example-minimal` 実行タスクを追加した
 - [x] W11: `build/analyze/profile` に `kind`（auto/core/component）を追加し、config/CLI で上書き可能にした
 - [x] W12: `optimize` に `--kind`（auto/core/component）を追加し、core/component 経路を明示指定可能にした
 - [x] テスト追加: `parse_diff_view` / `parse_diff_baseline` の回帰テスト
@@ -50,6 +50,14 @@
 - [x] テスト追加: `parse_wasm_dependency_spec` / `parse_dependency_protocol` / `parse_add_command_options` / `upsert_wasm_dependency_config_json` の回帰テスト
 - [x] テスト追加: `parse_deps_sync_command_options` / `build_dep_sync_target_dir` の回帰テスト
 - [x] テスト追加: `parse_analyze_view` / `derive_build_output_path` / `normalize_opt_level_token` の回帰テスト
+- [x] CLI: `wite new --moonbit|--rust` を追加し、guest テンプレート（MoonBit / cargo-component）を生成可能にした
+- [x] 統合テスト追加: `wite new --moonbit` 生成物を `moon build` で build できることを検証
+- [x] 統合テスト追加: `wite new --rust` 生成物を `cargo component build`（環境不足時は既知エラー判定 + `cargo build` fallback）で検証
+- [x] CLI: `wite optimize` に `wasm-opt` 互換フラグ（`--optimize-level` / `--shrink-level` / pass alias / feature flags）を追加し、単体最適化の直接導線を強化した
+- [x] モジュール分割: `src/optimize`（最適化実行 API）/ `src/bundle`（WAC compose・依存解析 API）を追加し、`main` から利用する構成へ整理した
+- [x] モジュール分割: `src/analyze`（解析実行 API）/ `src/component`（component 操作 API）/ `src/config`（config 解決 API）/ `src/deps`（依存解決 API）を追加し、`main` から利用する構成へ整理した
+- [x] 統合テスト追加: `bench/corpus/component-dce/wite-build-fixture`（`main.wac` + local deps）で `build` を実行し、implicit (`main.wac` + `composed.wasm`) と explicit (`-o explicit.wasm`) の出力同値性と export (`greet`) を検証
+- [x] 統合テスト追加: `bench/corpus/component-dce/wite-build-fixture` を壊した失敗系（依存 wasm 欠落 / `main.wac` 構文不正）で compose が失敗することを検証
 - [x] Perf: `analyze_call_graph` / `analyze_call_graph_summary` を body 直走査 (`collect_direct_callees_from_body_raise`) + bitmap visited に置換し、`parse_instruction_spans` 依存を除去
 - [x] Bench: `moon bench` 内部 driver 計測で `analyze summary` が改善（`pglite mean: 110527us -> 73258us`, `duckdb mean: 801982us -> 546504us`）
 - [x] P5: `inlining-optimizing` を拡張（identity/no-op callee を call-site で除去）し、zlib の DCE 連鎖を強化
