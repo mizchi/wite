@@ -1,88 +1,147 @@
 ///|
-fn write_output_or_exit(output_path : String, bytes : Bytes) -> Unit {
-  js_ensure_parent_dir_for_file(output_path)
-  @fs.write_bytes_to_file(output_path, bytes) catch {
-    e => {
-      println(
-        "failed to write file: " + output_path + " (" + e.to_string() + ")",
-      )
-      @sys.exit(1)
-    }
+fn replace_suffix(text : String, from : String, to : String) -> String {
+  if not(text.has_suffix(from)) {
+    return text + to
+  }
+  let prefix = text[:text.length() - from.length()].to_string() catch {
+    _ => text.to_string()
+  }
+  prefix + to
+}
+
+///|
+fn derive_build_output_path(input_path : String) -> String {
+  if input_path.has_suffix(".wac") {
+    replace_suffix(input_path, ".wac", ".wasm")
+  } else if input_path.has_suffix(".wasm") {
+    replace_suffix(input_path, ".wasm", ".min.wasm")
+  } else {
+    input_path + ".wasm"
   }
 }
 
 ///|
-fn run_optimize(args : Array[String]) -> Unit {
-  if args.length() < 4 {
-    print_usage()
-    @sys.exit(1)
+fn derive_implicit_build_output_path(input_path : String) -> String {
+  if input_path == "main.wac" {
+    "composed.wasm"
+  } else {
+    derive_build_output_path(input_path)
   }
-  let input_path = args[2]
-  let output_path = args[3]
-  let flags : Array[String] = []
-  for i in 4..<args.length() {
-    flags.push(args[i])
+}
+
+///|
+fn path_basename(path : String) -> String {
+  match path.rev_find("/") {
+    Some(index) => path[index + 1:].to_string() catch { _ => path }
+    None => path
   }
-  let kind_flags = extract_binary_kind_flags(
-    flags,
-    BinaryKind::Auto,
-    "optimize kind",
-  )
-  let options = parse_optimize_cli_options(kind_flags.flags)
-  let bytes = read_bytes_or_exit(input_path)
-  match
-    optimize_with_kind(
-      bytes,
-      kind_flags.kind,
-      options.config,
-      options.excluded_roots,
-    ) {
-    Ok(result) => {
-      write_output_or_exit(output_path, result.bytes)
-      println(
-        "optimized: " +
-        result.before_size.to_string() +
-        " -> " +
-        result.after_size.to_string() +
-        " bytes",
-      )
-      if result.removed_sections.length() > 0 {
-        println("removed sections: " + result.removed_sections.join(", "))
+}
+
+///|
+fn path_dirname(path : String) -> String {
+  let slash = path.rev_find("/")
+  let backslash = path.rev_find("\\")
+  let index = match (slash, backslash) {
+    (Some(a), Some(b)) => if a >= b { Some(a) } else { Some(b) }
+    (Some(a), None) => Some(a)
+    (None, Some(b)) => Some(b)
+    (None, None) => None
+  }
+  match index {
+    Some(i) =>
+      if i == 0 {
+        if path.has_prefix("\\") {
+          "\\"
+        } else {
+          "/"
+        }
+      } else {
+        path[:i].to_string() catch {
+          _ => "."
+        }
       }
-      if options.verbose && result.no_change_reasons.length() > 0 {
-        println("no-change reasons: " + result.no_change_reasons.join(", "))
+    None => "."
+  }
+}
+
+///|
+fn is_absolute_path(path : String) -> Bool {
+  if path.has_prefix("/") || path.has_prefix("\\") {
+    return true
+  }
+  match path.find(":") {
+    Some(i) if i == 1 && path.length() >= 3 => {
+      let sep = path[2:3].to_string() catch { _ => "" }
+      sep == "/" || sep == "\\"
+    }
+    _ => false
+  }
+}
+
+///|
+fn resolve_path_from_config_dir(config_dir : String, path : String) -> String {
+  if config_dir == "." || config_dir.is_empty() || is_absolute_path(path) {
+    return path
+  }
+  if config_dir == "/" || config_dir == "\\" {
+    return config_dir + path
+  }
+  config_dir + "/" + path
+}
+
+///|
+priv struct BuildInputResolution {
+  input_path : String
+  raw_flags : Array[String]
+  explicit_input : Bool
+}
+
+///|
+fn pick_default_build_input_path(
+  has_main_wac : Bool,
+  has_main_wasm : Bool,
+) -> String? {
+  if has_main_wac {
+    Some("main.wac")
+  } else if has_main_wasm {
+    Some("main.wasm")
+  } else {
+    None
+  }
+}
+
+///|
+fn resolve_build_input_from_args(
+  args : Array[String],
+  default_input : String?,
+) -> Result[BuildInputResolution, String] {
+  if args.length() < 3 {
+    return match default_input {
+      Some(input_path) =>
+        Ok({ input_path, raw_flags: [], explicit_input: false })
+      None =>
+        Err("build requires entry.(wac|wasm) or main.wac/main.wasm in cwd")
+    }
+  }
+  let token = args[2]
+  if token.has_prefix("-") {
+    return match default_input {
+      Some(input_path) => {
+        let raw_flags : Array[String] = []
+        for i in 2..<args.length() {
+          raw_flags.push(args[i])
+        }
+        Ok({ input_path, raw_flags, explicit_input: false })
       }
-      println("kind: " + binary_kind_name(kind_flags.kind))
-    }
-    Err(msg) => {
-      println("optimize failed: " + msg)
-      @sys.exit(1)
+      None =>
+        Err("build requires entry.(wac|wasm) or main.wac/main.wasm in cwd")
     }
   }
-}
-
-///|
-fn to_optimize_kind(kind : BinaryKind) -> @wite_optimize.OptimizeKind {
-  match kind {
-    BinaryKind::Auto => @wite_optimize.optimize_kind_auto()
-    BinaryKind::Core => @wite_optimize.optimize_kind_core()
-    BinaryKind::Component => @wite_optimize.optimize_kind_component()
+  let raw_flags : Array[String] = []
+  for i in 3..<args.length() {
+    raw_flags.push(args[i])
   }
-}
-
-///|
-fn optimize_with_kind(
-  bytes : Bytes,
-  kind : BinaryKind,
-  config : @wite.OptimizeConfig,
-  excluded_roots : Array[String],
-) -> Result[@wite.OptimizeResult, String] {
-  @wite_optimize.optimize_with_kind(
-    bytes,
-    to_optimize_kind(kind),
-    config,
-    exclude=excluded_roots,
-  )
+  Ok({ input_path: token, raw_flags, explicit_input: true })
 }
 
 ///|
@@ -272,4 +331,3 @@ async fn run_build(args : Array[String]) -> Unit {
   }
 }
 
-///|
