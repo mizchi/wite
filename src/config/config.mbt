@@ -37,6 +37,33 @@ pub fn parse_binary_kind_or_exit(value : String, label : String) -> BinaryKind {
 }
 
 ///|
+pub enum ConfigInput {
+  None
+  Single(String)
+  Named(Map[String, String])
+} derive(Show)
+
+///|
+pub fn ConfigInput::new_none() -> ConfigInput {
+  ConfigInput::None
+}
+
+///|
+pub fn ConfigInput::new_single(s : String) -> ConfigInput {
+  ConfigInput::Single(s)
+}
+
+///|
+pub fn ConfigInput::new_named(map : Map[String, String]) -> ConfigInput {
+  ConfigInput::Named(map)
+}
+
+///|
+pub struct ConfigOutput {
+  dir : String
+}
+
+///|
 pub struct WiteConfigFile {
   build_flags : Array[String]
   analyze_flags : Array[String]
@@ -44,6 +71,8 @@ pub struct WiteConfigFile {
   build_kind : BinaryKind
   analyze_kind : BinaryKind
   profile_kind : BinaryKind
+  input : ConfigInput
+  output : ConfigOutput
 }
 
 ///|
@@ -55,6 +84,54 @@ pub fn empty_wite_config_file() -> WiteConfigFile {
     build_kind: BinaryKind::Auto,
     analyze_kind: BinaryKind::Auto,
     profile_kind: BinaryKind::Auto,
+    input: ConfigInput::None,
+    output: { dir: "dist" },
+  }
+}
+
+///|
+pub fn parse_config_input(json_value : Json) -> Result[ConfigInput, String] {
+  match json_value {
+    String(s) => Ok(ConfigInput::Single(s))
+    Object(obj) => {
+      let map : Map[String, String] = {}
+      for entry in obj {
+        match entry.1 {
+          String(v) => map[entry.0] = v
+          _ => return Err("config input." + entry.0 + " must be string")
+        }
+      }
+      Ok(ConfigInput::Named(map))
+    }
+    _ => Err("config input must be string or object")
+  }
+}
+
+///|
+pub fn parse_config_output(json_value : Json) -> Result[ConfigOutput, String] {
+  match json_value {
+    String(s) => Ok({ dir: s })
+    Object(obj) =>
+      match obj.get("dir") {
+        Some(String(d)) => Ok({ dir: d })
+        Some(_) => Err("config output.dir must be string")
+        None => Ok({ dir: "dist" })
+      }
+    _ => Err("config output must be string or object")
+  }
+}
+
+///|
+pub fn config_input_single_path(input : ConfigInput) -> String? {
+  match input {
+    ConfigInput::None => None
+    ConfigInput::Single(s) => Some(s)
+    ConfigInput::Named(map) => {
+      for entry in map {
+        return Some(entry.1)
+      }
+      None
+    }
   }
 }
 
@@ -163,6 +240,24 @@ pub fn parse_wite_config_json(
           }
         None => ()
       }
+      let mut input = ConfigInput::None
+      match object.get("input") {
+        Some(value) =>
+          match parse_config_input(value) {
+            Ok(parsed) => input = parsed
+            Err(msg) => return Err(msg)
+          }
+        None => ()
+      }
+      let mut output : ConfigOutput = { dir: "dist" }
+      match object.get("output") {
+        Some(value) =>
+          match parse_config_output(value) {
+            Ok(parsed) => output = parsed
+            Err(msg) => return Err(msg)
+          }
+        None => ()
+      }
       Ok({
         build_flags,
         analyze_flags,
@@ -170,6 +265,8 @@ pub fn parse_wite_config_json(
         build_kind,
         analyze_kind,
         profile_kind,
+        input,
+        output,
       })
     }
     _ => Err("config root must be object")

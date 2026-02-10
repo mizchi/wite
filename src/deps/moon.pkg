@@ -10,9 +10,6 @@ import {
 }
 
 options(
-  targets: {
-    "deps_ffi_js.mbt": ["js"],
-    "deps_ffi_native.mbt": ["native"],
-  },
-  "native-stub": ["ffi_native.c"],
+  "native-stub": [ "ffi_native.c" ],
+  targets: { "deps_ffi_js.mbt": [ "js" ], "deps_ffi_native.mbt": [ "native" ] },
 )

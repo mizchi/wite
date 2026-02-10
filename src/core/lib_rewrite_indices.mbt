@@ -2042,4 +2042,3 @@ fn rewrite_data_section_payload_for_memory_global_index_map_raise(
   }
   (Bytes::from_array(out[:]), removed_segment_count, data_index_map)
 }
-

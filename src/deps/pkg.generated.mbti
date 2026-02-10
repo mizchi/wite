@@ -4,6 +4,8 @@ package "mizchi/wite/deps"
 // Values
 pub fn config_has_dep_entries_or_exit(String) -> Bool
 
+pub fn is_local_dep_url(String) -> Bool
+
 pub fn materialize_wac_dependencies_from_config(String, String, Bool) -> Result[UInt, String]
 
 pub fn noop_usage_printer() -> Unit

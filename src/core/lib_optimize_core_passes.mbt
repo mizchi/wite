@@ -4617,4 +4617,3 @@ fn optimize_for_size_round_raise(
   }
   { bytes: optimized_bytes, removed_sections }
 }
-

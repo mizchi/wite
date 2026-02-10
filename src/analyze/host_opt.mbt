@@ -1,3 +1,4 @@
+///|
 pub fn run_analyze_host(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
   match @wite.analyze_host_generated_code(bytes) {

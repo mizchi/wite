@@ -1018,4 +1018,3 @@ fn parse_instruction_spans_raise(
   }
   spans
 }
-

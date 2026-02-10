@@ -111,7 +111,9 @@ fn js_sanitize_dep_sync_name(raw : String) -> String {
       let safe = (ch >= 'a' && ch <= 'z') ||
         (ch >= 'A' && ch <= 'Z') ||
         (ch >= '0' && ch <= '9') ||
-        ch == '.' || ch == '_' || ch == '-'
+        ch == '.' ||
+        ch == '_' ||
+        ch == '-'
       let c = if safe { ch } else { '_' }
       if c == '_' {
         if not(prev_underscore) {
@@ -219,6 +221,7 @@ fn js_sync_wkg_package_to_file_cli(
   if parent != "." {
     let mkdir_cmd = "mkdir -p " + shell_quote(parent)
     let _ = run_shell_cmd(mkdir_cmd)
+
   }
   let cmd = "wkg get " +
     shell_quote(package_spec) +

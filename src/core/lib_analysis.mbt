@@ -2484,4 +2484,3 @@ pub fn analyze_dce_report(bytes : Bytes) -> Result[DceReport, WiteError] {
     Err(e) => Err(e)
   }
 }
-

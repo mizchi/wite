@@ -125,6 +125,11 @@ fn parse_wasm_dependency_spec(raw : String) -> WasmDependencySpec? {
 }
 
 ///|
+pub fn is_local_dep_url(url : String) -> Bool {
+  url.has_prefix("./") || url.has_prefix("../") || url.has_prefix("/")
+}
+
+///|
 fn parse_https_dependency_url(raw : String) -> (String, WasmDependencySpec)? {
   let text = raw.trim().to_string()
   let rest = if text.has_prefix("https://") {
@@ -262,7 +267,6 @@ fn build_verify_package_spec(spec : WasmDependencySpec) -> String {
   }
 }
 
-
 ///|
 fn exit_process(code : Int) -> Unit {
   js_set_process_exit_code(code)
@@ -283,7 +287,6 @@ fn parse_wkg_verify_cli_result(raw : String) -> Result[Unit, String] {
   let detail = if parts.length() >= 3 { parts[2] } else { raw }
   Err(stage + ": " + detail)
 }
-
 
 ///|
 fn normalize_dep_sync_output_dir(raw : String) -> String {
@@ -312,7 +315,6 @@ fn build_dep_sync_target_dir(
     base + "/" + safe_name
   }
 }
-
 
 ///|
 fn parse_wkg_sync_cli_result(raw : String) -> Result[String, String] {
@@ -955,6 +957,9 @@ fn build_wac_dependency_lookup(
 ) -> Result[Map[String, WacConfiguredDependency], String] {
   let lookup : Map[String, WacConfiguredDependency] = {}
   for entry in entries {
+    if is_local_dep_url(entry.url) {
+      continue
+    }
     let (host, spec) = match parse_https_dependency_url(entry.url) {
       Some(v) => v
       None => return Err("invalid dependency url: " + entry.url)
@@ -1183,6 +1188,10 @@ async fn run_deps_verify_command(
   println("deps verify: " + entries.length().to_string() + " entries")
   let failures : Array[String] = []
   for entry in entries {
+    if is_local_dep_url(entry.url) {
+      println("skip: " + entry.name + " (local path)")
+      continue
+    }
     let verified = verify_dependency_url(entry.url, DependencyProtocol::Wkg)
     match verified {
       Ok(msg) => {
@@ -1228,6 +1237,9 @@ fn validate_dep_sync_targets(
 ) -> Result[Unit, String] {
   let seen : Map[String, String] = {}
   for entry in entries {
+    if is_local_dep_url(entry.url) {
+      continue
+    }
     let target = build_dep_sync_target_dir(output_dir, entry.name)
     match seen.get(target) {
       Some(prev_name) =>
@@ -1293,6 +1305,10 @@ pub async fn run_deps_sync_command(
   let failures : Array[String] = []
   let mut synced = 0
   for entry in entries {
+    if is_local_dep_url(entry.url) {
+      println("skip: " + entry.name + " (local path)")
+      continue
+    }
     let (host, spec) = match parse_https_dependency_url(entry.url) {
       Some(value) => value
       None => {

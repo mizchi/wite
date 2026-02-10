@@ -38,4 +38,3 @@ pub fn optimize_kind_name(kind : OptimizeKind) -> String {
     OptimizeKind::Component => "component"
   }
 }
-

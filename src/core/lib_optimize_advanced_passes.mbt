@@ -290,4 +290,3 @@ fn clone_optimize_config(
     safe_mode=config.safe_mode,
   )
 }
-

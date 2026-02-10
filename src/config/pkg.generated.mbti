@@ -6,6 +6,8 @@ pub fn binary_kind_name(BinaryKind) -> String
 
 pub fn build_auto_sync_deps_command_args(String) -> Array[String]
 
+pub fn config_input_single_path(ConfigInput) -> String?
+
 pub fn empty_wite_config_file() -> WiteConfigFile
 
 pub fn load_wite_config_or_exit(String) -> WiteConfigFile
@@ -15,6 +17,10 @@ pub fn merge_command_flags(Array[String], Array[String]) -> Array[String]
 pub fn parse_binary_kind(String) -> BinaryKind?
 
 pub fn parse_binary_kind_or_exit(String, String) -> BinaryKind
+
+pub fn parse_config_input(Json) -> Result[ConfigInput, String]
+
+pub fn parse_config_output(Json) -> Result[ConfigOutput, String]
 
 pub fn parse_config_selection_flags(Array[String]) -> ConfigSelectionFlags
 
@@ -39,6 +45,20 @@ pub enum BinaryKind {
   Component
 }
 
+pub enum ConfigInput {
+  None
+  Single(String)
+  Named(Map[String, String])
+}
+pub fn ConfigInput::new_named(Map[String, String]) -> Self
+pub fn ConfigInput::new_none() -> Self
+pub fn ConfigInput::new_single(String) -> Self
+pub impl Show for ConfigInput
+
+pub struct ConfigOutput {
+  dir : String
+}
+
 pub struct ConfigSelectionFlags {
   config_path : String
   explicit_config_path : Bool
@@ -53,6 +73,8 @@ pub struct WiteConfigFile {
   build_kind : BinaryKind
   analyze_kind : BinaryKind
   profile_kind : BinaryKind
+  input : ConfigInput
+  output : ConfigOutput
 }
 
 // Type aliases

@@ -41,6 +41,8 @@ test "empty_wite_config_file defaults" {
   inspect(@config.binary_kind_name(config.build_kind), content="auto")
   inspect(@config.binary_kind_name(config.analyze_kind), content="auto")
   inspect(@config.binary_kind_name(config.profile_kind), content="auto")
+  assert_true(config.input is @config.ConfigInput::None)
+  inspect(config.output.dir, content="dist")
 }
 
 ///|
@@ -256,4 +258,110 @@ test "parse_config_selection_flags remaining flags preserved" {
   let flags : Array[String] = ["--no-config", "--other", "value"]
   let result = @config.parse_config_selection_flags(flags)
   inspect(result.remaining_flags, content="[\"--other\", \"value\"]")
+}
+
+///|
+test "parse_config_input string form" {
+  let json : Json = "app.wasm"
+  let result = @config.parse_config_input(json)
+  match result {
+    Ok(@config.ConfigInput::Single(s)) => inspect(s, content="app.wasm")
+    _ => fail("expected Single")
+  }
+}
+
+///|
+test "parse_config_input object form" {
+  let json : Json = { "app": "a.wasm" }
+  let result = @config.parse_config_input(json)
+  match result {
+    Ok(@config.ConfigInput::Named(map)) => inspect(map["app"], content="a.wasm")
+    _ => fail("expected Named")
+  }
+}
+
+///|
+test "parse_config_input type error" {
+  let json : Json = 42
+  let result = @config.parse_config_input(json)
+  match result {
+    Err(msg) => inspect(msg, content="config input must be string or object")
+    Ok(_) => fail("expected error")
+  }
+}
+
+///|
+test "parse_config_output string form" {
+  let json : Json = "dist"
+  let result = @config.parse_config_output(json)
+  match result {
+    Ok(output) => inspect(output.dir, content="dist")
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_config_output object form" {
+  let json : Json = { "dir": "out" }
+  let result = @config.parse_config_output(json)
+  match result {
+    Ok(output) => inspect(output.dir, content="out")
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_config_output empty object defaults to dist" {
+  let json : Json = {}
+  let result = @config.parse_config_output(json)
+  match result {
+    Ok(output) => inspect(output.dir, content="dist")
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_wite_config_json with input and output" {
+  let json : Json = { "input": "app.wasm", "output": "out" }
+  let result = @config.parse_wite_config_json(json)
+  match result {
+    Ok(config) => {
+      match config.input {
+        @config.ConfigInput::Single(s) => inspect(s, content="app.wasm")
+        _ => fail("expected Single input")
+      }
+      inspect(config.output.dir, content="out")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_wite_config_json backward compat empty object" {
+  let json : Json = {}
+  let result = @config.parse_wite_config_json(json)
+  match result {
+    Ok(config) => {
+      assert_true(config.input is @config.ConfigInput::None)
+      inspect(config.output.dir, content="dist")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "config_input_single_path" {
+  inspect(
+    @config.config_input_single_path(@config.ConfigInput::new_none()),
+    content="None",
+  )
+  inspect(
+    @config.config_input_single_path(@config.ConfigInput::new_single("a.wasm")),
+    content="Some(\"a.wasm\")",
+  )
+  let map : Map[String, String] = { "app": "b.wasm" }
+  inspect(
+    @config.config_input_single_path(@config.ConfigInput::new_named(map)),
+    content="Some(\"b.wasm\")",
+  )
 }
