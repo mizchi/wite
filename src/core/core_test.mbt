@@ -1540,6 +1540,77 @@ fn sample_module_with_i32_load_offset_precompute_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_i32_store_offset_precompute_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32, i32) -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x02, 0x7f, 0x7f, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // memory section: min 1 page
+  append_section(out, 5U, bytes_of([0x01, 0x00, 0x01]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // local.get 0
+  // i32.const 32
+  // i32.add
+  // local.get 1
+  // i32.store align=2 offset=8
+  // end
+  // folded result:
+  // local.get 0
+  // local.get 1
+  // i32.store align=2 offset=40
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0c, 0x00, 0x20, 0x00, 0x41, 0x20, 0x6a, 0x20, 0x01, 0x36, 0x02, 0x08,
+      0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_i32_store_offset_runtime_guard_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // memory section: min 1 page
+  append_section(out, 5U, bytes_of([0x01, 0x00, 0x01]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // local.get 0
+  // i32.const 32
+  // i32.add
+  // i32.const 123
+  // i32.store align=2 offset=8
+  // local.get 0
+  // i32.const 40
+  // i32.add
+  // i32.load align=2 offset=0
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x14, 0x00, 0x20, 0x00, 0x41, 0x20, 0x6a, 0x41, 0x7b, 0x36, 0x02, 0x08,
+      0x20, 0x00, 0x41, 0x28, 0x6a, 0x28, 0x02, 0x00, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_local_set_get_pair_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1903,6 +1974,33 @@ fn sample_module_with_br_if_const_nonzero_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_br_if_const_multibyte_nonzero_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x00]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // block
+  //   i32.const 128
+  //   br_if 0
+  // end
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0a, 0x00, 0x02, 0x40, 0x41, 0x80, 0x01, 0x0d, 0x00, 0x0b, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_double_eqz_br_if_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1927,6 +2025,60 @@ fn sample_module_with_double_eqz_br_if_bytes() -> Bytes {
     bytes_of([
       0x01, 0x0b, 0x00, 0x02, 0x40, 0x20, 0x00, 0x45, 0x45, 0x0d, 0x00, 0x0b, 0x0b,
     ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_bool_double_eqz_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // local.get 0
+  // local.get 0
+  // i32.const 1
+  // i32.add
+  // i32.lt_u
+  // i32.eqz
+  // i32.eqz
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0c, 0x00, 0x20, 0x00, 0x20, 0x00, 0x41, 0x01, 0x6a, 0x49, 0x45, 0x45,
+      0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_i32_eqz_const_multibyte_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // i32.const 128
+  // i32.eqz
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x01, 0x06, 0x00, 0x41, 0x80, 0x01, 0x45, 0x0b]),
   )
   Bytes::from_array(out[:])
 }
@@ -6305,6 +6457,80 @@ test "optimize peephole folds local.get+i32.const+i32.add into i32.load offset" 
 }
 
 ///|
+test "optimize peephole folds local.get+i32.const+i32.add into i32.store offset" {
+  let bytes = sample_module_with_i32_store_offset_precompute_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 12U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 9U)
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x20, 0x00, 0x20, 0x01, 0x36, 0x02, 0x28,
+    ]),
+  )
+  assert_true(
+    not(
+      bytes_contains_seq(optimized.bytes, [
+        0x20, 0x00, 0x41, 0x20, 0x6a, 0x20, 0x01, 0x36, 0x02, 0x08,
+      ]),
+    ),
+  )
+}
+
+///|
+test "optimize peephole store offset folding preserves runtime semantics" {
+  let bytes = sample_module_with_i32_store_offset_runtime_guard_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 14U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [0, 4, 100]),
+  )
+}
+
+///|
 test "optimize peephole rewrites local.set+local.get to local.tee" {
   let bytes = sample_module_with_local_set_get_pair_bytes()
   guard @wite_analyze.profile_module(bytes) is Ok(before) else {
@@ -6840,6 +7066,46 @@ test "optimize precompute rewrites i32.const nonzero + br_if to br" {
 }
 
 ///|
+test "optimize precompute rewrites i32.const multibyte nonzero + br_if to br" {
+  let bytes = sample_module_with_br_if_const_multibyte_nonzero_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 10U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 7U)
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x02, 0x40, 0x0c, 0x00, 0x0b]),
+  )
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x41, 0x80, 0x01, 0x0d, 0x00])),
+  )
+}
+
+///|
 test "optimize precompute removes i32.eqz+i32.eqz before br_if" {
   let bytes = sample_module_with_double_eqz_br_if_bytes()
   guard @wite_analyze.profile_module(bytes) is Ok(before) else {
@@ -6877,6 +7143,84 @@ test "optimize precompute removes i32.eqz+i32.eqz before br_if" {
       bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x45, 0x45, 0x0d, 0x00]),
     ),
   )
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42,
+    ]),
+  )
+}
+
+///|
+test "optimize precompute folds i32.eqz on multibyte i32.const" {
+  let bytes = sample_module_with_i32_eqz_const_multibyte_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 6U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 4U)
+  assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0b]))
+  assert_true(
+    not(bytes_contains_seq(optimized.bytes, [0x41, 0x80, 0x01, 0x45])),
+  )
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
+test "optimize precompute removes i32.eqz+i32.eqz after bool producer" {
+  let bytes = sample_module_with_bool_double_eqz_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 12U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 10U)
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
       -7, -1, 0, 1, 42,
