@@ -2,15 +2,15 @@
 
 完了済みの仕様は `docs/spec.md` に移動済み。
 
-## KPI Snapshot (2026-02-08)
+## KPI Snapshot (2026-02-10)
 
-- core size KPI (`optimize -O1`, 主要 gap 判定 / `gc_target_feature.wasm` 除外): `171361 -> 70711 bytes` (`58.7357%`)
-- wasm-opt 参考値 (`-Oz --all-features --strip-debug --strip-dwarf --strip-target-features`, 同スコープ): `171361 -> 66296 bytes` (`61.3121%`)
-- gap to wasm-opt (主要): `4415 bytes` (`-2.5764pt`)
-- gap to wasm-opt (参考: 全 core corpus): `4458 bytes` (`-2.6002pt`)
-- component-model DCE KPI: `128170 -> 63916 bytes` (`50.1319%`)
-- directize→DCE→RUME 診断: `success_files=8/8`, `dce_gain=1656 bytes`, `rume_gain=43 bytes`, `directize_calls_total=1`
-- zlib gap 分解: `code=4353 bytes`, `function=45 bytes`, `type=37 bytes`
+- core size KPI (`optimize -O1`, 主要 gap 判定 / `gc_target_feature.wasm` 除外): `9033101 -> 8930827 bytes` (`1.1322%`)
+- wasm-opt 参考値 (`-Oz --all-features --strip-debug --strip-dwarf --strip-target-features`, 同スコープ): `9033101 -> 8788083 bytes` (`2.7124%`)
+- gap to wasm-opt (主要): `142744 bytes` (`-1.5802pt`)
+- gap to wasm-opt (参考: 全 core corpus): `142787 bytes` (`-1.5807pt`)
+- component-model DCE KPI: `225479 -> 112549 bytes` (`50.0845%`)
+- directize→DCE→RUME 診断: `success_files=9/9`, `dce_gain=2272 bytes`, `rume_gain=43 bytes`, `directize_calls_total=1`
+- zlib gap 分解: `code=4353 bytes`, `function=45 bytes`, `type=37 bytes`（`wite=70578`, `wasm-opt=66146`, `gap=4432`）
 
 ## Active Backlog
 
@@ -61,9 +61,11 @@
 - [x] Perf: `analyze_call_graph` / `analyze_call_graph_summary` を body 直走査 (`collect_direct_callees_from_body_raise`) + bitmap visited に置換し、`parse_instruction_spans` 依存を除去
 - [x] Bench: `moon bench` 内部 driver 計測で `analyze summary` が改善（`pglite mean: 110527us -> 73258us`, `duckdb mean: 801982us -> 546504us`）
 - [x] P5: `inlining-optimizing` を拡張（identity/no-op callee を call-site で除去）し、zlib の DCE 連鎖を強化
+- [x] P5: `inlining-optimizing` を拡張（`(params)->()` no-op / `return; end` callee を `drop` 置換で inline）し、DCE 連鎖を強化
 - [x] Analyze: `runtime-profile` / `hot-size` を import 依存 wasm でも動作する stub import 生成に拡張
 - [x] KPI: `collect_kpi.sh` の section parser を更新し、`zlib_gap.md` の section delta（code/function/type）を復旧
 - [x] テスト追加: identity inlining / import 依存 runtime-profile / zlib runtime-profile の回帰テスト
+- [x] テスト追加: drop-only callee inlining（`end` / `return; end`）の回帰テスト
 - [x] Analyze: `analyze_host_generated_code` API と `analyze-host` CLI を追加（forwarding/sig-refine/directize候補/DCE除去余地を可視化）
 - [x] Analyze: `analyze_optimize_metadata` API と `analyze-opt` CLI を追加（`strip -> code -> dce -> rume` 段階ウォーターフォール）
 - [x] テスト追加: host-generated report / optimize metadata report の Red/Green カバレッジを追加

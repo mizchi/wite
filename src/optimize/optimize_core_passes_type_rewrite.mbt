@@ -992,6 +992,18 @@ fn is_const_opcode_compatible_with_result(
 }
 
 ///|
+fn make_drop_replacement_instr(drop_count : Int) -> Bytes {
+  if drop_count <= 0 {
+    return Bytes::from_array([])
+  }
+  let out : Array[Byte] = []
+  for _ in 0..<drop_count {
+    out.push(0x1aU.to_byte())
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn extract_inlining_replacement_instr_raise(
   body_bytes : Bytes,
   type_entry : FunctionTypeEntry,
@@ -1002,27 +1014,38 @@ fn extract_inlining_replacement_instr_raise(
   }
   let instr_bytes = body_bytes[prefix.prefix_end:body_bytes.length()].to_bytes()
   let spans = parse_instruction_spans_raise(instr_bytes)
-  if type_entry.params.length() == 0 &&
-    type_entry.results.length() == 0 &&
-    spans.length() == 1 &&
-    spans[0].opcode == 0x0bU {
-    return Some(Bytes::from_array([]))
+  let param_count = type_entry.params.length()
+  let result_count = type_entry.results.length()
+  if result_count == 0 && spans.length() == 1 && spans[0].opcode == 0x0bU {
+    return Some(make_drop_replacement_instr(param_count))
   }
-  if spans.length() == 2 && spans[1].opcode == 0x0bU {
-    if type_entry.params.length() == 1 &&
-      type_entry.results.length() == 1 &&
+  if result_count == 0 &&
+    spans.length() == 2 &&
+    spans[0].opcode == 0x0fU &&
+    spans[1].opcode == 0x0bU {
+    return Some(make_drop_replacement_instr(param_count))
+  }
+  if (spans.length() == 2 && spans[1].opcode == 0x0bU) ||
+    (
+      spans.length() == 3 &&
+      spans[1].opcode == 0x0fU &&
+      spans[2].opcode == 0x0bU
+    ) {
+    if param_count == 1 &&
+      result_count == 1 &&
       bytes_equal(type_entry.params[0], type_entry.results[0]) &&
       spans[0].opcode == 0x20U &&
       decode_local_index_immediate_from_span(instr_bytes, spans[0]) == Some(0U) {
       return Some(Bytes::from_array([]))
     }
-    if type_entry.params.length() == 0 &&
-      type_entry.results.length() == 1 &&
+    if result_count == 1 &&
       is_const_opcode_compatible_with_result(
         spans[0].opcode,
         type_entry.results[0],
       ) {
-      return Some(instr_bytes[spans[0].start:spans[0].end_].to_bytes())
+      let out = make_drop_replacement_instr(param_count).to_array()
+      out.append(instr_bytes[spans[0].start:spans[0].end_].to_array())
+      return Some(Bytes::from_array(out[:]))
     }
   }
   None
