@@ -1,7 +1,7 @@
 ///|
 pub fn run_analyze_host(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_host_generated_code(bytes) {
+  match analyze_host_generated_code(bytes) {
     Ok(report) => {
       println("host/generated code analysis:")
       println(
@@ -112,7 +112,7 @@ pub fn run_analyze_opt(
   function_diff_limit : UInt,
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_optimize_metadata(bytes, config~, function_diff_limit~) {
+  match analyze_optimize_metadata(bytes, config~, function_diff_limit~) {
     Ok(report) => {
       println("optimize metadata analysis:")
       println(

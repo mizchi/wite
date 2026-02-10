@@ -2,15 +2,120 @@
 package "mizchi/wite/analyze"
 
 import {
+  "mizchi/wite/optimize",
   "mizchi/wite/types",
 }
 
 // Values
+pub fn analyze_call_graph(Bytes) -> Result[@types.CallGraphReport, @types.WiteError]
+
+pub fn analyze_call_graph_summary(Bytes) -> Result[@types.CallGraphSummary, @types.WiteError]
+
+pub fn analyze_code_block_sizes(Bytes) -> Result[@types.CodeBlockSizeReport, @types.WiteError]
+
+pub fn analyze_dce_report(Bytes) -> Result[@types.DceReport, @types.WiteError]
+
+pub fn analyze_function_size_gap(Bytes, Bytes, top_limit? : UInt) -> Result[@types.FunctionGapReport, @types.WiteError]
+
+pub fn analyze_function_sizes(Bytes) -> Result[Array[@types.FunctionSize], @types.WiteError]
+
+pub fn analyze_host_generated_code(Bytes) -> Result[@types.HostGeneratedCodeReport, @types.WiteError]
+
+pub fn analyze_keep_reasons(Bytes, config? : @types.OptimizeConfig) -> Result[@types.KeepReasonReport, @types.WiteError]
+
+pub fn analyze_optimize_metadata(Bytes, config? : @types.OptimizeConfig, function_diff_limit? : UInt) -> Result[@types.OptimizeMetadataReport, @types.WiteError]
+
+pub fn analyze_retain_paths(Bytes, config? : @types.OptimizeConfig) -> Result[@types.RetainPathReport, @types.WiteError]
+
+pub fn analyze_section_sizes(Bytes) -> Result[Array[@types.SectionSize], @types.WiteError]
+
+pub fn analyze_wasm_breakdown(Bytes, top_limit? : UInt) -> Result[@types.WasmBreakdownReport, @types.WiteError]
+
+pub fn apply_directize_raise(Bytes) -> @optimize.DirectizeApplyResult raise @types.WiteError
+
+pub fn bytes_equal(Bytes, Bytes) -> Bool
+
+pub fn collect_call_forwarding_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, @optimize.FunctionTypeEntry], Array[UInt], Map[UInt, UInt]) -> Map[UInt, UInt]
+
+pub fn collect_const_call_forwarding_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, @optimize.FunctionTypeEntry], Map[UInt, UInt]) -> Map[UInt, @optimize.CfpConstAlias]
+
+pub fn collect_direct_callees(Bytes, Array[@optimize.InstrSpan]) -> (Array[UInt], Bool)
+
+pub fn collect_direct_callees_from_body_raise(Bytes) -> (Array[UInt], Bool) raise @types.WiteError
+
+pub fn collect_gc_type_canonical_map_from_entries_raise(Array[@optimize.ParsedTypeSectionEntry]) -> Map[UInt, UInt] raise @types.WiteError
+
+pub fn collect_signature_refine_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, @optimize.FunctionTypeEntry], Map[UInt, UInt]) -> Map[UInt, @optimize.SignatureRefineAlias]
+
+pub fn error_to_string(@types.WiteError) -> String
+
+pub fn is_visited_function_index(Array[Bool], UInt) -> Bool
+
+pub fn make_bool_array(Int, Bool) -> Array[Bool]
+
+pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> @types.OptimizeConfig
+
+pub fn make_runtime_profile_scenario(String, args? : Array[Int]) -> @types.RuntimeProfileScenario
+
+pub fn map_push_string_array(Map[UInt, Array[String]], UInt, String) -> Unit
+
+pub fn mark_visited_function_index(Array[Bool], UInt) -> Bool
+
+pub fn merge_export_function_names(Map[UInt, Array[String]], Map[UInt, Array[String]]) -> Unit
+
+pub fn optimize_config_from_opt_level(String) -> @types.OptimizeConfig?
+
+pub fn optimize_for_size(Bytes, config? : @types.OptimizeConfig) -> Result[@types.OptimizeResult, @types.WiteError]
+
+pub fn parse_code_bodies(Bytes) -> Array[Bytes] raise @types.WiteError
+
+pub fn parse_code_body_sizes(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_code_section_metrics(Bytes) -> (UInt, UInt) raise @types.WiteError
+
+pub fn parse_component_sections_raise(Bytes) -> Array[@optimize.RawSection] raise @types.WiteError
+
+pub fn parse_core_sections_raise(Bytes) -> Array[@optimize.RawSection] raise @types.WiteError
+
+pub fn parse_custom_section_name_prefix_end(Bytes) -> Int raise @types.WiteError
+
+pub fn parse_element_section_function_refs_raise(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_export_function_names(Bytes) -> Map[UInt, Array[String]] raise @types.WiteError
+
+pub fn parse_export_indices_by_kind(Bytes, UInt) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_function_type_entry_from_raw_raise(Bytes, String) -> @optimize.FunctionTypeEntry raise @types.WiteError
+
+pub fn parse_function_type_indices(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_function_type_param_count_from_raw_raise(Bytes, String) -> UInt raise @types.WiteError
+
+pub fn parse_global_section_function_refs_raise(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_import_function_count(Bytes) -> UInt raise @types.WiteError
+
+pub fn parse_import_function_type_indices(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_instruction_spans(Bytes) -> Array[@optimize.InstrSpan]?
+
+pub fn parse_local_decl_prefix_end(Bytes) -> Int raise @types.WiteError
+
+pub fn parse_name_section_function_names(Bytes) -> Map[UInt, String] raise @types.WiteError
+
+pub fn parse_start_function_index(Bytes) -> UInt raise @types.WiteError
+
+pub fn parse_type_section_entries_with_refs_raise(Bytes, String) -> Array[@optimize.ParsedTypeSectionEntry] raise @types.WiteError
+
+pub fn parse_vec_count(Bytes) -> UInt raise @types.WiteError
+
 pub fn print_call_graph_nodes(Array[@types.CallGraphNode], UInt) -> Unit
 
 pub fn print_function_sizes(Array[@types.FunctionSize], UInt) -> Unit
 
 pub fn print_section_sizes(Array[@types.SectionSize]) -> Unit
+
+pub fn profile_module(Bytes) -> Result[@types.ModuleProfile, @types.WiteError]
 
 pub fn run_analyze(String) -> Unit
 
@@ -30,25 +135,126 @@ pub fn run_deep_analyze(String, UInt) -> Unit
 
 pub fn run_function_gap(String, String, UInt) -> Unit
 
-pub fn run_hot_size(String, UInt, UInt, Array[@types.RuntimeProfileScenario]) -> Unit
-
 pub fn run_keep_reasons_with_options(String, Bool, Bool, Array[String]) -> Unit
 
 pub fn run_profile(String) -> Unit
 
 pub fn run_retain_path_with_options(String, UInt, Bool, Bool, Array[String]) -> Unit
 
-pub fn run_runtime_profile(String, UInt, Array[@types.RuntimeProfileScenario]) -> Unit
-
 pub fn run_section_gap(String, String, UInt) -> Unit
 
 pub fn run_top_functions(String, UInt) -> Unit
+
+pub fn section_total_bytes(@optimize.RawSection) -> UInt
+
+pub fn summarize_sections(Array[@optimize.RawSection], Bool) -> Array[@types.SectionSize]
+
+pub fn unique_sorted(Array[String]) -> Array[String]
 
 // Errors
 
 // Types and methods
 
 // Type aliases
+pub using @types {type CallGraphNode}
+
+pub using @types {type CallGraphReport}
+
+pub using @types {type CallGraphSummary}
+
+pub using @optimize {type CfpConstAlias}
+
+pub using @types {type CodeBlockSize}
+
+pub using @types {type CodeBlockSizeReport}
+
+pub using @types {type ComponentCallGraphReport}
+
+pub using @types {type ComponentCoreOptimizeEntry}
+
+pub using @types {type ComponentCoreOptimizeReport}
+
+pub using @types {type ComponentFunctionSizeReport}
+
+pub using @types {type ComponentProfile}
+
+pub using @types {type ComponentRootPolicyReport}
+
+pub using @types {type ContractReport}
+
+pub using @optimize {type Cursor}
+
+pub using @types {type CustomSectionBreakdown}
+
+pub using @types {type DceReport}
+
+pub using @optimize {type DirectizeApplyResult}
+
+pub using @types {type FunctionGapEntry}
+
+pub using @types {type FunctionGapReport}
+
+pub using @types {type FunctionSize}
+
+pub using @types {type FunctionSizeDiff}
+
+pub using @optimize {type FunctionTypeEntry}
+
+pub using @types {type HostCodeHint}
+
+pub using @types {type HostGeneratedCodeReport}
+
+pub using @types {type HotnessSizeBucket}
+
+pub using @types {type HotnessSizeEntry}
+
+pub using @types {type HotnessSizeMatrixReport}
+
+pub using @types {type HotnessUnresolvedReasonCount}
+
+pub using @optimize {type InstrSpan}
+
+pub using @types {type KeepReasonEntry}
+
+pub using @types {type KeepReasonReport}
+
+pub using @types {type ModuleProfile}
+
+pub using @types {type OpcodeStat}
+
+pub using @optimize {type OpenCodeBlock}
+
+pub using @types {type OptimizeConfig}
+
+pub using @types {type OptimizeMetadataReport}
+
+pub using @types {type OptimizeResult}
+
+pub using @types {type OptimizeStageMetadata}
+
+pub using @optimize {type ParsedTypeSectionEntry}
+
+pub using @optimize {type RawSection}
+
+pub using @types {type RetainPathEntry}
+
+pub using @types {type RetainPathReport}
+
+pub using @types {type RuntimeFunctionProfile}
+
+pub using @types {type RuntimeProfile}
+
+pub using @types {type RuntimeProfileScenario}
+
+pub using @types {type RuntimeUnresolvedExport}
+
+pub using @types {type SectionSize}
+
+pub using @optimize {type SignatureRefineAlias}
+
+pub using @types {type WasmBreakdownReport}
+
+pub using @types {type WiteError}
 
 // Traits
 

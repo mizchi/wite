@@ -98,7 +98,7 @@ pub fn run_block_gap(
 ) -> Unit {
   let left_bytes = read_bytes_or_exit(left_path)
   let right_bytes = read_bytes_or_exit(right_path)
-  let left_report = match @wite.analyze_code_block_sizes(left_bytes) {
+  let left_report = match analyze_code_block_sizes(left_bytes) {
     Ok(v) => v
     Err(e) => {
       println("block diff failed (left): " + @wite.error_to_string(e))
@@ -106,7 +106,7 @@ pub fn run_block_gap(
       panic()
     }
   }
-  let right_report = match @wite.analyze_code_block_sizes(right_bytes) {
+  let right_report = match analyze_code_block_sizes(right_bytes) {
     Ok(v) => v
     Err(e) => {
       println("block diff failed (right): " + @wite.error_to_string(e))
@@ -215,7 +215,7 @@ pub fn print_call_graph_nodes(
 ///|
 pub fn run_callgraph(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_call_graph(bytes) {
+  match analyze_call_graph(bytes) {
     Ok(report) => {
       println("call graph:")
       println(

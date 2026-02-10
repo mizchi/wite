@@ -10,6 +10,88 @@ pub fn read_bytes_or_exit(path : String) -> Bytes {
 }
 
 ///|
+fn print_section_sizes(sections : Array[@wite.SectionSize]) -> Unit {
+  for section in sections {
+    println(
+      "  " + section.key + ": " + section.total_bytes.to_string() + " bytes",
+    )
+  }
+}
+
+///|
+fn print_function_sizes(
+  functions : Array[@wite.FunctionSize],
+  limit : UInt,
+) -> Unit {
+  let mut printed = 0U
+  for fn_size in functions {
+    if printed >= limit {
+      break
+    }
+    let label = match fn_size.name {
+      Some(name) => name
+      None => "#\{fn_size.function_index.to_string()}"
+    }
+    let exports = if fn_size.export_names.length() == 0 {
+      ""
+    } else {
+      " exports=" + fn_size.export_names.join(",")
+    }
+    println(
+      "    " +
+      label +
+      " idx=" +
+      fn_size.function_index.to_string() +
+      " body=" +
+      fn_size.body_bytes.to_string() +
+      exports,
+    )
+    printed += 1U
+  }
+}
+
+///|
+fn print_call_graph_nodes(
+  nodes : Array[@wite.CallGraphNode],
+  limit : UInt,
+) -> Unit {
+  let mut printed = 0U
+  for node in nodes {
+    if printed >= limit {
+      break
+    }
+    let label = match node.name {
+      Some(name) => name
+      None => "#\{node.function_index.to_string()}"
+    }
+    let status = if node.reachable_from_roots { "reachable" } else { "dead" }
+    let export_part = if node.export_names.length() == 0 {
+      ""
+    } else {
+      " exports=" + node.export_names.join(",")
+    }
+    let callee_part = if node.direct_callees.length() == 0 {
+      ""
+    } else {
+      " callees=" + node.direct_callees.map(i => i.to_string()).join(",")
+    }
+    println(
+      "    " +
+      label +
+      " idx=" +
+      node.function_index.to_string() +
+      " body=" +
+      node.body_bytes.to_string() +
+      " " +
+      status +
+      export_part +
+      callee_part,
+    )
+    printed += 1U
+  }
+}
+
+///|
 pub fn run_component_profile(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
   match @wite.profile_component(bytes) {
@@ -24,7 +106,7 @@ pub fn run_component_profile(path : String) -> Unit {
         profile.nested_component_count.to_string(),
       )
       println("  sections:")
-      @wite_analyze.print_section_sizes(profile.sections)
+      print_section_sizes(profile.sections)
       println("  core modules:")
       for i in 0..<profile.core_modules.length() {
         let core = profile.core_modules[i]
@@ -63,7 +145,7 @@ pub fn run_component_top_functions(path : String, limit : UInt) -> Unit {
           " total_body_bytes=" +
           report.total_body_bytes.to_string(),
         )
-        @wite_analyze.print_function_sizes(report.functions, limit)
+        print_function_sizes(report.functions, limit)
       }
     }
     Err(msg) => {
@@ -95,7 +177,7 @@ pub fn run_component_callgraph(path : String, limit : UInt) -> Unit {
           report.graph.dead_body_bytes.to_string(),
         )
         println("    partial=" + report.graph.partial.to_string())
-        @wite_analyze.print_call_graph_nodes(report.graph.nodes, limit)
+        print_call_graph_nodes(report.graph.nodes, limit)
       }
     }
     Err(msg) => {

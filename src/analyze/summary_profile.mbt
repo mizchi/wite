@@ -1,14 +1,14 @@
 ///|
 pub fn run_analyze(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_section_sizes(bytes) {
+  match analyze_section_sizes(bytes) {
     Ok(sections) => {
       println("section size analysis:")
       print_section_sizes_with_share(
         sections,
         bytes.length().reinterpret_as_uint(),
       )
-      match @wite.analyze_call_graph_summary(bytes) {
+      match analyze_call_graph_summary(bytes) {
         Ok(summary) => print_call_graph_summary(summary)
         Err(e) => {
           println("analyze failed: " + @wite.error_to_string(e))
@@ -26,7 +26,7 @@ pub fn run_analyze(path : String) -> Unit {
 ///|
 pub fn run_deep_analyze(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_wasm_breakdown(bytes, top_limit=limit) {
+  match analyze_wasm_breakdown(bytes, top_limit=limit) {
     Ok(report) => {
       println("wasm deep analysis:")
       println("  total_bytes: " + report.total_bytes.to_string())
@@ -80,7 +80,7 @@ pub fn run_deep_analyze(path : String, limit : UInt) -> Unit {
 ///|
 pub fn run_profile(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.profile_module(bytes) {
+  match profile_module(bytes) {
     Ok(profile) => {
       println("core wasm profile:")
       println("  total_bytes: " + profile.total_bytes.to_string())
@@ -102,7 +102,7 @@ pub fn run_profile(path : String) -> Unit {
 ///|
 pub fn run_dce_report(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_dce_report(bytes) {
+  match analyze_dce_report(bytes) {
     Ok(report) => {
       println("dce report:")
       println("  roots: " + report.roots.map(i => i.to_string()).join(", "))

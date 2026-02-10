@@ -1,5 +1,4 @@
 import {
-  "mizchi/wite/analyze" as @wite_analyze,
   "mizchi/wite/component" as @wite_component,
   "mizchi/wite/config" as @wite_config,
   "mizchi/wite/deps" as @wite_deps,

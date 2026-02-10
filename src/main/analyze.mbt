@@ -86,7 +86,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
       } else {
         20U
       }
-      @wite_analyze.run_analyze_host(shifted[2], limit)
+      run_analyze_host(shifted[2], limit)
     }
     "opt" => {
       if shifted.length() < 3 {
@@ -106,7 +106,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
           None => diff_limit = parse_uint_or_exit(shifted[3], "diff-limit")
         }
       }
-      @wite_analyze.run_analyze_opt(shifted[2], config, diff_limit)
+      run_analyze_opt(shifted[2], config, diff_limit)
     }
     "deep" => {
       if shifted.length() < 3 {
@@ -118,7 +118,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
       } else {
         20U
       }
-      @wite_analyze.run_deep_analyze(shifted[2], limit)
+      run_deep_analyze(shifted[2], limit)
     }
     "profile" => run_profile_command(shifted)
     "top-functions" => {
@@ -131,7 +131,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
       } else {
         20U
       }
-      @wite_analyze.run_top_functions(shifted[2], limit)
+      run_top_functions(shifted[2], limit)
     }
     "function-gap" => {
       if shifted.length() < 4 {
@@ -143,7 +143,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
       } else {
         20U
       }
-      @wite_analyze.run_function_gap(shifted[2], shifted[3], limit)
+      run_function_gap(shifted[2], shifted[3], limit)
     }
     "block-sizes" => {
       if shifted.length() < 3 {
@@ -155,7 +155,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
       } else {
         20U
       }
-      @wite_analyze.run_block_sizes(shifted[2], limit)
+      run_block_sizes(shifted[2], limit)
     }
     "callgraph" => {
       if shifted.length() < 3 {
@@ -167,7 +167,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
       } else {
         20U
       }
-      @wite_analyze.run_callgraph(shifted[2], limit)
+      run_callgraph(shifted[2], limit)
     }
     "keep-reasons" => run_keep_reasons(shifted)
     "retain-path" => run_retain_path(shifted)
@@ -181,7 +181,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
       } else {
         20U
       }
-      @wite_analyze.run_dce_report(shifted[2], limit)
+      run_dce_report(shifted[2], limit)
     }
     "runtime-profile" => {
       if shifted.length() < 3 {
@@ -206,7 +206,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
         }
       }
       let scenarios = parse_runtime_profile_scenarios(shifted, 3)
-      @wite_analyze.run_runtime_profile(shifted[2], iterations, scenarios)
+      run_runtime_profile(shifted[2], iterations, scenarios)
     }
     "hot-size" => {
       if shifted.length() < 3 {
@@ -236,7 +236,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
         }
       }
       let scenarios = parse_runtime_profile_scenarios(shifted, 3)
-      @wite_analyze.run_hot_size(shifted[2], iterations, limit, scenarios)
+      run_hot_size(shifted[2], iterations, limit, scenarios)
     }
     "component" => {
       if shifted.length() < 3 {
@@ -465,21 +465,20 @@ async fn run_analyze_view_command(args : Array[String]) -> Unit {
       }
     BinaryKind::Auto | BinaryKind::Core =>
       match view {
-        AnalyzeView::Summary => @wite_analyze.run_analyze(path)
-        AnalyzeView::Deep => @wite_analyze.run_deep_analyze(path, limit)
-        AnalyzeView::Functions => @wite_analyze.run_top_functions(path, limit)
-        AnalyzeView::Blocks => @wite_analyze.run_block_sizes(path, limit)
-        AnalyzeView::Callgraph => @wite_analyze.run_callgraph(path, limit)
-        AnalyzeView::Host => @wite_analyze.run_analyze_host(path, limit)
-        AnalyzeView::Pipeline =>
-          @wite_analyze.run_analyze_opt(path, config, diff_limit)
-        AnalyzeView::Dce => @wite_analyze.run_dce_report(path, limit)
+        AnalyzeView::Summary => run_analyze(path)
+        AnalyzeView::Deep => run_deep_analyze(path, limit)
+        AnalyzeView::Functions => run_top_functions(path, limit)
+        AnalyzeView::Blocks => run_block_sizes(path, limit)
+        AnalyzeView::Callgraph => run_callgraph(path, limit)
+        AnalyzeView::Host => run_analyze_host(path, limit)
+        AnalyzeView::Pipeline => run_analyze_opt(path, config, diff_limit)
+        AnalyzeView::Dce => run_dce_report(path, limit)
         AnalyzeView::Keep =>
-          @wite_analyze.run_keep_reasons_with_options(
+          run_keep_reasons_with_options(
             path, closed_world, safe_mode, closed_world_root_exports,
           )
         AnalyzeView::Retain =>
-          @wite_analyze.run_retain_path_with_options(
+          run_retain_path_with_options(
             path, limit, closed_world, safe_mode, closed_world_root_exports,
           )
       }

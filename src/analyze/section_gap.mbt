@@ -96,7 +96,7 @@ pub fn run_section_gap(
 ) -> Unit {
   let left_bytes = read_bytes_or_exit(left_path)
   let right_bytes = read_bytes_or_exit(right_path)
-  let left_sections = match @wite.analyze_section_sizes(left_bytes) {
+  let left_sections = match analyze_section_sizes(left_bytes) {
     Ok(v) => v
     Err(e) => {
       println("section diff failed (left): " + @wite.error_to_string(e))
@@ -104,7 +104,7 @@ pub fn run_section_gap(
       []
     }
   }
-  let right_sections = match @wite.analyze_section_sizes(right_bytes) {
+  let right_sections = match analyze_section_sizes(right_bytes) {
     Ok(v) => v
     Err(e) => {
       println("section diff failed (right): " + @wite.error_to_string(e))

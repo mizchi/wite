@@ -6,12 +6,12 @@ pub fn run_keep_reasons_with_options(
   closed_world_root_exports : Array[String],
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  let config = @wite.make_optimize_config(
+  let config = make_optimize_config(
     closed_world~,
     closed_world_root_exports~,
     safe_mode~,
   )
-  match @wite.analyze_keep_reasons(bytes, config~) {
+  match analyze_keep_reasons(bytes, config~) {
     Ok(report) => {
       println("keep reasons:")
       println("  partial: " + report.partial.to_string())
@@ -108,12 +108,12 @@ pub fn run_retain_path_with_options(
   closed_world_root_exports : Array[String],
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  let config = @wite.make_optimize_config(
+  let config = make_optimize_config(
     closed_world~,
     closed_world_root_exports~,
     safe_mode~,
   )
-  match @wite.analyze_retain_paths(bytes, config~) {
+  match analyze_retain_paths(bytes, config~) {
     Ok(report) => {
       println("retain-path analysis:")
       println("  partial: " + report.partial.to_string())

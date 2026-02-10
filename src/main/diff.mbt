@@ -101,11 +101,9 @@ fn run_diff_command(args : Array[String]) -> Unit {
     }
   }
   match view {
-    DiffView::Function =>
-      @wite_analyze.run_function_gap(left_path, right_path, limit)
-    DiffView::Section =>
-      @wite_analyze.run_section_gap(left_path, right_path, limit)
-    DiffView::Block => @wite_analyze.run_block_gap(left_path, right_path, limit)
+    DiffView::Function => run_function_gap(left_path, right_path, limit)
+    DiffView::Section => run_section_gap(left_path, right_path, limit)
+    DiffView::Block => run_block_gap(left_path, right_path, limit)
   }
   match generated_baseline_path {
     Some(path) => @fs.remove_file(path) catch { _ => () }

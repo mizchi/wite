@@ -162,7 +162,7 @@ fn print_code_block_sizes(
 ///|
 pub fn run_block_sizes(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_code_block_sizes(bytes) {
+  match analyze_code_block_sizes(bytes) {
     Ok(report) => {
       println("code block size analysis:")
       println("  partial: " + report.partial.to_string())
@@ -186,7 +186,7 @@ pub fn run_block_sizes(path : String, limit : UInt) -> Unit {
 ///|
 pub fn run_top_functions(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_function_sizes(bytes) {
+  match analyze_function_sizes(bytes) {
     Ok(functions) => {
       println("top functions:")
       println("  count: " + functions.length().to_string())
@@ -207,8 +207,7 @@ pub fn run_function_gap(
 ) -> Unit {
   let left_bytes = read_bytes_or_exit(left_path)
   let right_bytes = read_bytes_or_exit(right_path)
-  match
-    @wite.analyze_function_size_gap(left_bytes, right_bytes, top_limit=limit) {
+  match analyze_function_size_gap(left_bytes, right_bytes, top_limit=limit) {
     Ok(report) => {
       println("function-gap:")
       println(

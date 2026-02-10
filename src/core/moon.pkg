@@ -1,4 +1,5 @@
 import {
+  "mizchi/wite/analyze" as @wite_analyze,
   "mizchi/mwac/component" as @mwac_component,
   "mizchi/wite/optimize" as @wite_optimize,
   "mizchi/wite/types" as @wite_types,
