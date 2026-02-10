@@ -6,20 +6,6 @@ import {
 }
 
 // Values
-pub fn build_auto_sync_deps_command_args(String) -> Array[String]
-
-pub fn config_has_dep_entries_or_exit(String) -> Bool
-
-pub fn materialize_wac_dependencies_from_config(String, String, Bool) -> Result[UInt, String]
-
-pub fn merge_command_flags(Array[String], Array[String]) -> Array[String]
-
-pub fn parse_config_selection_flags(Array[String]) -> ConfigSelectionFlags
-
-pub fn resolve_wite_config_or_default(ConfigSelectionFlags) -> WiteConfigFile
-
-pub async fn run_add_command(Array[String]) -> Unit
-
 pub fn run_analyze(String) -> Unit
 
 pub fn run_analyze_host(String, UInt) -> Unit
@@ -42,8 +28,6 @@ pub fn run_dce_report(String, UInt) -> Unit
 
 pub fn run_deep_analyze(String, UInt) -> Unit
 
-pub async fn run_deps_command(Array[String]) -> Unit
-
 pub fn run_function_gap(String, String, UInt) -> Unit
 
 pub fn run_hot_size(String, UInt, UInt, Array[@core.RuntimeProfileScenario]) -> Unit
@@ -54,8 +38,6 @@ pub fn run_section_gap(String, String, UInt) -> Unit
 
 pub fn run_top_functions(String, UInt) -> Unit
 
-pub fn should_auto_sync_deps(Bool, Bool) -> Bool
-
 // Errors
 
 // Types and methods
@@ -63,32 +45,6 @@ pub enum BinaryKind {
   Auto
   Core
   Component
-}
-
-pub struct ConfigSelectionFlags {
-  config_path : String
-  explicit_config_path : Bool
-  use_config : Bool
-  remaining_flags : Array[String]
-}
-
-type DepConfigEntry
-
-type DependencyProtocol
-
-type ParsedDependencyInput
-
-type VerifyBackend
-
-type WasmDependencySpec
-
-pub struct WiteConfigFile {
-  build_flags : Array[String]
-  analyze_flags : Array[String]
-  profile_flags : Array[String]
-  build_kind : BinaryKind
-  analyze_kind : BinaryKind
-  profile_kind : BinaryKind
 }
 
 // Type aliases

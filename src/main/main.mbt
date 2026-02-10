@@ -4,58 +4,57 @@ fn print_usage() -> Unit {
   println("  init [--force]")
   println("  new [--moonbit|--rust] [--force]")
   println(
-    "  analyze <core.wasm> [--config=<path>|--config <path>|--no-config] [--kind=auto|core|component] [--view=summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain] [--limit=<n>] [--diff-limit=<n>] [--opt-level=O1] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
-  )
-  println(
-    "  build [entry.(wac|wasm)] [--config=<path>|--config <path>|--no-config] [--kind=auto|core|component] [--out=<path>|-o <path>] [--best-effort] [--no-compose-dce] [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--strip-all-custom] [--strip-debug] [--strip-dwarf] [--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole] [--no-vacuum] [--no-merge-blocks] [--no-remove-unused-brs] [--converge] [--rounds=<n>] [--dce-apply] [--dfe-apply] [--msf-apply] [--rume-apply] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
-  )
-  println(
-    "  diff <left.wasm> [right.wasm] [--view=function|section|block] [--limit=<n>] [--baseline=wasm-opt] [--wasm-opt-bin=<path>] [--baseline-opt-level=Oz]",
-  )
-  println(
-    "  add <dep-spec> [--protocol=wkg|warg|oci] [--registry=<host>] [--name=<id>] [--config=<path>] [--verify]  # dep-spec: wkg:mizchi/markdown | mizchi/markdown | wasi:http | https://wa.dev/mizchi:tmgrammar",
-  )
-  println(
     "  install [--config=<path>|--config <path>] [--dir=<path>|--dir <path>] [--verify] [--fail-fast]",
   )
-  println("  deps verify [--config=<path>|--config <path>] [--fail-fast]")
   println(
-    "  deps sync [--config=<path>|--config <path>] [--dir=<path>|--dir <path>] [--verify] [--fail-fast]",
+    "  add <dep-spec> [--protocol=wkg|warg|oci] [--registry=<host>] [--name=<id>] [--config=<path>] [--verify]",
   )
-  println("  analyze-host <core.wasm> [limit]")
-  println("  analyze-opt <core.wasm> [opt-level] [diff-limit]")
-  println("  deep-analyze <core.wasm> [limit]")
+  println("  build [entry.(wac|wasm)] [options]")
+  println("  diff <left.wasm> [right.wasm] [options]")
+  println("  optimize <input.wasm> <output.wasm> [options]")
+  println("  deps verify|sync [options]")
+  println("  analyze [subcommand] <file.wasm> [options]")
+  println("")
+  println("Run 'wite <command> -h' for more information on a command.")
+}
+
+///|
+fn print_analyze_usage() -> Unit {
+  println("wite analyze subcommands:")
   println(
-    "  profile <core.wasm> [--config=<path>|--config <path>|--no-config] [--kind=auto|core|component]",
+    "  wite analyze <file.wasm> [--view=summary|deep|functions|blocks|callgraph|host|pipeline|dce|keep|retain] [--limit=<n>] [--kind=auto|core|component] [options]",
   )
-  println("  top-functions <core.wasm> [limit]")
-  println("  function-gap <left.wasm> <right.wasm> [limit]")
-  println("  block-sizes <core.wasm> [limit]")
-  println("  callgraph <core.wasm> [limit]")
+  println("  wite analyze host <file.wasm> [limit]")
+  println("  wite analyze opt <file.wasm> [opt-level] [diff-limit]")
+  println("  wite analyze deep <file.wasm> [limit]")
   println(
-    "  keep-reasons <core.wasm> [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
+    "  wite analyze profile <file.wasm> [--config=<path>|--config <path>|--no-config] [--kind=auto|core|component]",
   )
+  println("  wite analyze top-functions <file.wasm> [limit]")
+  println("  wite analyze function-gap <left.wasm> <right.wasm> [limit]")
+  println("  wite analyze block-sizes <file.wasm> [limit]")
+  println("  wite analyze callgraph <file.wasm> [limit]")
   println(
-    "  retain-path <core.wasm> [limit] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
-  )
-  println("  dce-report <core.wasm> [limit]")
-  println(
-    "  runtime-profile <core.wasm> [iterations] [--scenario=<export>[:arg1,arg2,...]]",
-  )
-  println(
-    "  hot-size <core.wasm> [iterations] [limit] [--scenario=<export>[:arg1,arg2,...]]",
+    "  wite analyze keep-reasons <file.wasm> [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
   )
   println(
-    "  optimize <input.wasm> <output.wasm> [--kind=auto|core|component] [-O|-O0|-O1|-O2|-O3|-O4|-Os|-Oz] [--optimize-level=<n>|-ol <n>] [--shrink-level=<n>|-s <n>] [--all-features|--enable-*|--disable-*] [--strip|--strip-all-custom|--strip-debug|--strip-dwarf|--strip-producers|--strip-target-features] [--keep-custom=<name>] [--exclude=<name>] [--no-peephole|--peephole] [--no-vacuum|--vacuum] [--no-merge-blocks|--merge-blocks] [--no-remove-unused-brs|--remove-unused-brs] [--converge|-c] [--rounds=<n>|--rounds <n>] [--dce|--duplicate-function-elimination|--merge-similar-functions|--remove-unused-module-elements] [--dce-apply|--dfe-apply|--msf-apply|--rume-apply] [--closed-world|-cw] [--closed-world-root=<export-name>] [--safe-mode] [--debuginfo|-g] [--verbose]",
+    "  wite analyze retain-path <file.wasm> [limit] [--closed-world] [--closed-world-root=<export-name>] [--safe-mode]",
   )
-  println("  component-profile <component.wasm>")
-  println("  component-top-functions <component.wasm> [limit]")
-  println("  component-callgraph <component.wasm> [limit]")
+  println("  wite analyze dce-report <file.wasm> [limit]")
   println(
-    "  component-dce-kpi <component.wasm> [wit-dir] [--exclude=<name>] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
+    "  wite analyze runtime-profile <file.wasm> [iterations] [--scenario=<export>[:arg1,arg2,...]]",
   )
-  println("  contract <component.wasm> <wit-dir>")
-  println("  root-policy <component.wasm> [wit-dir] [--exclude=<name>]")
+  println(
+    "  wite analyze hot-size <file.wasm> [iterations] [limit] [--scenario=<export>[:arg1,arg2,...]]",
+  )
+  println("  wite analyze component <file.wasm>")
+  println("  wite analyze component-top-functions <file.wasm> [limit]")
+  println("  wite analyze component-callgraph <file.wasm> [limit]")
+  println(
+    "  wite analyze component-dce-kpi <file.wasm> [wit-dir] [--exclude=<name>] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
+  )
+  println("  wite analyze contract <file.wasm> <wit-dir>")
+  println("  wite analyze root-policy <file.wasm> [wit-dir] [--exclude=<name>]")
 }
 
 ///|
@@ -278,18 +277,63 @@ fn derive_implicit_build_output_path(input_path : String) -> String {
 }
 
 ///|
-fn path_dirname(path : String) -> String {
+fn path_basename(path : String) -> String {
   match path.rev_find("/") {
-    Some(index) =>
-      if index == 0 {
-        "/"
+    Some(index) => path[index + 1:].to_string() catch { _ => path }
+    None => path
+  }
+}
+
+///|
+fn path_dirname(path : String) -> String {
+  let slash = path.rev_find("/")
+  let backslash = path.rev_find("\\")
+  let index = match (slash, backslash) {
+    (Some(a), Some(b)) => if a >= b { Some(a) } else { Some(b) }
+    (Some(a), None) => Some(a)
+    (None, Some(b)) => Some(b)
+    (None, None) => None
+  }
+  match index {
+    Some(i) =>
+      if i == 0 {
+        if path.has_prefix("\\") {
+          "\\"
+        } else {
+          "/"
+        }
       } else {
-        path[:index].to_string() catch {
+        path[:i].to_string() catch {
           _ => "."
         }
       }
     None => "."
   }
+}
+
+///|
+fn is_absolute_path(path : String) -> Bool {
+  if path.has_prefix("/") || path.has_prefix("\\") {
+    return true
+  }
+  match path.find(":") {
+    Some(i) if i == 1 && path.length() >= 3 => {
+      let sep = path[2:3].to_string() catch { _ => "" }
+      sep == "/" || sep == "\\"
+    }
+    _ => false
+  }
+}
+
+///|
+fn resolve_path_from_config_dir(config_dir : String, path : String) -> String {
+  if config_dir == "." || config_dir.is_empty() || is_absolute_path(path) {
+    return path
+  }
+  if config_dir == "/" || config_dir == "\\" {
+    return config_dir + path
+  }
+  config_dir + "/" + path
 }
 
 ///|
@@ -586,7 +630,6 @@ fn collect_new_template_files(
   files
 }
 
-
 ///|
 fn write_init_file(path : String, content : String, force : Bool) -> Bool {
   if @fs.path_exists(path) && not(force) {
@@ -694,401 +737,6 @@ fn run_init_command(args : Array[String]) -> Unit {
 }
 
 ///|
-fn build_wac_dep_target_path(
-  base_dir : String,
-  spec : WasmDependencySpec,
-) -> String {
-  @wite_bundle.build_wac_dep_target_path(base_dir, spec.ns, spec.name)
-}
-
-///|
-fn collect_wac_new_package_names(
-  source : String,
-) -> Result[Array[String], String] {
-  @wite_bundle.collect_wac_new_package_names(source)
-}
-
-///|
-fn parse_wac_package_name(pkg_name : String) -> WasmDependencySpec? {
-  match @wite_bundle.parse_wac_package_name(pkg_name) {
-    Some((ns, name)) => Some({ ns, name, version: "latest" })
-    None => None
-  }
-}
-
-///|
-priv struct WacConfiguredDependency {
-  url : String
-  host : String
-  spec : WasmDependencySpec
-}
-
-///|
-fn build_wac_dependency_lookup(
-  entries : Array[DepConfigEntry],
-) -> Result[Map[String, WacConfiguredDependency], String] {
-  let lookup : Map[String, WacConfiguredDependency] = {}
-  for entry in entries {
-    let (host, spec) = match parse_https_dependency_url(entry.url) {
-      Some(v) => v
-      None => return Err("invalid dependency url: " + entry.url)
-    }
-    let pkg_name = spec.ns + ":" + spec.name
-    match lookup.get(pkg_name) {
-      Some(prev) =>
-        if prev.url != entry.url {
-          return Err(
-            "duplicate dependency package with different urls: " +
-            pkg_name +
-            " (" +
-            prev.url +
-            " vs " +
-            entry.url +
-            ")",
-          )
-        }
-      None => lookup.set(pkg_name, { url: entry.url, host, spec })
-    }
-  }
-  Ok(lookup)
-}
-
-///|
-pub fn materialize_wac_dependencies_from_config(
-  config_path : String,
-  wac_path : String,
-  best_effort : Bool,
-) -> Result[UInt, String] {
-  let config_json = load_config_json_for_add(config_path)
-  let entries = match collect_dep_entries_from_config_json(config_json) {
-    Ok(v) => v
-    Err(msg) => return Err("failed to read deps: " + msg)
-  }
-  if entries.length() == 0 {
-    return Ok(0U)
-  }
-  let source = @fs.read_file_to_string(wac_path) catch {
-    e =>
-      return Err(
-        "failed to read wac file: " + wac_path + " (" + e.to_string() + ")",
-      )
-  }
-  let required_packages = match collect_wac_new_package_names(source) {
-    Ok(v) => v
-    Err(msg) => return Err(msg)
-  }
-  if required_packages.length() == 0 {
-    return Ok(0U)
-  }
-  let lookup = match build_wac_dependency_lookup(entries) {
-    Ok(v) => v
-    Err(msg) => return Err(msg)
-  }
-  let base_dir = path_dirname(wac_path)
-  let mut synced = 0U
-  for pkg_name in required_packages {
-    let dep = lookup.get(pkg_name)
-    match dep {
-      Some(value) => {
-        let target_path = build_wac_dep_target_path(base_dir, value.spec)
-        let synced_path = sync_dep_spec_to_file_with_wkg_cli(
-          value.host,
-          value.spec,
-          target_path,
-        )
-        match synced_path {
-          Ok(path) => {
-            synced += 1U
-            println("materialized wac dep: " + pkg_name)
-            println("  source: " + value.url)
-            println("  output: " + path)
-          }
-          Err(msg) =>
-            if best_effort {
-              println("warn: failed to materialize wac dep: " + pkg_name)
-              println("  reason: " + msg)
-            } else {
-              return Err(
-                "failed to materialize wac dep " + pkg_name + ": " + msg,
-              )
-            }
-        }
-      }
-      None => {
-        let spec = parse_wac_package_name(pkg_name)
-        match spec {
-          Some(parsed) => {
-            let target_path = build_wac_dep_target_path(base_dir, parsed)
-            if @fs.path_exists(target_path) {
-              println("use local wac dep: " + pkg_name)
-              println("  path: " + target_path)
-            } else if best_effort {
-              println("warn: missing wac dep in config: " + pkg_name)
-              println("  expected: " + target_path)
-            } else {
-              return Err(
-                "missing wac dep in config: " +
-                pkg_name +
-                " (expected " +
-                target_path +
-                ")",
-              )
-            }
-          }
-          None =>
-            if best_effort {
-              println("warn: invalid wac package name: " + pkg_name)
-            } else {
-              return Err("invalid wac package name: " + pkg_name)
-            }
-        }
-      }
-    }
-  }
-  Ok(synced)
-}
-
-///|
-pub struct WiteConfigFile {
-  build_flags : Array[String]
-  analyze_flags : Array[String]
-  profile_flags : Array[String]
-  build_kind : BinaryKind
-  analyze_kind : BinaryKind
-  profile_kind : BinaryKind
-}
-
-///|
-fn empty_wite_config_file() -> WiteConfigFile {
-  {
-    build_flags: [],
-    analyze_flags: [],
-    profile_flags: [],
-    build_kind: BinaryKind::Auto,
-    analyze_kind: BinaryKind::Auto,
-    profile_kind: BinaryKind::Auto,
-  }
-}
-
-///|
-fn parse_json_string_array(
-  json_value : Json,
-  label : String,
-) -> Result[Array[String], String] {
-  match json_value {
-    Array(values) => {
-      let out : Array[String] = []
-      for i in 0..<values.length() {
-        match values[i] {
-          String(value) => out.push(value)
-          _ =>
-            return Err(
-              "config " + label + "[" + i.to_string() + "] must be string",
-            )
-        }
-      }
-      Ok(out)
-    }
-    _ => Err("config " + label + " must be string array")
-  }
-}
-
-///|
-fn parse_wite_config_section(
-  json_value : Json,
-  label : String,
-) -> Result[(Array[String], BinaryKind), String] {
-  match json_value {
-    Array(_) =>
-      match parse_json_string_array(json_value, label) {
-        Ok(flags) => Ok((flags, BinaryKind::Auto))
-        Err(msg) => Err(msg)
-      }
-    Object(object) => {
-      let mut flags : Array[String] = []
-      let mut kind = BinaryKind::Auto
-      match object.get("flags") {
-        Some(flags_value) =>
-          match parse_json_string_array(flags_value, label + ".flags") {
-            Ok(parsed) => flags = parsed
-            Err(msg) => return Err(msg)
-          }
-        None => ()
-      }
-      match object.get("kind") {
-        Some(String(raw_kind)) =>
-          match parse_binary_kind(raw_kind) {
-            Some(parsed_kind) => kind = parsed_kind
-            None => return Err("invalid config " + label + ".kind: " + raw_kind)
-          }
-        Some(_) => return Err("config " + label + ".kind must be string")
-        None => ()
-      }
-      Ok((flags, kind))
-    }
-    _ => Err("config " + label + " must be array or object")
-  }
-}
-
-///|
-fn parse_wite_config_json(json_value : Json) -> Result[WiteConfigFile, String] {
-  match json_value {
-    Object(object) => {
-      let mut build_flags : Array[String] = []
-      let mut analyze_flags : Array[String] = []
-      let mut profile_flags : Array[String] = []
-      let mut build_kind = BinaryKind::Auto
-      let mut analyze_kind = BinaryKind::Auto
-      let mut profile_kind = BinaryKind::Auto
-      match object.get("build") {
-        Some(value) =>
-          match parse_wite_config_section(value, "build") {
-            Ok((flags, kind)) => {
-              build_flags = flags
-              build_kind = kind
-            }
-            Err(msg) => return Err(msg)
-          }
-        None => ()
-      }
-      match object.get("analyze") {
-        Some(value) =>
-          match parse_wite_config_section(value, "analyze") {
-            Ok((flags, kind)) => {
-              analyze_flags = flags
-              analyze_kind = kind
-            }
-            Err(msg) => return Err(msg)
-          }
-        None => ()
-      }
-      match object.get("profile") {
-        Some(value) =>
-          match parse_wite_config_section(value, "profile") {
-            Ok((flags, kind)) => {
-              profile_flags = flags
-              profile_kind = kind
-            }
-            Err(msg) => return Err(msg)
-          }
-        None => ()
-      }
-      Ok({
-        build_flags,
-        analyze_flags,
-        profile_flags,
-        build_kind,
-        analyze_kind,
-        profile_kind,
-      })
-    }
-    _ => Err("config root must be object")
-  }
-}
-
-///|
-fn parse_wite_config_text(text : String) -> Result[WiteConfigFile, String] {
-  let json_value = @json5.parse(text) catch {
-    parse_error => return Err(parse_error.to_string())
-  }
-  parse_wite_config_json(json_value)
-}
-
-///|
-pub struct ConfigSelectionFlags {
-  config_path : String
-  explicit_config_path : Bool
-  use_config : Bool
-  remaining_flags : Array[String]
-}
-
-///|
-pub fn parse_config_selection_flags(
-  flags : Array[String],
-) -> ConfigSelectionFlags {
-  let mut config_path = "wite.config.jsonc"
-  let mut explicit_config_path = false
-  let mut use_config = true
-  let remaining_flags : Array[String] = []
-  let mut i = 0
-  while i < flags.length() {
-    let flag = flags[i]
-    if flag == "--no-config" {
-      use_config = false
-      i += 1
-      continue
-    }
-    if flag == "--config" {
-      if i + 1 >= flags.length() {
-        println("missing config path after --config")
-        @sys.exit(1)
-      }
-      let path = flags[i + 1]
-      if path.is_empty() {
-        println("config path must not be empty")
-        @sys.exit(1)
-      }
-      config_path = path
-      explicit_config_path = true
-      use_config = true
-      i += 2
-      continue
-    }
-    match flag.strip_prefix("--config=") {
-      Some(path) => {
-        if path.is_empty() {
-          println("config path must not be empty")
-          @sys.exit(1)
-        }
-        config_path = path.to_string()
-        explicit_config_path = true
-        use_config = true
-        i += 1
-        continue
-      }
-      None => ()
-    }
-    remaining_flags.push(flag)
-    i += 1
-  }
-  { config_path, explicit_config_path, use_config, remaining_flags }
-}
-
-///|
-pub fn merge_command_flags(
-  defaults : Array[String],
-  cli_flags : Array[String],
-) -> Array[String] {
-  let merged = defaults.copy()
-  merged.append(cli_flags[:])
-  merged
-}
-
-///|
-pub fn should_auto_sync_deps(use_config : Bool, config_exists : Bool) -> Bool {
-  use_config && config_exists
-}
-
-///|
-pub fn build_auto_sync_deps_command_args(config_path : String) -> Array[String] {
-  ["wite", "deps", "sync", "--config=" + config_path, "--fail-fast"]
-}
-
-///|
-pub fn config_has_dep_entries_or_exit(config_path : String) -> Bool {
-  let config_json = load_config_json_for_add(config_path)
-  let entries = match collect_dep_entries_from_config_json(config_json) {
-    Ok(value) => value
-    Err(msg) => {
-      println("failed to read deps: " + msg)
-      @sys.exit(1)
-      []
-    }
-  }
-  entries.length() > 0
-}
-
-///|
 async fn auto_sync_deps_from_config_if_needed(
   selection : @wite_config.ConfigSelectionFlags,
 ) -> Unit {
@@ -1106,44 +754,6 @@ async fn auto_sync_deps_from_config_if_needed(
   )
   println("auto deps sync: " + selection.config_path + " -> deps/")
   @wite_deps.run_deps_sync_command(sync_args, @wite_deps.noop_usage_printer)
-}
-
-///|
-fn load_wite_config_or_exit(path : String) -> WiteConfigFile {
-  let text = @fs.read_file_to_string(path) catch {
-    e => {
-      println(
-        "failed to read config file: " + path + " (" + e.to_string() + ")",
-      )
-      @sys.exit(1)
-      ""
-    }
-  }
-  match parse_wite_config_text(text) {
-    Ok(config) => config
-    Err(msg) => {
-      println("failed to parse config file: " + path + " (" + msg + ")")
-      @sys.exit(1)
-      empty_wite_config_file()
-    }
-  }
-}
-
-///|
-pub fn resolve_wite_config_or_default(
-  selection : ConfigSelectionFlags,
-) -> WiteConfigFile {
-  if not(selection.use_config) {
-    return empty_wite_config_file()
-  }
-  if not(@fs.path_exists(selection.config_path)) {
-    if selection.explicit_config_path {
-      println("config file not found: " + selection.config_path)
-      @sys.exit(1)
-    }
-    return empty_wite_config_file()
-  }
-  load_wite_config_or_exit(selection.config_path)
 }
 
 ///|
@@ -1625,7 +1235,7 @@ fn run_profile_with_kind(path : String, kind : BinaryKind) -> Unit {
 ///|
 async fn run_profile_command(args : Array[String]) -> Unit {
   if args.length() < 3 {
-    print_usage()
+    print_analyze_usage()
     @sys.exit(1)
   }
   let path = args[2]
@@ -1668,7 +1278,6 @@ async fn run_profile_command(args : Array[String]) -> Unit {
   }
   run_profile_with_kind(path, kind)
 }
-
 
 ///|
 fn parse_wasm_opt_level_or_exit(token : String) -> String {
@@ -2327,6 +1936,7 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
 
 ///|
 fn write_output_or_exit(output_path : String, bytes : Bytes) -> Unit {
+  js_ensure_parent_dir_for_file(output_path)
   @fs.write_bytes_to_file(output_path, bytes) catch {
     e => {
       println(
@@ -2419,23 +2029,49 @@ async fn run_build(args : Array[String]) -> Unit {
   )
   let resolved = match resolve_build_input_from_args(args, default_input) {
     Ok(value) => value
-    Err(msg) => {
-      println(msg)
-      print_usage()
-      @sys.exit(1)
-      { input_path: "", raw_flags: [], explicit_input: false }
+    Err(_) => {
+      // defer error until after config check — config.input may resolve it
+      // extract flags from args[2:] (skipping "wite" "build")
+      let fallback_flags : Array[String] = []
+      for i in 2..<args.length() {
+        fallback_flags.push(args[i])
+      }
+      { input_path: "", raw_flags: fallback_flags, explicit_input: false }
     }
   }
-  let input_path = resolved.input_path
-  let is_wac_input = input_path.has_suffix(".wac")
   let raw_flags = resolved.raw_flags
   let config_selection = @wite_config.parse_config_selection_flags(raw_flags)
-  if not(is_wac_input) {
-    auto_sync_deps_from_config_if_needed(config_selection)
-  }
   let config_file = @wite_config.resolve_wite_config_or_default(
     config_selection,
   )
+  // Resolve input: CLI > config.input > filesystem default
+  let config_dir = path_dirname(config_selection.config_path)
+  let input_path = if resolved.explicit_input {
+    resolved.input_path
+  } else {
+    match @wite_config.config_input_single_path(config_file.input) {
+      Some(config_input) =>
+        resolve_path_from_config_dir(config_dir, config_input)
+      None =>
+        if default_input is Some(_) {
+          resolved.input_path
+        } else {
+          println(
+            "build requires entry.(wac|wasm), config input, or main.wac/main.wasm in cwd",
+          )
+          print_usage()
+          @sys.exit(1)
+          ""
+        }
+    }
+  }
+  let has_config_input = not(
+    config_file.input is @wite_config.ConfigInput::None,
+  )
+  let is_wac_input = input_path.has_suffix(".wac")
+  if not(is_wac_input) {
+    auto_sync_deps_from_config_if_needed(config_selection)
+  }
   let merged_flags = @wite_config.merge_command_flags(
     config_file.build_flags,
     config_selection.remaining_flags,
@@ -2498,7 +2134,15 @@ async fn run_build(args : Array[String]) -> Unit {
   let out = match output_path {
     Some(path) => path
     None =>
-      if resolved.explicit_input {
+      if has_config_input {
+        // config に input がある場合: config_dir/output.dir + basename
+        let basename = derive_build_output_path(path_basename(input_path))
+        let output_dir = resolve_path_from_config_dir(
+          config_dir,
+          config_file.output.dir,
+        )
+        output_dir + "/" + basename
+      } else if resolved.explicit_input {
         derive_build_output_path(input_path)
       } else {
         derive_implicit_build_output_path(input_path)
@@ -3466,7 +3110,7 @@ fn run_keep_reasons_with_options(
 ///|
 fn run_keep_reasons(args : Array[String]) -> Unit {
   if args.length() < 3 {
-    print_usage()
+    print_analyze_usage()
     @sys.exit(1)
   }
   let path = args[2]
@@ -3572,7 +3216,7 @@ fn run_retain_path_with_options(
 ///|
 fn run_retain_path(args : Array[String]) -> Unit {
   if args.length() < 3 {
-    print_usage()
+    print_analyze_usage()
     @sys.exit(1)
   }
   let path = args[2]
@@ -3618,7 +3262,7 @@ pub fn run_component_callgraph(path : String, limit : UInt) -> Unit {
 ///|
 fn run_component_dce_kpi(args : Array[String]) -> Unit {
   if args.length() < 3 {
-    print_usage()
+    print_analyze_usage()
     @sys.exit(1)
   }
   let component_path = args[2]
@@ -3653,7 +3297,7 @@ fn run_contract(component_path : String, wit_path : String) -> Unit {
 ///|
 fn run_root_policy(args : Array[String]) -> Unit {
   if args.length() < 3 {
-    print_usage()
+    print_analyze_usage()
     @sys.exit(1)
   }
   let component_path = args[2]
@@ -3801,11 +3445,278 @@ fn analyze_view_name(view : AnalyzeView) -> String {
 }
 
 ///|
+fn is_analyze_subcommand(name : String) -> Bool {
+  match name {
+    "host"
+    | "opt"
+    | "deep"
+    | "profile"
+    | "top-functions"
+    | "function-gap"
+    | "block-sizes"
+    | "callgraph"
+    | "keep-reasons"
+    | "retain-path"
+    | "dce-report"
+    | "runtime-profile"
+    | "hot-size"
+    | "component"
+    | "component-top-functions"
+    | "component-callgraph"
+    | "component-dce-kpi"
+    | "contract"
+    | "root-policy" => true
+    _ => false
+  }
+}
+
+///|
+fn make_shifted_args(args : Array[String], subcmd : String) -> Array[String] {
+  // Shift args so that args[2] (subcommand) becomes transparent:
+  // [wite, analyze, subcmd, file, ...] -> [wite, subcmd, file, ...]
+  let shifted : Array[String] = [args[0], subcmd]
+  for i in 3..<args.length() {
+    shifted.push(args[i])
+  }
+  shifted
+}
+
+///|
 async fn run_analyze_command(args : Array[String]) -> Unit {
   if args.length() < 3 {
-    print_usage()
+    print_analyze_usage()
     @sys.exit(1)
   }
+  let second = args[2]
+  // Handle -h flag
+  if second == "-h" || second == "--help" {
+    print_analyze_usage()
+    return
+  }
+  // Check if args[2] is a known subcommand
+  if is_analyze_subcommand(second) {
+    run_analyze_subcommand(args, second)
+    return
+  }
+  // Otherwise, treat args[2] as a wasm file path and use --view= based analysis
+  run_analyze_view_command(args)
+}
+
+///|
+async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
+  let shifted = make_shifted_args(args, subcmd)
+  match subcmd {
+    "host" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let limit = if shifted.length() >= 4 {
+        parse_uint_or_exit(shifted[3], "limit")
+      } else {
+        20U
+      }
+      @wite_analyze.run_analyze_host(shifted[2], limit)
+    }
+    "opt" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let mut config = @wite.OptimizeConfig::o1()
+      let mut diff_limit = 20U
+      if shifted.length() >= 4 {
+        match @wite.optimize_config_from_opt_level(shifted[3]) {
+          Some(v) => {
+            config = v
+            if shifted.length() >= 5 {
+              diff_limit = parse_uint_or_exit(shifted[4], "diff-limit")
+            }
+          }
+          None => diff_limit = parse_uint_or_exit(shifted[3], "diff-limit")
+        }
+      }
+      @wite_analyze.run_analyze_opt(shifted[2], config, diff_limit)
+    }
+    "deep" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let limit = if shifted.length() >= 4 {
+        parse_uint_or_exit(shifted[3], "limit")
+      } else {
+        20U
+      }
+      @wite_analyze.run_deep_analyze(shifted[2], limit)
+    }
+    "profile" => run_profile_command(shifted)
+    "top-functions" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let limit = if shifted.length() >= 4 {
+        parse_uint_or_exit(shifted[3], "limit")
+      } else {
+        20U
+      }
+      @wite_analyze.run_top_functions(shifted[2], limit)
+    }
+    "function-gap" => {
+      if shifted.length() < 4 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let limit = if shifted.length() >= 5 {
+        parse_uint_or_exit(shifted[4], "limit")
+      } else {
+        20U
+      }
+      @wite_analyze.run_function_gap(shifted[2], shifted[3], limit)
+    }
+    "block-sizes" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let limit = if shifted.length() >= 4 {
+        parse_uint_or_exit(shifted[3], "limit")
+      } else {
+        20U
+      }
+      @wite_analyze.run_block_sizes(shifted[2], limit)
+    }
+    "callgraph" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let limit = if shifted.length() >= 4 {
+        parse_uint_or_exit(shifted[3], "limit")
+      } else {
+        20U
+      }
+      @wite_analyze.run_callgraph(shifted[2], limit)
+    }
+    "keep-reasons" => run_keep_reasons(shifted)
+    "retain-path" => run_retain_path(shifted)
+    "dce-report" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let limit = if shifted.length() >= 4 {
+        parse_uint_or_exit(shifted[3], "limit")
+      } else {
+        20U
+      }
+      @wite_analyze.run_dce_report(shifted[2], limit)
+    }
+    "runtime-profile" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let mut iterations = 50U
+      let mut has_iterations = false
+      for i in 3..<shifted.length() {
+        let arg = shifted[i]
+        if arg.has_prefix("--scenario=") {
+          ()
+        } else if arg.has_prefix("--") {
+          println("unknown runtime-profile option: " + arg)
+          @sys.exit(1)
+        } else if not(has_iterations) {
+          iterations = parse_uint_or_exit(arg, "iterations")
+          has_iterations = true
+        } else {
+          println("unexpected runtime-profile argument: " + arg)
+          @sys.exit(1)
+        }
+      }
+      let scenarios = parse_runtime_profile_scenarios(shifted, 3)
+      @wite_analyze.run_runtime_profile(shifted[2], iterations, scenarios)
+    }
+    "hot-size" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let mut iterations = 50U
+      let mut limit = 20U
+      let mut has_iterations = false
+      let mut has_limit = false
+      for i in 3..<shifted.length() {
+        let arg = shifted[i]
+        if arg.has_prefix("--scenario=") {
+          ()
+        } else if arg.has_prefix("--") {
+          println("unknown hot-size option: " + arg)
+          @sys.exit(1)
+        } else if not(has_iterations) {
+          iterations = parse_uint_or_exit(arg, "iterations")
+          has_iterations = true
+        } else if not(has_limit) {
+          limit = parse_uint_or_exit(arg, "limit")
+          has_limit = true
+        } else {
+          println("unexpected hot-size argument: " + arg)
+          @sys.exit(1)
+        }
+      }
+      let scenarios = parse_runtime_profile_scenarios(shifted, 3)
+      @wite_analyze.run_hot_size(shifted[2], iterations, limit, scenarios)
+    }
+    "component" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      @wite_component.run_component_profile(shifted[2])
+    }
+    "component-top-functions" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let limit = if shifted.length() >= 4 {
+        parse_uint_or_exit(shifted[3], "limit")
+      } else {
+        20U
+      }
+      @wite_component.run_component_top_functions(shifted[2], limit)
+    }
+    "component-callgraph" => {
+      if shifted.length() < 3 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      let limit = if shifted.length() >= 4 {
+        parse_uint_or_exit(shifted[3], "limit")
+      } else {
+        20U
+      }
+      @wite_component.run_component_callgraph(shifted[2], limit)
+    }
+    "component-dce-kpi" => run_component_dce_kpi(shifted)
+    "contract" => {
+      if shifted.length() < 4 {
+        print_analyze_usage()
+        @sys.exit(1)
+      }
+      run_contract(shifted[2], shifted[3])
+    }
+    "root-policy" => run_root_policy(shifted)
+    _ => {
+      print_analyze_usage()
+      @sys.exit(1)
+    }
+  }
+}
+
+///|
+async fn run_analyze_view_command(args : Array[String]) -> Unit {
   let path = args[2]
   let raw_flags : Array[String] = []
   for i in 3..<args.length() {
@@ -4021,209 +3932,7 @@ async fn main {
     "build" => run_build(args)
     "deps" => @wite_deps.run_deps_command(args, print_usage)
     "diff" => run_diff_command(args)
-    "analyze-host" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let limit = if args.length() >= 4 {
-        parse_uint_or_exit(args[3], "limit")
-      } else {
-        20U
-      }
-      @wite_analyze.run_analyze_host(args[2], limit)
-    }
-    "analyze-opt" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let mut config = @wite.OptimizeConfig::o1()
-      let mut diff_limit = 20U
-      if args.length() >= 4 {
-        match @wite.optimize_config_from_opt_level(args[3]) {
-          Some(v) => {
-            config = v
-            if args.length() >= 5 {
-              diff_limit = parse_uint_or_exit(args[4], "diff-limit")
-            }
-          }
-          None => diff_limit = parse_uint_or_exit(args[3], "diff-limit")
-        }
-      }
-      @wite_analyze.run_analyze_opt(args[2], config, diff_limit)
-    }
-    "deep-analyze" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let limit = if args.length() >= 4 {
-        parse_uint_or_exit(args[3], "limit")
-      } else {
-        20U
-      }
-      @wite_analyze.run_deep_analyze(args[2], limit)
-    }
-    "profile" => run_profile_command(args)
-    "top-functions" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let limit = if args.length() >= 4 {
-        parse_uint_or_exit(args[3], "limit")
-      } else {
-        20U
-      }
-      @wite_analyze.run_top_functions(args[2], limit)
-    }
-    "function-gap" => {
-      if args.length() < 4 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let limit = if args.length() >= 5 {
-        parse_uint_or_exit(args[4], "limit")
-      } else {
-        20U
-      }
-      @wite_analyze.run_function_gap(args[2], args[3], limit)
-    }
-    "block-sizes" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let limit = if args.length() >= 4 {
-        parse_uint_or_exit(args[3], "limit")
-      } else {
-        20U
-      }
-      @wite_analyze.run_block_sizes(args[2], limit)
-    }
-    "callgraph" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let limit = if args.length() >= 4 {
-        parse_uint_or_exit(args[3], "limit")
-      } else {
-        20U
-      }
-      @wite_analyze.run_callgraph(args[2], limit)
-    }
-    "keep-reasons" => run_keep_reasons(args)
-    "retain-path" => run_retain_path(args)
-    "dce-report" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let limit = if args.length() >= 4 {
-        parse_uint_or_exit(args[3], "limit")
-      } else {
-        20U
-      }
-      @wite_analyze.run_dce_report(args[2], limit)
-    }
-    "runtime-profile" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let mut iterations = 50U
-      let mut has_iterations = false
-      for i in 3..<args.length() {
-        let arg = args[i]
-        if arg.has_prefix("--scenario=") {
-          ()
-        } else if arg.has_prefix("--") {
-          println("unknown runtime-profile option: " + arg)
-          @sys.exit(1)
-        } else if not(has_iterations) {
-          iterations = parse_uint_or_exit(arg, "iterations")
-          has_iterations = true
-        } else {
-          println("unexpected runtime-profile argument: " + arg)
-          @sys.exit(1)
-        }
-      }
-      let scenarios = parse_runtime_profile_scenarios(args, 3)
-      @wite_analyze.run_runtime_profile(args[2], iterations, scenarios)
-    }
-    "hot-size" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let mut iterations = 50U
-      let mut limit = 20U
-      let mut has_iterations = false
-      let mut has_limit = false
-      for i in 3..<args.length() {
-        let arg = args[i]
-        if arg.has_prefix("--scenario=") {
-          ()
-        } else if arg.has_prefix("--") {
-          println("unknown hot-size option: " + arg)
-          @sys.exit(1)
-        } else if not(has_iterations) {
-          iterations = parse_uint_or_exit(arg, "iterations")
-          has_iterations = true
-        } else if not(has_limit) {
-          limit = parse_uint_or_exit(arg, "limit")
-          has_limit = true
-        } else {
-          println("unexpected hot-size argument: " + arg)
-          @sys.exit(1)
-        }
-      }
-      let scenarios = parse_runtime_profile_scenarios(args, 3)
-      @wite_analyze.run_hot_size(args[2], iterations, limit, scenarios)
-    }
     "optimize" => run_optimize(args)
-    "component-profile" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      @wite_component.run_component_profile(args[2])
-    }
-    "component-top-functions" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let limit = if args.length() >= 4 {
-        parse_uint_or_exit(args[3], "limit")
-      } else {
-        20U
-      }
-      @wite_component.run_component_top_functions(args[2], limit)
-    }
-    "component-callgraph" => {
-      if args.length() < 3 {
-        print_usage()
-        @sys.exit(1)
-      }
-      let limit = if args.length() >= 4 {
-        parse_uint_or_exit(args[3], "limit")
-      } else {
-        20U
-      }
-      @wite_component.run_component_callgraph(args[2], limit)
-    }
-    "component-dce-kpi" => run_component_dce_kpi(args)
-    "contract" => {
-      if args.length() < 4 {
-        print_usage()
-        @sys.exit(1)
-      }
-      run_contract(args[2], args[3])
-    }
-    "root-policy" => run_root_policy(args)
     _ => {
       print_usage()
       @sys.exit(1)

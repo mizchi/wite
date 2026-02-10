@@ -3,25 +3,21 @@ import {
   "mizchi/wite/component" as @wite_component,
   "mizchi/wite/config" as @wite_config,
   "mizchi/wite/deps" as @wite_deps,
-  "mizchi/oci_wasm/discovery" as @oci_discovery,
-  "mizchi/oci_wasm/oci" as @oci_client,
-  "mizchi/oci_wasm/types" as @oci_types,
   "mizchi/wite/bundle" as @wite_bundle,
   "mizchi/wite/optimize" as @wite_optimize,
   "mizchi/wite/core" as @wite,
   "mizchi/wit" as @wit,
   "moonbitlang/async",
   "moonbitlang/x/fs" as @fs,
-  "moonbitlang/x/json5" as @json5,
   "moonbitlang/x/sys" as @sys,
 }
 
 options(
   "is-main": true,
+  "native-stub": [ "ffi_native.c" ],
   targets: {
-    "main_ffi_js.mbt": ["js"],
-    "main_ffi_native.mbt": ["native"],
-    "main_wbtest.mbt": ["js"],
+    "main_ffi_js.mbt": [ "js" ],
+    "main_ffi_native.mbt": [ "native" ],
+    "main_wbtest.mbt": [ "js" ],
   },
-  "native-stub": ["ffi_native.c"],
 )
