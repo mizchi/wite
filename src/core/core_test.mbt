@@ -393,6 +393,28 @@ fn runtime_zlib_behaviors_equal(
 }
 
 ///|
+fn read_zlib_fixture() -> Bytes? {
+  try @fs.read_file_to_bytes("bench/corpus/core/binaryen/zlib.wasm") catch {
+    _ => None
+  } noraise {
+    bytes => Some(bytes)
+  }
+}
+
+///|
+fn zlib_runtime_preserved_with_kind(
+  config : OptimizeConfig,
+  kind : @wite_optimize.OptimizeKind,
+) -> Bool {
+  guard read_zlib_fixture() is Some(bytes) else { return false }
+  guard @wite_optimize.optimize_with_kind(bytes, kind, config) is Ok(optimized) else {
+    return false
+  }
+  optimized.after_size <= optimized.before_size &&
+  runtime_zlib_behaviors_equal(bytes, optimized.bytes)
+}
+
+///|
 fn runtime_zero_arg_export_behaviors_equal(
   before_bytes : Bytes,
   after_bytes : Bytes,
@@ -6486,11 +6508,9 @@ test "runtime profile supports zero-arg exports with function imports" {
 
 ///|
 test "runtime profile supports zlib fixture with stub imports" {
-  let bytes = @fs.read_file_to_bytes("bench/corpus/core/binaryen/zlib.wasm") catch {
-    _ => {
-      assert_true(false)
-      return
-    }
+  guard read_zlib_fixture() is Some(bytes) else {
+    assert_true(false)
+    return
   }
   guard profile_runtime_zero_arg_exports(bytes, iterations=3U) is Ok(profile) else {
     assert_true(false)
@@ -6502,11 +6522,9 @@ test "runtime profile supports zlib fixture with stub imports" {
 
 ///|
 test "optimize -O1 preserves zlib runtime behavior with stub imports" {
-  let bytes = @fs.read_file_to_bytes("bench/corpus/core/binaryen/zlib.wasm") catch {
-    _ => {
-      assert_true(false)
-      return
-    }
+  guard read_zlib_fixture() is Some(bytes) else {
+    assert_true(false)
+    return
   }
   let config = OptimizeConfig::o1()
   guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
@@ -6515,6 +6533,36 @@ test "optimize -O1 preserves zlib runtime behavior with stub imports" {
   }
   assert_true(optimized.after_size <= optimized.before_size)
   assert_true(runtime_zlib_behaviors_equal(bytes, optimized.bytes))
+}
+
+///|
+test "optimize_with_kind core -O1 preserves zlib runtime behavior" {
+  assert_true(
+    zlib_runtime_preserved_with_kind(
+      OptimizeConfig::o1(),
+      @wite_optimize.optimize_kind_core(),
+    ),
+  )
+}
+
+///|
+test "optimize_with_kind auto -O2 preserves zlib runtime behavior" {
+  assert_true(
+    zlib_runtime_preserved_with_kind(
+      OptimizeConfig::o2(),
+      @wite_optimize.optimize_kind_auto(),
+    ),
+  )
+}
+
+///|
+test "optimize_with_kind auto -Oz preserves zlib runtime behavior" {
+  assert_true(
+    zlib_runtime_preserved_with_kind(
+      OptimizeConfig::oz(),
+      @wite_optimize.optimize_kind_auto(),
+    ),
+  )
 }
 
 ///|

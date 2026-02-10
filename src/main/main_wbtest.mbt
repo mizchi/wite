@@ -116,6 +116,40 @@ test "parse optimize cli options supports debuginfo alias override" {
 }
 
 ///|
+test "parse optimize cli options keeps metadata-strip policy across presets" {
+  let o1 = parse_optimize_cli_options(["-O1"]).config
+  assert_true(o1.strip_debug_sections)
+  assert_true(o1.strip_dwarf_sections)
+  assert_true(o1.strip_target_features_section)
+  let o2 = parse_optimize_cli_options(["-O2"]).config
+  assert_true(not(o2.strip_debug_sections))
+  assert_true(not(o2.strip_dwarf_sections))
+  assert_true(not(o2.strip_target_features_section))
+  let o3 = parse_optimize_cli_options(["-O3"]).config
+  assert_true(not(o3.strip_debug_sections))
+  assert_true(not(o3.strip_dwarf_sections))
+  assert_true(not(o3.strip_target_features_section))
+  let os = parse_optimize_cli_options(["-Os"]).config
+  assert_true(not(os.strip_debug_sections))
+  assert_true(not(os.strip_dwarf_sections))
+  assert_true(not(os.strip_target_features_section))
+  let oz = parse_optimize_cli_options(["-Oz"]).config
+  assert_true(not(oz.strip_debug_sections))
+  assert_true(not(oz.strip_dwarf_sections))
+  assert_true(not(oz.strip_target_features_section))
+}
+
+///|
+test "parse optimize cli options allows explicit strip override on O2" {
+  let parsed = parse_optimize_cli_options([
+    "-O2", "--strip-debug", "--strip-dwarf", "--strip-target-features",
+  ])
+  assert_true(parsed.config.strip_debug_sections)
+  assert_true(parsed.config.strip_dwarf_sections)
+  assert_true(parsed.config.strip_target_features_section)
+}
+
+///|
 test "analyze view support matrix distinguishes component compatible views" {
   assert_true(
     analyze_view_supports_kind(AnalyzeView::Summary, BinaryKind::Component),
@@ -706,6 +740,53 @@ fn bytes_equal(left : Bytes, right : Bytes) -> Bool {
     }
   }
   true
+}
+
+///|
+test "optimize command writes zlib output on auto and core kinds" {
+  let input_path = "bench/corpus/core/binaryen/zlib.wasm"
+  let temp_dir = js_make_temp_dir("wite-optimize-zlib-")
+  let output_auto = temp_dir + "/zlib.auto.min.wasm"
+  let output_core = temp_dir + "/zlib.core.min.wasm"
+  run_optimize(["wite", "optimize", input_path, output_auto, "-O1"])
+  run_optimize([
+    "wite", "optimize", input_path, output_core, "-O1", "--kind=core",
+  ])
+  let input_bytes = @fs.read_file_to_bytes(input_path) catch {
+    e => {
+      js_remove_dir_recursive(temp_dir)
+      fail("failed to read optimize input fixture: " + e.to_string())
+      b""
+    }
+  }
+  let auto_bytes = @fs.read_file_to_bytes(output_auto) catch {
+    e => {
+      js_remove_dir_recursive(temp_dir)
+      fail("failed to read optimize auto output: " + e.to_string())
+      b""
+    }
+  }
+  let core_bytes = @fs.read_file_to_bytes(output_core) catch {
+    e => {
+      js_remove_dir_recursive(temp_dir)
+      fail("failed to read optimize core output: " + e.to_string())
+      b""
+    }
+  }
+  guard @wite_analyze.profile_module(auto_bytes) is Ok(auto_profile) else {
+    js_remove_dir_recursive(temp_dir)
+    fail("optimize auto output is not parseable core wasm")
+  }
+  guard @wite_analyze.profile_module(core_bytes) is Ok(core_profile) else {
+    js_remove_dir_recursive(temp_dir)
+    fail("optimize core output is not parseable core wasm")
+  }
+  assert_true(auto_profile.total_bytes > 0U)
+  assert_true(core_profile.total_bytes > 0U)
+  assert_true(auto_bytes.length() < input_bytes.length())
+  assert_true(core_bytes.length() < input_bytes.length())
+  assert_true(bytes_equal(auto_bytes, core_bytes))
+  js_remove_dir_recursive(temp_dir)
 }
 
 ///|

@@ -131,6 +131,8 @@ pub fn OptimizeConfig::o0() -> Self {
 }
 
 ///|
+/// Shrink-first preset.
+/// By default this strips debug/dwarf/target-features metadata in addition to code optimizations.
 pub fn OptimizeConfig::o1() -> Self {
   make_optimize_config(
     strip_all_custom=false,
@@ -155,6 +157,8 @@ pub fn OptimizeConfig::o1() -> Self {
 }
 
 ///|
+/// Throughput/balance presets.
+/// By default these keep debug/custom metadata unless explicit strip flags are enabled by CLI.
 pub fn OptimizeConfig::o2() -> Self {
   make_optimize_config(
     strip_all_custom=false,
