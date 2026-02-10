@@ -2,15 +2,15 @@
 package "mizchi/wite/optimize"
 
 import {
-  "mizchi/wite",
+  "mizchi/wite/core",
 }
 
 // Values
-pub fn optimize_auto_for_size(Bytes, @wite.OptimizeConfig, exclude? : Array[String]) -> Result[@wite.OptimizeResult, String]
+pub fn optimize_auto_for_size(Bytes, @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.OptimizeResult, String]
 
-pub fn optimize_component_for_size(Bytes, @wite.OptimizeConfig, exclude? : Array[String]) -> Result[@wite.OptimizeResult, String]
+pub fn optimize_component_for_size(Bytes, @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.OptimizeResult, String]
 
-pub fn optimize_core_for_size(Bytes, @wite.OptimizeConfig) -> Result[@wite.OptimizeResult, String]
+pub fn optimize_core_for_size(Bytes, @core.OptimizeConfig) -> Result[@core.OptimizeResult, String]
 
 pub fn optimize_kind_auto() -> OptimizeKind
 
@@ -20,7 +20,7 @@ pub fn optimize_kind_core() -> OptimizeKind
 
 pub fn optimize_kind_name(OptimizeKind) -> String
 
-pub fn optimize_with_kind(Bytes, OptimizeKind, @wite.OptimizeConfig, exclude? : Array[String]) -> Result[@wite.OptimizeResult, String]
+pub fn optimize_with_kind(Bytes, OptimizeKind, @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.OptimizeResult, String]
 
 pub fn parse_optimize_kind(String) -> OptimizeKind?
 

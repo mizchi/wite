@@ -8,7 +8,7 @@ import {
   "mizchi/oci_wasm/types" as @oci_types,
   "mizchi/wite/bundle" as @wite_bundle,
   "mizchi/wite/optimize" as @wite_optimize,
-  "mizchi/wite" as @wite,
+  "mizchi/wite/core" as @wite,
   "mizchi/wit" as @wit,
   "moonbitlang/async",
   "moonbitlang/x/fs" as @fs,

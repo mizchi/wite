@@ -3,463 +3,156 @@ package "mizchi/wite"
 
 import {
   "mizchi/wit",
+  "mizchi/wite/core",
 }
 
 // Values
-pub fn analyze_call_graph(Bytes) -> Result[CallGraphReport, WiteError]
+pub fn analyze_call_graph(Bytes) -> Result[@core.CallGraphReport, @core.WiteError]
 
-pub fn analyze_call_graph_summary(Bytes) -> Result[CallGraphSummary, WiteError]
+pub fn analyze_call_graph_summary(Bytes) -> Result[@core.CallGraphSummary, @core.WiteError]
 
-pub fn analyze_code_block_sizes(Bytes) -> Result[CodeBlockSizeReport, WiteError]
+pub fn analyze_code_block_sizes(Bytes) -> Result[@core.CodeBlockSizeReport, @core.WiteError]
 
-pub fn analyze_component_call_graphs(Bytes) -> Result[Array[ComponentCallGraphReport], String]
+pub fn analyze_component_call_graphs(Bytes) -> Result[Array[@core.ComponentCallGraphReport], String]
 
-pub fn analyze_component_contract(Bytes, @wit.ResolveInput) -> Result[ContractReport, String]
+pub fn analyze_component_contract(Bytes, @wit.ResolveInput) -> Result[@core.ContractReport, String]
 
-pub fn analyze_component_core_optimize(Bytes, config? : OptimizeConfig, exclude? : Array[String]) -> Result[ComponentCoreOptimizeReport, String]
+pub fn analyze_component_core_optimize(Bytes, config? : @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.ComponentCoreOptimizeReport, String]
 
-pub fn analyze_component_function_sizes(Bytes) -> Result[Array[ComponentFunctionSizeReport], String]
+pub fn analyze_component_function_sizes(Bytes) -> Result[Array[@core.ComponentFunctionSizeReport], String]
 
-pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput?, exclude? : Array[String]) -> Result[ComponentRootPolicyReport, String]
+pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput?, exclude? : Array[String]) -> Result[@core.ComponentRootPolicyReport, String]
 
-pub fn analyze_dce_report(Bytes) -> Result[DceReport, WiteError]
+pub fn analyze_dce_report(Bytes) -> Result[@core.DceReport, @core.WiteError]
 
-pub fn analyze_function_size_gap(Bytes, Bytes, top_limit? : UInt) -> Result[FunctionGapReport, WiteError]
+pub fn analyze_function_size_gap(Bytes, Bytes, top_limit? : UInt) -> Result[@core.FunctionGapReport, @core.WiteError]
 
-pub fn analyze_function_sizes(Bytes) -> Result[Array[FunctionSize], WiteError]
+pub fn analyze_function_sizes(Bytes) -> Result[Array[@core.FunctionSize], @core.WiteError]
 
-pub fn analyze_host_generated_code(Bytes) -> Result[HostGeneratedCodeReport, WiteError]
+pub fn analyze_host_generated_code(Bytes) -> Result[@core.HostGeneratedCodeReport, @core.WiteError]
 
-pub fn analyze_hotness_size_matrix(Bytes, iterations? : UInt, scenarios? : Array[RuntimeProfileScenario]) -> Result[HotnessSizeMatrixReport, String]
+pub fn analyze_hotness_size_matrix(Bytes, iterations? : UInt, scenarios? : Array[@core.RuntimeProfileScenario]) -> Result[@core.HotnessSizeMatrixReport, String]
 
-pub fn analyze_keep_reasons(Bytes, config? : OptimizeConfig) -> Result[KeepReasonReport, WiteError]
+pub fn analyze_keep_reasons(Bytes, config? : @core.OptimizeConfig) -> Result[@core.KeepReasonReport, @core.WiteError]
 
-pub fn analyze_optimize_metadata(Bytes, config? : OptimizeConfig, function_diff_limit? : UInt) -> Result[OptimizeMetadataReport, WiteError]
+pub fn analyze_optimize_metadata(Bytes, config? : @core.OptimizeConfig, function_diff_limit? : UInt) -> Result[@core.OptimizeMetadataReport, @core.WiteError]
 
-pub fn analyze_retain_paths(Bytes, config? : OptimizeConfig) -> Result[RetainPathReport, WiteError]
+pub fn analyze_retain_paths(Bytes, config? : @core.OptimizeConfig) -> Result[@core.RetainPathReport, @core.WiteError]
 
-pub fn analyze_section_sizes(Bytes) -> Result[Array[SectionSize], WiteError]
+pub fn analyze_section_sizes(Bytes) -> Result[Array[@core.SectionSize], @core.WiteError]
 
-pub fn analyze_wasm_breakdown(Bytes, top_limit? : UInt) -> Result[WasmBreakdownReport, WiteError]
+pub fn analyze_wasm_breakdown(Bytes, top_limit? : UInt) -> Result[@core.WasmBreakdownReport, @core.WiteError]
 
-pub fn error_to_string(WiteError) -> String
+pub fn error_to_string(@core.WiteError) -> String
 
-pub fn make_component_optimize_config(base? : OptimizeConfig, root_name_candidates? : Array[String], exclude? : Array[String]) -> OptimizeConfig
+pub fn make_component_optimize_config(base? : @core.OptimizeConfig, root_name_candidates? : Array[String], exclude? : Array[String]) -> @core.OptimizeConfig
 
-pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> OptimizeConfig
+pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> @core.OptimizeConfig
 
-pub fn make_runtime_profile_scenario(String, args? : Array[Int]) -> RuntimeProfileScenario
+pub fn make_runtime_profile_scenario(String, args? : Array[Int]) -> @core.RuntimeProfileScenario
 
-pub fn optimize_binary_for_size(Bytes, config? : OptimizeConfig, exclude? : Array[String]) -> Result[OptimizeResult, String]
+pub fn optimize_binary_for_size(Bytes, config? : @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.OptimizeResult, String]
 
-pub fn optimize_component_for_size(Bytes, config? : OptimizeConfig, exclude? : Array[String]) -> Result[OptimizeResult, String]
+pub fn optimize_component_for_size(Bytes, config? : @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.OptimizeResult, String]
 
-pub fn optimize_config_from_opt_level(String) -> OptimizeConfig?
+pub fn optimize_config_from_opt_level(String) -> @core.OptimizeConfig?
 
-pub fn optimize_for_size(Bytes, config? : OptimizeConfig) -> Result[OptimizeResult, WiteError]
+pub fn optimize_for_size(Bytes, config? : @core.OptimizeConfig) -> Result[@core.OptimizeResult, @core.WiteError]
 
-pub fn profile_component(Bytes) -> Result[ComponentProfile, String]
+pub fn profile_component(Bytes) -> Result[@core.ComponentProfile, String]
 
-pub fn profile_module(Bytes) -> Result[ModuleProfile, WiteError]
+pub fn profile_module(Bytes) -> Result[@core.ModuleProfile, @core.WiteError]
 
-pub fn profile_runtime_exports(Bytes, iterations? : UInt, scenarios? : Array[RuntimeProfileScenario]) -> Result[RuntimeProfile, String]
+pub fn profile_runtime_exports(Bytes, iterations? : UInt, scenarios? : Array[@core.RuntimeProfileScenario]) -> Result[@core.RuntimeProfile, String]
 
-pub fn profile_runtime_zero_arg_exports(Bytes, iterations? : UInt) -> Result[RuntimeProfile, String]
+pub fn profile_runtime_zero_arg_exports(Bytes, iterations? : UInt) -> Result[@core.RuntimeProfile, String]
 
 // Errors
-pub suberror WiteError {
-  UnexpectedEof
-  InvalidMagic
-  UnsupportedVersion(String)
-  InvalidFormat(String)
-}
 
 // Types and methods
-pub struct CallGraphNode {
-  function_index : UInt
-  body_bytes : UInt
-  name : String?
-  export_names : Array[String]
-  direct_callees : Array[UInt]
-  reachable_from_roots : Bool
-}
-
-pub struct CallGraphReport {
-  imported_function_count : UInt
-  local_function_count : UInt
-  roots : Array[UInt]
-  has_indirect_calls : Bool
-  partial : Bool
-  reachable_body_bytes : UInt
-  dead_body_bytes : UInt
-  nodes : Array[CallGraphNode]
-}
-
-pub struct CallGraphSummary {
-  imported_function_count : UInt
-  local_function_count : UInt
-  roots : Array[UInt]
-  has_indirect_calls : Bool
-  partial : Bool
-  reachable_function_count : UInt
-  dead_function_count : UInt
-  reachable_body_bytes : UInt
-  dead_body_bytes : UInt
-}
-
-pub struct CodeBlockSize {
-  function_index : UInt
-  function_name : String?
-  export_names : Array[String]
-  block_index : UInt
-  depth : UInt
-  kind : String
-  start_offset : UInt
-  end_offset : UInt
-  instruction_count : UInt
-  total_bytes : UInt
-}
-
-pub struct CodeBlockSizeReport {
-  partial : Bool
-  function_count : UInt
-  block_count : UInt
-  total_body_bytes : UInt
-  total_instruction_bytes : UInt
-  blocks : Array[CodeBlockSize]
-}
-
-pub struct ComponentCallGraphReport {
-  module_index : UInt
-  graph : CallGraphReport
-}
-
-pub struct ComponentCoreOptimizeEntry {
-  module_index : UInt
-  before_bytes : UInt
-  after_bytes : UInt
-  removed_sections : Array[String]
-  no_change_reasons : Array[String]
-}
-
-pub struct ComponentCoreOptimizeReport {
-  total_component_bytes : UInt
-  core_module_count : UInt
-  total_core_before_bytes : UInt
-  total_core_after_bytes : UInt
-  entries : Array[ComponentCoreOptimizeEntry]
-}
-
-pub struct ComponentFunctionSizeReport {
-  module_index : UInt
-  function_count : UInt
-  total_body_bytes : UInt
-  functions : Array[FunctionSize]
-}
-
-pub struct ComponentProfile {
-  total_bytes : UInt
-  import_count : UInt
-  export_count : UInt
-  core_module_count : UInt
-  nested_component_count : UInt
-  sections : Array[SectionSize]
-  core_modules : Array[ModuleProfile]
-}
-
-pub struct ComponentRootPolicyReport {
-  component_imports : Array[String]
-  component_exports : Array[String]
-  wit_imports : Array[String]
-  wit_exports : Array[String]
-  canonical_abi_roots : Array[String]
-  root_name_candidates : Array[String]
-}
-
-pub struct ContractReport {
-  component_imports : Array[String]
-  component_exports : Array[String]
-  wit_imports : Array[String]
-  wit_exports : Array[String]
-  missing_component_imports : Array[String]
-  missing_component_exports : Array[String]
-}
-
-pub struct CustomSectionBreakdown {
-  name : String
-  count : UInt
-  total_bytes : UInt
-  payload_bytes : UInt
-  content_bytes : UInt
-}
-
-pub struct DceReport {
-  roots : Array[UInt]
-  partial : Bool
-  removable_function_count : UInt
-  removable_body_bytes : UInt
-  removable_functions : Array[FunctionSize]
-}
-
-pub struct FunctionGapEntry {
-  match_kind : String
-  match_key : String
-  left_function_index : UInt?
-  right_function_index : UInt?
-  left_name : String?
-  right_name : String?
-  left_export_names : Array[String]
-  right_export_names : Array[String]
-  left_body_bytes : UInt
-  right_body_bytes : UInt
-  left_minus_right_bytes : Int
-  abs_gap_bytes : UInt
-}
-
-pub struct FunctionGapReport {
-  left_total_body_bytes : UInt
-  right_total_body_bytes : UInt
-  left_minus_right_total_bytes : Int
-  unmatched_left_count : UInt
-  unmatched_right_count : UInt
-  entries : Array[FunctionGapEntry]
-}
-
-pub struct FunctionSize {
-  function_index : UInt
-  body_bytes : UInt
-  name : String?
-  export_names : Array[String]
-}
-
-pub struct FunctionSizeDiff {
-  function_index : UInt
-  before_body_bytes : UInt
-  after_body_bytes : UInt
-  gain_bytes : UInt
-  regression_bytes : UInt
-  before_name : String?
-  after_name : String?
-  export_names : Array[String]
-}
-
-pub struct HostCodeHint {
-  kind : String
-  function_index : UInt
-  function_name : String?
-  target_function_index : UInt
-  target_function_name : String?
-  export_names : Array[String]
-  appended_i32_const_count : UInt
-  dropped_param_count : UInt
-}
-
-pub struct HostGeneratedCodeReport {
-  imported_function_count : UInt
-  local_function_count : UInt
-  param_forwarding_thunk_count : UInt
-  const_forwarding_thunk_count : UInt
-  signature_refinable_thunk_count : UInt
-  directize_candidate_call_count : UInt
-  dce_removable_function_count : UInt
-  dce_removable_body_bytes : UInt
-  dce_partial : Bool
-  hints : Array[HostCodeHint]
-}
-
-pub struct HotnessSizeBucket {
-  bucket : String
-  count : UInt
-  body_bytes : UInt
-  total_ns : UInt64
-}
-
-pub struct HotnessSizeEntry {
-  export_name : String
-  function_index : UInt?
-  function_name : String?
-  body_bytes : UInt
-  calls : UInt
-  total_ns : UInt64
-  average_ns : UInt64
-  bucket : String
-  unresolved_reason : String?
-  unresolved_detail : String?
-}
-
-pub struct HotnessSizeMatrixReport {
-  iterations : UInt
-  instantiate_ns : UInt64
-  hot_threshold_ns : UInt64
-  large_threshold_bytes : UInt
-  unresolved_exports : Array[String]
-  unresolved_reason_counts : Array[HotnessUnresolvedReasonCount]
-  buckets : Array[HotnessSizeBucket]
-  entries : Array[HotnessSizeEntry]
-}
-
-pub struct HotnessUnresolvedReasonCount {
-  reason : String
-  count : UInt
-}
-
-pub struct KeepReasonEntry {
-  function_index : UInt
-  name : String?
-  export_names : Array[String]
-  reasons : Array[String]
-}
-
-pub struct KeepReasonReport {
-  partial : Bool
-  entries : Array[KeepReasonEntry]
-}
-
-pub struct ModuleProfile {
-  total_bytes : UInt
-  function_count : UInt
-  import_count : UInt
-  export_count : UInt
-  code_body_count : UInt
-  code_body_bytes : UInt
-  sections : Array[SectionSize]
-}
-
-pub struct OpcodeStat {
-  key : String
-  mnemonic : String
-  count : UInt
-  total_bytes : UInt
-}
-
-pub struct OptimizeConfig {
-  strip_all_custom : Bool
-  strip_name_section : Bool
-  strip_producers_section : Bool
-  strip_debug_sections : Bool
-  strip_dwarf_sections : Bool
-  strip_target_features_section : Bool
-  keep_custom_sections : Array[String]
-  pass_rounds : UInt
-  enable_peephole : Bool
-  peephole_remove_nop : Bool
-  peephole_remove_const_drop : Bool
-  enable_vacuum : Bool
-  enable_merge_blocks : Bool
-  enable_remove_unused_brs : Bool
-  enable_dce : Bool
-  enable_dfe : Bool
-  enable_merge_similar_functions : Bool
-  enable_remove_unused_module_elements : Bool
-  closed_world : Bool
-  closed_world_root_exports : Array[String]
-  safe_mode : Bool
-}
-pub fn OptimizeConfig::aggressive() -> Self
-pub fn OptimizeConfig::default() -> Self
-pub fn OptimizeConfig::o0() -> Self
-pub fn OptimizeConfig::o1() -> Self
-pub fn OptimizeConfig::o2() -> Self
-pub fn OptimizeConfig::o3() -> Self
-pub fn OptimizeConfig::os() -> Self
-pub fn OptimizeConfig::oz() -> Self
-
-pub struct OptimizeMetadataReport {
-  before_size : UInt
-  after_size : UInt
-  total_gain_bytes : UInt
-  total_regression_bytes : UInt
-  stages : Array[OptimizeStageMetadata]
-}
-
-pub struct OptimizeResult {
-  bytes : Bytes
-  before_size : UInt
-  after_size : UInt
-  removed_sections : Array[String]
-  no_change_reasons : Array[String]
-}
-
-pub struct OptimizeStageMetadata {
-  stage : String
-  before_size : UInt
-  after_size : UInt
-  gain_bytes : UInt
-  regression_bytes : UInt
-  function_gain_bytes : UInt
-  function_regression_bytes : UInt
-  function_diffs : Array[FunctionSizeDiff]
-  removed_sections : Array[String]
-  no_change_reasons : Array[String]
-}
-
-pub struct RetainPathEntry {
-  function_index : UInt
-  name : String?
-  export_names : Array[String]
-  body_bytes : UInt
-  root_reasons : Array[String]
-  path : Array[UInt]
-}
-
-pub struct RetainPathReport {
-  partial : Bool
-  roots : Array[UInt]
-  entries : Array[RetainPathEntry]
-}
-
-pub struct RuntimeFunctionProfile {
-  name : String
-  calls : UInt
-  total_ns : UInt64
-  average_ns : UInt64
-}
-
-pub struct RuntimeProfile {
-  instantiate_ns : UInt64
-  iterations : UInt
-  functions : Array[RuntimeFunctionProfile]
-  skipped_exports : Array[String]
-  unresolved_exports : Array[RuntimeUnresolvedExport]
-}
-
-pub struct RuntimeProfileScenario {
-  export_name : String
-  args : Array[Int]
-}
-
-pub struct RuntimeUnresolvedExport {
-  export_name : String
-  reason : String
-  detail : String
-}
-
-pub struct SectionSize {
-  key : String
-  section_id : UInt
-  total_bytes : UInt
-}
-
-pub struct WasmBreakdownReport {
-  total_bytes : UInt
-  sections : Array[SectionSize]
-  custom_sections : Array[CustomSectionBreakdown]
-  imported_function_count : UInt
-  local_function_count : UInt
-  top_functions : Array[FunctionSize]
-  block_count : UInt
-  top_blocks : Array[CodeBlockSize]
-  instruction_count : UInt
-  instruction_bytes : UInt
-  opcode_partial : Bool
-  opcodes : Array[OpcodeStat]
-  callgraph_partial : Bool
-  has_indirect_calls : Bool
-  reachable_body_bytes : UInt
-  dead_body_bytes : UInt
-}
 
 // Type aliases
+pub using @core {type CallGraphNode}
+
+pub using @core {type CallGraphReport}
+
+pub using @core {type CallGraphSummary}
+
+pub using @core {type CodeBlockSize}
+
+pub using @core {type CodeBlockSizeReport}
+
+pub using @core {type ComponentCallGraphReport}
+
+pub using @core {type ComponentCoreOptimizeEntry}
+
+pub using @core {type ComponentCoreOptimizeReport}
+
+pub using @core {type ComponentFunctionSizeReport}
+
+pub using @core {type ComponentProfile}
+
+pub using @core {type ComponentRootPolicyReport}
+
+pub using @core {type ContractReport}
+
+pub using @core {type CustomSectionBreakdown}
+
+pub using @core {type DceReport}
+
+pub using @core {type FunctionGapEntry}
+
+pub using @core {type FunctionGapReport}
+
+pub using @core {type FunctionSize}
+
+pub using @core {type FunctionSizeDiff}
+
+pub using @core {type HostCodeHint}
+
+pub using @core {type HostGeneratedCodeReport}
+
+pub using @core {type HotnessSizeBucket}
+
+pub using @core {type HotnessSizeEntry}
+
+pub using @core {type HotnessSizeMatrixReport}
+
+pub using @core {type HotnessUnresolvedReasonCount}
+
+pub using @core {type KeepReasonEntry}
+
+pub using @core {type KeepReasonReport}
+
+pub using @core {type ModuleProfile}
+
+pub using @core {type OpcodeStat}
+
+pub using @core {type OptimizeConfig}
+
+pub using @core {type OptimizeMetadataReport}
+
+pub using @core {type OptimizeResult}
+
+pub using @core {type OptimizeStageMetadata}
+
+pub using @core {type RetainPathEntry}
+
+pub using @core {type RetainPathReport}
+
+pub using @core {type RuntimeFunctionProfile}
+
+pub using @core {type RuntimeProfile}
+
+pub using @core {type RuntimeProfileScenario}
+
+pub using @core {type RuntimeUnresolvedExport}
+
+pub using @core {type SectionSize}
+
+pub using @core {type WasmBreakdownReport}
+
+pub using @core {type WiteError}
 
 // Traits
 

@@ -1,0 +1,14 @@
+import {
+  "mizchi/mwac/component" as @mwac_component,
+  "mizchi/wit" as @wit,
+  "moonbitlang/core/bench",
+  "moonbitlang/x/fs" as @fs,
+}
+
+options(
+  targets: {
+    "lib_test.mbt": [ "js" ],
+    "runtime_profile_js.mbt": [ "js" ],
+    "runtime_profile_stub.mbt": [ "native", "wasm" ],
+  },
+)

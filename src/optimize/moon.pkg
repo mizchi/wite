@@ -1,4 +1,4 @@
 import {
-  "mizchi/wite" as @wite,
+  "mizchi/wite/core" as @wite,
   "moonbitlang/x/fs" as @fs,
 }
