@@ -91,12 +91,13 @@ pub(all) struct SignatureRefineAlias {
   target : UInt
   dropped_param_count : UInt
   dropped_result_count : UInt
+  appended_i32_const_instrs : Array[Bytes]
 }
 
 ///|
 fn parse_forward_call_target_with_prefix_param_count(
   body_bytes : Bytes,
-) -> (UInt, UInt, UInt)? {
+) -> (UInt, UInt, UInt, Array[Bytes])? {
   let prefix_result = try? parse_local_decl_prefix_raise(body_bytes)
   let prefix = match prefix_result {
     Ok(v) => v
@@ -139,21 +140,42 @@ fn parse_forward_call_target_with_prefix_param_count(
     return None
   }
   let call_pos = pos
-  for i in 0..<call_pos {
-    if spans[i].opcode != 0x20U {
-      return None
+  let mut forwarded_param_count = 0
+  while forwarded_param_count < call_pos {
+    if spans[forwarded_param_count].opcode != 0x20U {
+      break
     }
-    match decode_span_u32_immediate(instr_bytes, spans[i]) {
+    match decode_span_u32_immediate(instr_bytes, spans[forwarded_param_count]) {
       Some(local_index) =>
-        if local_index != i.reinterpret_as_uint() {
+        if local_index != forwarded_param_count.reinterpret_as_uint() {
           return None
         }
       None => return None
     }
+    forwarded_param_count += 1
+  }
+  let appended_i32_const_instrs : Array[Bytes] = []
+  for i in forwarded_param_count..<call_pos {
+    if spans[i].opcode != 0x41U {
+      return None
+    }
+    appended_i32_const_instrs.push(
+      instr_bytes[spans[i].start:spans[i].end_].to_bytes(),
+    )
+  }
+  if forwarded_param_count == 0 && appended_i32_const_instrs.length() == 0 {
+    return None
   }
   match decode_span_u32_immediate(instr_bytes, spans[call_pos]) {
     Some(target) =>
-      Some((target, call_pos.reinterpret_as_uint(), dropped_result_count))
+      Some(
+        (
+          target,
+          forwarded_param_count.reinterpret_as_uint(),
+          dropped_result_count,
+          appended_i32_const_instrs,
+        ),
+      )
     None => None
   }
 }
@@ -358,12 +380,16 @@ fn can_signature_refine_forward_to_target(
   wrapper_type : FunctionTypeEntry,
   target_type : FunctionTypeEntry,
   forwarded_param_count : UInt,
+  appended_i32_const_count : UInt,
   dropped_result_count : UInt,
   gc_type_canonical_map : Map[UInt, UInt],
 ) -> (UInt, UInt)? {
   let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
   let target_param_count = target_type.params.length().reinterpret_as_uint()
-  if forwarded_param_count != target_param_count {
+  if forwarded_param_count > wrapper_param_count {
+    return None
+  }
+  if target_param_count != forwarded_param_count + appended_i32_const_count {
     return None
   }
   if wrapper_param_count < target_param_count {
@@ -390,8 +416,8 @@ fn can_signature_refine_forward_to_target(
       return None
     }
   }
-  let target_param_count_i = UInt::reinterpret_as_int(target_param_count)
-  for i in 0..<target_param_count_i {
+  let forwarded_param_count_i = UInt::reinterpret_as_int(forwarded_param_count)
+  for i in 0..<forwarded_param_count_i {
     if not(
         type_bytes_equal_with_gc_canonical_map(
           wrapper_type.params[i],
@@ -402,8 +428,16 @@ fn can_signature_refine_forward_to_target(
       return None
     }
   }
-  let dropped_param_count = wrapper_param_count - target_param_count
-  if dropped_param_count == 0U && dropped_result_count == 0U {
+  let target_param_count_i = UInt::reinterpret_as_int(target_param_count)
+  for i in forwarded_param_count_i..<target_param_count_i {
+    if not(is_i32_value_type(target_type.params[i])) {
+      return None
+    }
+  }
+  let dropped_param_count = wrapper_param_count - forwarded_param_count
+  if dropped_param_count == 0U &&
+    dropped_result_count == 0U &&
+    appended_i32_const_count == 0U {
     return None
   }
   Some((dropped_param_count, dropped_result_count))

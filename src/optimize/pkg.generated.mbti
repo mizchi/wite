@@ -184,6 +184,7 @@ pub(all) struct SignatureRefineAlias {
   target : UInt
   dropped_param_count : UInt
   dropped_result_count : UInt
+  appended_i32_const_instrs : Array[Bytes]
 }
 
 // Type aliases

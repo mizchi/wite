@@ -520,7 +520,9 @@ pub fn analyze_host_generated_code(
               Some(v) => v
               None => []
             },
-            appended_i32_const_count: 0U,
+            appended_i32_const_count: alias_info.appended_i32_const_instrs
+            .length()
+            .reinterpret_as_uint(),
             dropped_param_count: alias_info.dropped_param_count,
           })
         })

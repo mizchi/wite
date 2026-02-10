@@ -76,6 +76,7 @@
 - [x] P2/P5: forwarding thunk が `unused local` を持つ場合でも `cfp/cfp-const/signature-refine` を適用可能に拡張
 - [x] テスト追加: `cfp/cfp-const/signature-refining` の `unused local` thunk ケースを追加
 - [x] P2: `signature-refine` を拡張し、`call; drop; end` / `call; drop; return; end` 形の result-drop wrapper を callsite で直接化可能にした
+- [x] P2: `signature-refine` を拡張し、`param-drop + const-forward`（`local.get*; i32.const*; call; [return]; end`）合成パターンを直接化可能にした
 - [x] P5: `optimize-instructions` に const-first 形（`i32.const 0/-1; local/global.get; op`）の簡約を追加
 - [x] テスト追加: `optimize-instructions simplifies const-first bitwise and cmp patterns`
 - [x] Analyze: `analyze-opt` に pass 単位 function 差分（gain/regression, TopK）を追加
