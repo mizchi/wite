@@ -668,7 +668,7 @@ fn rewrite_code_section_payload_for_dce_raise(
 ///|
 fn decode_call_indirect_immediate(imm : Bytes) -> (UInt, UInt)? {
   let parser = Cursor::new(imm)
-  let result = try? {
+  let result = try? ({
     let type_index = parser.read_u32_leb128()
     let table_index = parser.read_u32_leb128()
     if not(parser.eof()) {
@@ -677,7 +677,7 @@ fn decode_call_indirect_immediate(imm : Bytes) -> (UInt, UInt)? {
       )
     }
     (type_index, table_index)
-  }
+  })
   match result {
     Ok(v) => Some(v)
     Err(_) => None
@@ -1004,6 +1004,60 @@ fn make_drop_replacement_instr(drop_count : Int) -> Bytes {
 }
 
 ///|
+fn is_inlining_expression_unsupported_opcode(opcode : UInt) -> Bool {
+  opcode == 0x00U || // unreachable
+  opcode == 0x02U || // block
+  opcode == 0x03U || // loop
+  opcode == 0x04U || // if
+  opcode == 0x05U || // else
+  opcode == 0x0cU || // br
+  opcode == 0x0dU || // br_if
+  opcode == 0x0eU || // br_table
+  opcode == 0x0fU // return
+}
+
+///|
+fn extract_inlining_prefix_param_expression_instr_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  param_count : Int,
+) -> Bytes? {
+  if param_count < 0 {
+    return None
+  }
+  if spans.length() <= param_count || spans[spans.length() - 1].opcode != 0x0bU {
+    return None
+  }
+  for i in 0..<param_count {
+    if spans[i].opcode != 0x20U {
+      return None
+    }
+    if decode_local_index_immediate_from_span(instr_bytes, spans[i]) !=
+      Some(i.reinterpret_as_uint()) {
+      return None
+    }
+  }
+  let expr_start = param_count
+  let mut expr_end = spans.length() - 1
+  if expr_end > expr_start && spans[expr_end - 1].opcode == 0x0fU {
+    expr_end -= 1
+  }
+  if expr_start >= expr_end {
+    return None
+  }
+  for i in expr_start..<expr_end {
+    let opcode = spans[i].opcode
+    if opcode == 0x20U ||
+      opcode == 0x21U ||
+      opcode == 0x22U ||
+      is_inlining_expression_unsupported_opcode(opcode) {
+      return None
+    }
+  }
+  Some(instr_bytes[spans[expr_start].start:spans[expr_end - 1].end_].to_bytes())
+}
+
+///|
 fn extract_inlining_replacement_instr_raise(
   body_bytes : Bytes,
   type_entry : FunctionTypeEntry,
@@ -1048,6 +1102,13 @@ fn extract_inlining_replacement_instr_raise(
       return Some(Bytes::from_array(out[:]))
     }
   }
+  match
+    extract_inlining_prefix_param_expression_instr_raise(
+      instr_bytes, spans, param_count,
+    ) {
+    Some(replacement) => return Some(replacement)
+    None => ()
+  }
   None
 }
 
@@ -1056,6 +1117,7 @@ fn rewrite_instruction_calls_for_inlining_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
   replacement_by_function_index : Map[UInt, Bytes],
+  call_count_by_target : Map[UInt, UInt],
 ) -> (Bytes, UInt) raise WiteError {
   let out : Array[Byte] = []
   let mut rewritten_call_count = 0U
@@ -1076,7 +1138,12 @@ fn rewrite_instruction_calls_for_inlining_raise(
         Some(replacement) => {
           let call_span_len = (span.end_ - span.start).reinterpret_as_uint()
           let replacement_len = replacement.length().reinterpret_as_uint()
-          if replacement_len <= call_span_len {
+          let call_site_count = match call_count_by_target.get(target) {
+            Some(v) => v
+            None => 0U
+          }
+          if replacement_len <= call_span_len ||
+            (replacement_len == call_span_len + 1U && call_site_count == 1U) {
             out.append(replacement[:].to_array())
             rewritten_call_count += 1U
           } else {
@@ -1096,6 +1163,46 @@ fn rewrite_instruction_calls_for_inlining_raise(
 priv struct InliningApplyResult {
   bytes : Bytes
   inlined_call_count : UInt
+}
+
+///|
+fn collect_call_count_by_target_raise(
+  code_bodies : Array[Bytes],
+  replacement_by_function_index : Map[UInt, Bytes],
+) -> Map[UInt, UInt] raise WiteError {
+  let counts : Map[UInt, UInt] = {}
+  for body in code_bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    for span in spans {
+      if span.opcode != 0x10U {
+        continue
+      }
+      if span.end_ <= span.start + 1 {
+        raise WiteError::InvalidFormat("invalid call immediate in inlining")
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let target = match decode_u32_leb128_bytes(imm) {
+        Some(v) => v
+        None =>
+          raise WiteError::InvalidFormat(
+            "failed to decode call immediate in inlining",
+          )
+      }
+      match replacement_by_function_index.get(target) {
+        Some(_) => {
+          let next = match counts.get(target) {
+            Some(v) => v + 1U
+            None => 1U
+          }
+          counts.set(target, next)
+        }
+        None => ()
+      }
+    }
+  }
+  counts
 }
 
 ///|
@@ -1183,6 +1290,9 @@ fn apply_inlining_optimizing_raise(
   if not(has_candidate) {
     return { bytes, inlined_call_count: 0U }
   }
+  let call_count_by_target = collect_call_count_by_target_raise(
+    code_bodies, replacement_by_function_index,
+  )
   let rewritten_bodies : Array[Bytes] = []
   let mut inlined_call_count = 0U
   for body in code_bodies {
@@ -1190,7 +1300,7 @@ fn apply_inlining_optimizing_raise(
     let instr_bytes = body[prefix_end:body.length()].to_bytes()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let (rewritten_instr, rewritten_call_count) = rewrite_instruction_calls_for_inlining_raise(
-      instr_bytes, spans, replacement_by_function_index,
+      instr_bytes, spans, replacement_by_function_index, call_count_by_target,
     )
     inlined_call_count += rewritten_call_count
     if rewritten_call_count > 0U {

@@ -334,6 +334,13 @@ fn append_i32_const_small(out : Array[Byte], value : UInt) -> Unit {
 }
 
 ///|
+fn append_i32_const_small_signed(out : Array[Byte], value : Int) -> Unit {
+  out.push(0x41U.to_byte())
+  let encoded = if value < 0 { value + 128 } else { value }
+  out.push(encoded.to_byte())
+}
+
+///|
 fn append_i32_const_nonnegative(out : Array[Byte], value : UInt) -> Unit {
   out.push(0x41U.to_byte())
   out.append(encode_nonnegative_i32_leb128(value)[:])
@@ -843,10 +850,9 @@ fn apply_precompute_i32_eqz_const(instr_bytes : Bytes) -> Bytes {
     if i + 1 < spans.length() &&
       spans[i].opcode == 0x41U &&
       spans[i + 1].opcode == 0x45U {
-      match
-        decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
+      match decode_i32_const_small_signed_from_span(instr_bytes, spans[i]) {
         Some(value) => {
-          append_i32_const_small(out, if value == 0U { 1U } else { 0U })
+          append_i32_const_small(out, if value == 0 { 1U } else { 0U })
           i += 2
           continue
         }
@@ -897,9 +903,19 @@ fn is_local_const_propagation_barrier(opcode : UInt) -> Bool {
 }
 
 ///|
-fn known_local_const_get(known : Map[UInt, UInt], local_index : UInt) -> UInt? {
+fn known_local_const_unknown_sentinel() -> Int {
+  2147483647
+}
+
+///|
+fn known_local_const_get(known : Map[UInt, Int], local_index : UInt) -> Int? {
   match known.get(local_index) {
-    Some(value) => if value == 0xffffffffU { None } else { Some(value) }
+    Some(value) =>
+      if value == known_local_const_unknown_sentinel() {
+        None
+      } else {
+        Some(value)
+      }
     None => None
   }
 }
@@ -911,7 +927,7 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
     None => return instr_bytes
   }
   let out : Array[Byte] = []
-  let mut known_local_consts : Map[UInt, UInt] = {}
+  let mut known_local_consts : Map[UInt, Int] = {}
   for i in 0..<spans.length() {
     let span = spans[i]
     if span.opcode == 0x20U {
@@ -931,7 +947,7 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
           if not(adjacent_set_same_local) {
             match known_local_const_get(known_local_consts, local_index) {
               Some(value) => {
-                append_i32_const_small(out, value)
+                append_i32_const_small_signed(out, value)
                 if is_local_const_propagation_barrier(span.opcode) {
                   known_local_consts = {}
                 }
@@ -946,16 +962,20 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
     } else if span.opcode == 0x21U || span.opcode == 0x22U {
       match decode_local_index_immediate_from_span(instr_bytes, span) {
         Some(local_index) => {
-          let mut assigned_const : UInt? = None
+          let mut assigned_const : Int? = None
           if i > 0 {
-            assigned_const = decode_i32_const_small_nonnegative_from_span(
+            assigned_const = decode_i32_const_small_signed_from_span(
               instr_bytes,
               spans[i - 1],
             )
           }
           match assigned_const {
             Some(value) => known_local_consts.set(local_index, value)
-            None => known_local_consts.set(local_index, 0xffffffffU)
+            None =>
+              known_local_consts.set(
+                local_index,
+                known_local_const_unknown_sentinel(),
+              )
           }
         }
         None => ()
@@ -981,9 +1001,8 @@ fn apply_precompute_br_if_const(instr_bytes : Bytes) -> Bytes {
     if i + 1 < spans.length() &&
       spans[i].opcode == 0x41U &&
       spans[i + 1].opcode == 0x0dU {
-      match
-        decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
-        Some(0U) => {
+      match decode_i32_const_small_signed_from_span(instr_bytes, spans[i]) {
+        Some(0) => {
           i += 2
           continue
         }
