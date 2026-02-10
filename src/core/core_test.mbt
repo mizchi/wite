@@ -2347,6 +2347,78 @@ fn sample_module_with_gc_signature_refining_call_return_thunk_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_signature_refining_drop_result_thunk_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 (func (param i32 i32))
+  //   #1 (func (param i32) (result i32))
+  //   #2 (func (result i32))
+  append_section(
+    out,
+    1U,
+    bytes_of([
+      0x03, 0x60, 0x02, 0x7f, 0x7f, 0x00, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x00,
+      0x01, 0x7f,
+    ]),
+  )
+  // function section: 3 local functions (indices 0..2) with type idx [2,0,1]
+  append_section(out, 3U, bytes_of([0x03, 0x02, 0x00, 0x01]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: i32.const 10; i32.const 99; call 1; i32.const 7; end
+  // #1: local.get 0; call 2; drop; end (signature-refining + drop-result candidate)
+  // #2: local.get 0; i32.const 1; i32.add; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x0a, 0x00, 0x41, 0x0a, 0x41, 0x63, 0x10, 0x01, 0x41, 0x07, 0x0b, 0x07,
+      0x00, 0x20, 0x00, 0x10, 0x02, 0x1a, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x41, 0x01,
+      0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_signature_refining_drop_result_call_return_thunk_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 (func (param i32 i32))
+  //   #1 (func (param i32) (result i32))
+  //   #2 (func (result i32))
+  append_section(
+    out,
+    1U,
+    bytes_of([
+      0x03, 0x60, 0x02, 0x7f, 0x7f, 0x00, 0x60, 0x01, 0x7f, 0x01, 0x7f, 0x60, 0x00,
+      0x01, 0x7f,
+    ]),
+  )
+  // function section: 3 local functions (indices 0..2) with type idx [2,0,1]
+  append_section(out, 3U, bytes_of([0x03, 0x02, 0x00, 0x01]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: i32.const 10; i32.const 99; call 1; i32.const 7; end
+  // #1: local.get 0; call 2; drop; return; end (signature-refining + drop-result candidate)
+  // #2: local.get 0; i32.const 1; i32.add; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x0a, 0x00, 0x41, 0x0a, 0x41, 0x63, 0x10, 0x01, 0x41, 0x07, 0x0b, 0x08,
+      0x00, 0x20, 0x00, 0x10, 0x02, 0x1a, 0x0f, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x41,
+      0x01, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_cfp_target_leb_growth_bytes() -> Bytes {
   let function_count = 131U
   let wrapper_index = 1U
@@ -5470,6 +5542,88 @@ test "optimize signature-refining phase3 rewrites forwarding thunk with unused l
       -9, -1, 0, 1, 7, 123456,
     ]),
   )
+}
+
+///|
+test "optimize signature-refining phase3 rewrites drop-result forwarding thunk" {
+  let bytes = sample_module_with_signature_refining_drop_result_thunk_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 3U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=1U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    closed_world=true,
+    closed_world_root_exports=["run"],
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("signature-refine:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
+test "optimize signature-refining phase3 rewrites drop-result call+return thunk" {
+  let bytes = sample_module_with_signature_refining_drop_result_call_return_thunk_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 3U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=1U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    closed_world=true,
+    closed_world_root_exports=["run"],
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("signature-refine:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
 ///|

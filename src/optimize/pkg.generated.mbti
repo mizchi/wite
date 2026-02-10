@@ -183,6 +183,7 @@ pub(all) struct RawSection {
 pub(all) struct SignatureRefineAlias {
   target : UInt
   dropped_param_count : UInt
+  dropped_result_count : UInt
 }
 
 // Type aliases

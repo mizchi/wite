@@ -555,7 +555,7 @@ pub fn collect_signature_refine_alias_map(
       None => continue
     }
     match parse_forward_call_target_with_prefix_param_count(code_bodies[i]) {
-      Some((target, forwarded_param_count)) =>
+      Some((target, forwarded_param_count, dropped_result_count)) =>
         if target != old_index {
           let target_pos = UInt::reinterpret_as_int(target)
           if target_pos >= 0 && target_pos < function_type_by_index.length() {
@@ -564,12 +564,14 @@ pub fn collect_signature_refine_alias_map(
               Some(target_type) =>
                 match
                   can_signature_refine_forward_to_target(
-                    wrapper_type, target_type, forwarded_param_count, gc_type_canonical_map,
+                    wrapper_type, target_type, forwarded_param_count, dropped_result_count,
+                    gc_type_canonical_map,
                   ) {
-                  Some(dropped_param_count) =>
+                  Some((dropped_param_count, dropped_result_count)) =>
                     alias_candidate.set(old_index, {
                       target,
                       dropped_param_count,
+                      dropped_result_count,
                     })
                   None => ()
                 }
@@ -588,6 +590,7 @@ pub fn collect_signature_refine_alias_map(
         let seen : Map[UInt, Bool] = {}
         let mut current_target = initial_alias.target
         let mut dropped_param_count = initial_alias.dropped_param_count
+        let mut dropped_result_count = initial_alias.dropped_result_count
         let mut valid = true
         while true {
           if current_target == old_index {
@@ -602,6 +605,7 @@ pub fn collect_signature_refine_alias_map(
           match alias_candidate.get(current_target) {
             Some(next_alias) => {
               dropped_param_count += next_alias.dropped_param_count
+              dropped_result_count += next_alias.dropped_result_count
               current_target = next_alias.target
             }
             None => break
@@ -611,6 +615,7 @@ pub fn collect_signature_refine_alias_map(
           resolved_alias.set(old_index, {
             target: current_target,
             dropped_param_count,
+            dropped_result_count,
           })
         }
       }
@@ -650,6 +655,9 @@ fn rewrite_instruction_calls_for_signature_refining_raise(
           }
           out.push(0x10U.to_byte())
           out.append(encode_u32_leb128(alias_info.target)[:])
+          for _ in 0U..<alias_info.dropped_result_count {
+            out.push(0x1aU.to_byte())
+          }
           rewritten_call_count += 1U
         }
         None => out.append(instr_bytes[span.start:span.end_].to_array())
