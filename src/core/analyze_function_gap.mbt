@@ -361,4 +361,3 @@ pub fn analyze_function_size_gap(
     }
   }
 }
-

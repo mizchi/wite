@@ -825,4 +825,3 @@ pub fn analyze_wasm_breakdown(
     }
   }
 }
-

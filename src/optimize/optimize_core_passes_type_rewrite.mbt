@@ -78,7 +78,9 @@ fn rewrite_start_section_payload_for_dce_raise(
 }
 
 ///|
-fn parse_function_type_indices(payload : Bytes) -> Array[UInt] raise WiteError {
+pub fn parse_function_type_indices(
+  payload : Bytes,
+) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
@@ -89,7 +91,7 @@ fn parse_function_type_indices(payload : Bytes) -> Array[UInt] raise WiteError {
 }
 
 ///|
-priv struct ParsedTypeSectionEntry {
+pub(all) struct ParsedTypeSectionEntry {
   raw : Bytes
   form : UInt
   referenced_type_indices : Array[UInt]
@@ -199,7 +201,7 @@ fn read_type_entry_field_type_refs_raise(
 }
 
 ///|
-fn parse_type_section_entries_with_refs_raise(
+pub fn parse_type_section_entries_with_refs_raise(
   payload : Bytes,
   context : String,
 ) -> Array[ParsedTypeSectionEntry] raise WiteError {
@@ -267,7 +269,7 @@ fn parse_type_section_entries_raise(
 }
 
 ///|
-priv struct FunctionTypeEntry {
+pub(all) struct FunctionTypeEntry {
   params : Array[Bytes]
   results : Array[Bytes]
 }
@@ -303,7 +305,7 @@ fn parse_function_type_entries_raise(
 }
 
 ///|
-fn parse_function_type_entry_from_raw_raise(
+pub fn parse_function_type_entry_from_raw_raise(
   raw : Bytes,
   context : String,
 ) -> FunctionTypeEntry raise WiteError {
@@ -333,7 +335,7 @@ fn parse_function_type_entry_from_raw_raise(
 }
 
 ///|
-fn parse_function_type_param_count_from_raw_raise(
+pub fn parse_function_type_param_count_from_raw_raise(
   raw : Bytes,
   context : String,
 ) -> UInt raise WiteError {

@@ -233,7 +233,7 @@ fn run_optimize_stage_raise(
     optimized.bytes,
     function_diff_limit,
   )
-  let stage = {
+  let stage : OptimizeStageMetadata = {
     stage: stage_name,
     before_size: optimized.before_size,
     after_size: optimized.after_size,
@@ -298,4 +298,3 @@ pub fn analyze_optimize_metadata(
     }
   }
 }
-

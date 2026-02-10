@@ -244,4 +244,3 @@ fn run_new_command(args : Array[String]) -> Unit {
     }
   }
 }
-

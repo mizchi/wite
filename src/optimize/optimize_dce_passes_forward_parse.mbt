@@ -1,5 +1,5 @@
 ///|
-fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
+pub fn bytes_equal(a : Bytes, b : Bytes) -> Bool {
   if a.length() != b.length() {
     return false
   }
@@ -87,7 +87,7 @@ fn parse_forward_call_target_with_param_count(
 }
 
 ///|
-priv struct SignatureRefineAlias {
+pub(all) struct SignatureRefineAlias {
   target : UInt
   dropped_param_count : UInt
 }
@@ -225,7 +225,7 @@ fn is_i32_value_type(value_type : Bytes) -> Bool {
 }
 
 ///|
-fn collect_gc_type_canonical_map_from_entries_raise(
+pub fn collect_gc_type_canonical_map_from_entries_raise(
   parsed_type_entries : Array[ParsedTypeSectionEntry],
 ) -> Map[UInt, UInt] raise WiteError {
   let gc_type_canonical_map : Map[UInt, UInt] = {}
@@ -367,8 +367,7 @@ fn can_signature_refine_forward_to_target(
 }
 
 ///|
-priv struct CfpConstAlias {
+pub(all) struct CfpConstAlias {
   target : UInt
   appended_i32_const_instrs : Array[Bytes]
 }
-

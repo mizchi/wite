@@ -1,5 +1,5 @@
 ///|
-fn make_bool_array(length : Int, value : Bool) -> Array[Bool] {
+pub fn make_bool_array(length : Int, value : Bool) -> Array[Bool] {
   let out : Array[Bool] = []
   for _ in 0..<length {
     out.push(value)
@@ -8,7 +8,7 @@ fn make_bool_array(length : Int, value : Bool) -> Array[Bool] {
 }
 
 ///|
-fn is_visited_function_index(visited : Array[Bool], index : UInt) -> Bool {
+pub fn is_visited_function_index(visited : Array[Bool], index : UInt) -> Bool {
   let pos = UInt::reinterpret_as_int(index)
   if pos < 0 || pos >= visited.length() {
     false
@@ -18,7 +18,7 @@ fn is_visited_function_index(visited : Array[Bool], index : UInt) -> Bool {
 }
 
 ///|
-fn mark_visited_function_index(visited : Array[Bool], index : UInt) -> Bool {
+pub fn mark_visited_function_index(visited : Array[Bool], index : UInt) -> Bool {
   let pos = UInt::reinterpret_as_int(index)
   if pos < 0 || pos >= visited.length() || visited[pos] {
     false
@@ -165,7 +165,7 @@ fn rewrite_const_expr_global_indices_raise(
 }
 
 ///|
-fn parse_global_section_function_refs_raise(
+pub fn parse_global_section_function_refs_raise(
   payload : Bytes,
 ) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
@@ -183,7 +183,7 @@ fn parse_global_section_function_refs_raise(
 }
 
 ///|
-fn parse_element_section_function_refs_raise(
+pub fn parse_element_section_function_refs_raise(
   payload : Bytes,
 ) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
@@ -388,4 +388,3 @@ fn collect_used_global_indices_from_element_section_raise(
   }
   out
 }
-

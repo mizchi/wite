@@ -1,5 +1,5 @@
 ///|
-fn collect_const_call_forwarding_alias_map(
+pub fn collect_const_call_forwarding_alias_map(
   code_bodies : Array[Bytes],
   imported_function_count : UInt,
   function_type_by_index : Array[UInt],
@@ -93,7 +93,7 @@ fn collect_const_call_forwarding_alias_map(
 }
 
 ///|
-fn collect_call_forwarding_alias_map(
+pub fn collect_call_forwarding_alias_map(
   code_bodies : Array[Bytes],
   imported_function_count : UInt,
   function_type_by_index : Array[UInt],
@@ -534,7 +534,7 @@ fn apply_call_forwarding_propagation_raise(
 }
 
 ///|
-fn collect_signature_refine_alias_map(
+pub fn collect_signature_refine_alias_map(
   code_bodies : Array[Bytes],
   imported_function_count : UInt,
   function_type_by_index : Array[UInt],
@@ -808,4 +808,3 @@ fn apply_signature_refining_raise(
   }
   { bytes: Bytes::from_array(out[:]), rewritten_call_count }
 }
-

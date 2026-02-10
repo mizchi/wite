@@ -2,15 +2,61 @@
 package "mizchi/wite/optimize"
 
 import {
-  "mizchi/wite/core",
+  "mizchi/wite/types",
 }
 
 // Values
-pub fn optimize_auto_for_size(Bytes, @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.OptimizeResult, String]
+pub fn append_encoded_section(Array[Byte], UInt, Bytes) -> Unit
 
-pub fn optimize_component_for_size(Bytes, @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.OptimizeResult, String]
+pub fn apply_directize_raise(Bytes) -> DirectizeApplyResult raise @types.WiteError
 
-pub fn optimize_core_for_size(Bytes, @core.OptimizeConfig) -> Result[@core.OptimizeResult, String]
+pub fn bytes_equal(Bytes, Bytes) -> Bool
+
+pub fn clone_optimize_config(@types.OptimizeConfig, pass_rounds? : UInt, closed_world_root_exports? : Array[String]) -> @types.OptimizeConfig
+
+pub fn collect_call_forwarding_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, FunctionTypeEntry], Array[UInt], Map[UInt, UInt]) -> Map[UInt, UInt]
+
+pub fn collect_const_call_forwarding_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, FunctionTypeEntry], Map[UInt, UInt]) -> Map[UInt, CfpConstAlias]
+
+pub fn collect_direct_callees(Bytes, Array[InstrSpan]) -> (Array[UInt], Bool)
+
+pub fn collect_direct_callees_from_body_raise(Bytes) -> (Array[UInt], Bool) raise @types.WiteError
+
+pub fn collect_gc_type_canonical_map_from_entries_raise(Array[ParsedTypeSectionEntry]) -> Map[UInt, UInt] raise @types.WiteError
+
+pub fn collect_signature_refine_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, FunctionTypeEntry], Map[UInt, UInt]) -> Map[UInt, SignatureRefineAlias]
+
+pub fn error_to_string(@types.WiteError) -> String
+
+pub fn is_visited_function_index(Array[Bool], UInt) -> Bool
+
+pub fn make_bool_array(Int, Bool) -> Array[Bool]
+
+pub fn make_component_optimize_config(base? : @types.OptimizeConfig, root_name_candidates? : Array[String], exclude? : Array[String]) -> @types.OptimizeConfig
+
+pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> @types.OptimizeConfig
+
+pub fn make_runtime_profile_scenario(String, args? : Array[Int]) -> @types.RuntimeProfileScenario
+
+pub fn map_push_string_array(Map[UInt, Array[String]], UInt, String) -> Unit
+
+pub fn mark_visited_function_index(Array[Bool], UInt) -> Bool
+
+pub fn merge_export_function_names(Map[UInt, Array[String]], Map[UInt, Array[String]]) -> Unit
+
+pub fn merge_root_names(Array[String], Array[String]) -> Array[String]
+
+pub fn optimize_auto_for_size(Bytes, @types.OptimizeConfig, exclude? : Array[String]) -> Result[@types.OptimizeResult, String]
+
+pub fn optimize_binary_for_size(Bytes, config? : @types.OptimizeConfig, exclude? : Array[String]) -> Result[@types.OptimizeResult, String]
+
+pub fn optimize_component_for_size(Bytes, config? : @types.OptimizeConfig, exclude? : Array[String]) -> Result[@types.OptimizeResult, String]
+
+pub fn optimize_config_from_opt_level(String) -> @types.OptimizeConfig?
+
+pub fn optimize_core_for_size(Bytes, @types.OptimizeConfig) -> Result[@types.OptimizeResult, String]
+
+pub fn optimize_for_size(Bytes, config? : @types.OptimizeConfig) -> Result[@types.OptimizeResult, @types.WiteError]
 
 pub fn optimize_kind_auto() -> OptimizeKind
 
@@ -20,20 +66,207 @@ pub fn optimize_kind_core() -> OptimizeKind
 
 pub fn optimize_kind_name(OptimizeKind) -> String
 
-pub fn optimize_with_kind(Bytes, OptimizeKind, @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.OptimizeResult, String]
+pub fn optimize_with_kind(Bytes, OptimizeKind, @types.OptimizeConfig, exclude? : Array[String]) -> Result[@types.OptimizeResult, String]
+
+pub fn parse_code_bodies(Bytes) -> Array[Bytes] raise @types.WiteError
+
+pub fn parse_code_body_sizes(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_code_section_metrics(Bytes) -> (UInt, UInt) raise @types.WiteError
+
+pub fn parse_component_sections_raise(Bytes) -> Array[RawSection] raise @types.WiteError
+
+pub fn parse_core_sections_raise(Bytes) -> Array[RawSection] raise @types.WiteError
+
+pub fn parse_custom_section_name_prefix_end(Bytes) -> Int raise @types.WiteError
+
+pub fn parse_element_section_function_refs_raise(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_export_function_names(Bytes) -> Map[UInt, Array[String]] raise @types.WiteError
+
+pub fn parse_export_indices_by_kind(Bytes, UInt) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_function_type_entry_from_raw_raise(Bytes, String) -> FunctionTypeEntry raise @types.WiteError
+
+pub fn parse_function_type_indices(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_function_type_param_count_from_raw_raise(Bytes, String) -> UInt raise @types.WiteError
+
+pub fn parse_global_section_function_refs_raise(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_import_function_count(Bytes) -> UInt raise @types.WiteError
+
+pub fn parse_import_function_type_indices(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_instruction_spans(Bytes) -> Array[InstrSpan]?
+
+pub fn parse_local_decl_prefix_end(Bytes) -> Int raise @types.WiteError
+
+pub fn parse_name_section_function_names(Bytes) -> Map[UInt, String] raise @types.WiteError
 
 pub fn parse_optimize_kind(String) -> OptimizeKind?
+
+pub fn parse_start_function_index(Bytes) -> UInt raise @types.WiteError
+
+pub fn parse_type_section_entries_with_refs_raise(Bytes, String) -> Array[ParsedTypeSectionEntry] raise @types.WiteError
+
+pub fn parse_vec_count(Bytes) -> UInt raise @types.WiteError
+
+pub fn section_total_bytes(RawSection) -> UInt
+
+pub fn summarize_sections(Array[RawSection], Bool) -> Array[@types.SectionSize]
+
+pub fn unique_sorted(Array[String]) -> Array[String]
 
 // Errors
 
 // Types and methods
+pub(all) struct CfpConstAlias {
+  target : UInt
+  appended_i32_const_instrs : Array[Bytes]
+}
+
+pub(all) struct Cursor {
+  bytes : Bytes
+  mut pos : Int
+}
+pub fn Cursor::eof(Self) -> Bool
+pub fn Cursor::get_pos(Self) -> Int
+pub fn Cursor::new(Bytes) -> Self
+pub fn Cursor::read_byte(Self) -> Byte raise @types.WiteError
+pub fn Cursor::read_u32_leb128(Self) -> UInt raise @types.WiteError
+pub fn Cursor::set_pos(Self, Int) -> Unit
+pub fn Cursor::skip(Self, Int) -> Unit raise @types.WiteError
+
+pub(all) struct DirectizeApplyResult {
+  bytes : Bytes
+  rewritten_call_count : UInt
+}
+
+pub(all) struct FunctionTypeEntry {
+  params : Array[Bytes]
+  results : Array[Bytes]
+}
+
+pub(all) struct InstrSpan {
+  start : Int
+  end_ : Int
+  opcode : UInt
+}
+
+pub(all) struct OpenCodeBlock {
+  entry_index : Int
+  start_span_index : Int
+  start_offset : Int
+}
+
 pub enum OptimizeKind {
   Auto
   Core
   Component
 }
 
+pub(all) struct ParsedTypeSectionEntry {
+  raw : Bytes
+  form : UInt
+  referenced_type_indices : Array[UInt]
+}
+
+pub(all) struct RawSection {
+  section_id : UInt
+  section_start : Int
+  payload_start : Int
+  section_end : Int
+  custom_name : String?
+}
+
+pub(all) struct SignatureRefineAlias {
+  target : UInt
+  dropped_param_count : UInt
+}
+
 // Type aliases
+pub using @types {type CallGraphNode}
+
+pub using @types {type CallGraphReport}
+
+pub using @types {type CallGraphSummary}
+
+pub using @types {type CodeBlockSize}
+
+pub using @types {type CodeBlockSizeReport}
+
+pub using @types {type ComponentCallGraphReport}
+
+pub using @types {type ComponentCoreOptimizeEntry}
+
+pub using @types {type ComponentCoreOptimizeReport}
+
+pub using @types {type ComponentFunctionSizeReport}
+
+pub using @types {type ComponentProfile}
+
+pub using @types {type ComponentRootPolicyReport}
+
+pub using @types {type ContractReport}
+
+pub using @types {type CustomSectionBreakdown}
+
+pub using @types {type DceReport}
+
+pub using @types {type FunctionGapEntry}
+
+pub using @types {type FunctionGapReport}
+
+pub using @types {type FunctionSize}
+
+pub using @types {type FunctionSizeDiff}
+
+pub using @types {type HostCodeHint}
+
+pub using @types {type HostGeneratedCodeReport}
+
+pub using @types {type HotnessSizeBucket}
+
+pub using @types {type HotnessSizeEntry}
+
+pub using @types {type HotnessSizeMatrixReport}
+
+pub using @types {type HotnessUnresolvedReasonCount}
+
+pub using @types {type KeepReasonEntry}
+
+pub using @types {type KeepReasonReport}
+
+pub using @types {type ModuleProfile}
+
+pub using @types {type OpcodeStat}
+
+pub using @types {type OptimizeConfig}
+
+pub using @types {type OptimizeMetadataReport}
+
+pub using @types {type OptimizeResult}
+
+pub using @types {type OptimizeStageMetadata}
+
+pub using @types {type RetainPathEntry}
+
+pub using @types {type RetainPathReport}
+
+pub using @types {type RuntimeFunctionProfile}
+
+pub using @types {type RuntimeProfile}
+
+pub using @types {type RuntimeProfileScenario}
+
+pub using @types {type RuntimeUnresolvedExport}
+
+pub using @types {type SectionSize}
+
+pub using @types {type WasmBreakdownReport}
+
+pub using @types {type WiteError}
 
 // Traits
 

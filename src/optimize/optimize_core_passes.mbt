@@ -185,12 +185,22 @@ fn collect_optimize_no_change_reasons(
       )
   }
   if config.enable_dce {
-    match analyze_dce_report(before) {
+    let export_root_names = export_root_names_from_config(config)
+    let report_result = try? analyze_call_graph_raise(before, export_root_names)
+    match report_result {
       Ok(report) =>
         if report.partial {
           push_reason(reasons, "dce skipped: partial call graph")
-        } else if report.removable_function_count == 0U {
-          push_reason(reasons, "dce found no removable functions")
+        } else {
+          let mut removable_function_count = 0U
+          for node in report.nodes {
+            if not(node.reachable_from_roots) {
+              removable_function_count += 1U
+            }
+          }
+          if removable_function_count == 0U {
+            push_reason(reasons, "dce found no removable functions")
+          }
         }
       Err(_) => push_reason(reasons, "dce analysis failed")
     }

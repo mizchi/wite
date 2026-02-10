@@ -5,5 +5,5 @@
 `profile_runtime_zero_arg_exports` / `analyze_hotness_size_matrix` の runtime 計測は JS runtime 依存のため、`native/wasm` ターゲットではエラーを返します。
 
 ```mbt nocheck
-// Public API is defined in src/core/lib.mbt
+// Shared public types are defined in src/types/types.mbt
 ```

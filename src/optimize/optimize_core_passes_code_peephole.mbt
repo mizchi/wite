@@ -57,6 +57,26 @@ fn is_dae_pure_i32_binary_opcode(opcode : UInt) -> Bool {
 }
 
 ///|
+fn parse_prefixed_opcode_subopcode(
+  instr_bytes : Bytes,
+  span : InstrSpan,
+) -> UInt? {
+  if span.opcode != 0xfcU && span.opcode != 0xfdU {
+    return None
+  }
+  if span.end_ <= span.start + 1 {
+    return None
+  }
+  let parser = Cursor::new(instr_bytes)
+  parser.set_pos(span.start + 1)
+  let result = try? parser.read_u32_leb128()
+  match result {
+    Ok(v) => if parser.get_pos() <= span.end_ { Some(v) } else { None }
+    Err(_) => None
+  }
+}
+
+///|
 fn rewrite_instruction_for_dae_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
@@ -1247,7 +1267,7 @@ fn parse_local_decl_prefix_raise(
 }
 
 ///|
-fn parse_local_decl_prefix_end(body_bytes : Bytes) -> Int raise WiteError {
+pub fn parse_local_decl_prefix_end(body_bytes : Bytes) -> Int raise WiteError {
   parse_local_decl_prefix_raise(body_bytes).prefix_end
 }
 

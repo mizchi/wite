@@ -112,4 +112,3 @@ fn run_diff_command(args : Array[String]) -> Unit {
     None => ()
   }
 }
-

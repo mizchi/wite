@@ -81,4 +81,3 @@ priv struct SignaturePruneApplyResult {
   pruned_function_count : UInt
   pruned_param_count : UInt
 }
-

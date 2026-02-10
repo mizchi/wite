@@ -1,5 +1,5 @@
 ///|
-pub suberror WiteError {
+pub(all) suberror WiteError {
   UnexpectedEof
   InvalidMagic
   UnsupportedVersion(String)
@@ -22,14 +22,14 @@ pub fn error_to_string(err : WiteError) -> String {
 }
 
 ///|
-pub struct SectionSize {
+pub(all) struct SectionSize {
   key : String
   section_id : UInt
   total_bytes : UInt
 }
 
 ///|
-pub struct OptimizeConfig {
+pub(all) struct OptimizeConfig {
   strip_all_custom : Bool
   strip_name_section : Bool
   strip_producers_section : Bool
@@ -312,7 +312,7 @@ pub fn make_optimize_config(
 }
 
 ///|
-pub struct OptimizeResult {
+pub(all) struct OptimizeResult {
   bytes : Bytes
   before_size : UInt
   after_size : UInt
@@ -321,7 +321,7 @@ pub struct OptimizeResult {
 }
 
 ///|
-pub struct ModuleProfile {
+pub(all) struct ModuleProfile {
   total_bytes : UInt
   function_count : UInt
   import_count : UInt
@@ -332,7 +332,7 @@ pub struct ModuleProfile {
 }
 
 ///|
-pub struct FunctionSize {
+pub(all) struct FunctionSize {
   function_index : UInt
   body_bytes : UInt
   name : String?
@@ -340,7 +340,7 @@ pub struct FunctionSize {
 }
 
 ///|
-pub struct FunctionGapEntry {
+pub(all) struct FunctionGapEntry {
   match_kind : String
   match_key : String
   left_function_index : UInt?
@@ -356,7 +356,7 @@ pub struct FunctionGapEntry {
 }
 
 ///|
-pub struct FunctionGapReport {
+pub(all) struct FunctionGapReport {
   left_total_body_bytes : UInt
   right_total_body_bytes : UInt
   left_minus_right_total_bytes : Int
@@ -366,7 +366,7 @@ pub struct FunctionGapReport {
 }
 
 ///|
-pub struct CodeBlockSize {
+pub(all) struct CodeBlockSize {
   function_index : UInt
   function_name : String?
   export_names : Array[String]
@@ -380,7 +380,7 @@ pub struct CodeBlockSize {
 }
 
 ///|
-pub struct CodeBlockSizeReport {
+pub(all) struct CodeBlockSizeReport {
   partial : Bool
   function_count : UInt
   block_count : UInt
@@ -390,7 +390,7 @@ pub struct CodeBlockSizeReport {
 }
 
 ///|
-pub struct CustomSectionBreakdown {
+pub(all) struct CustomSectionBreakdown {
   name : String
   count : UInt
   total_bytes : UInt
@@ -399,7 +399,7 @@ pub struct CustomSectionBreakdown {
 }
 
 ///|
-pub struct OpcodeStat {
+pub(all) struct OpcodeStat {
   key : String
   mnemonic : String
   count : UInt
@@ -407,7 +407,7 @@ pub struct OpcodeStat {
 }
 
 ///|
-pub struct WasmBreakdownReport {
+pub(all) struct WasmBreakdownReport {
   total_bytes : UInt
   sections : Array[SectionSize]
   custom_sections : Array[CustomSectionBreakdown]
@@ -427,7 +427,7 @@ pub struct WasmBreakdownReport {
 }
 
 ///|
-pub struct CallGraphNode {
+pub(all) struct CallGraphNode {
   function_index : UInt
   body_bytes : UInt
   name : String?
@@ -437,7 +437,7 @@ pub struct CallGraphNode {
 }
 
 ///|
-pub struct CallGraphReport {
+pub(all) struct CallGraphReport {
   imported_function_count : UInt
   local_function_count : UInt
   roots : Array[UInt]
@@ -449,7 +449,7 @@ pub struct CallGraphReport {
 }
 
 ///|
-pub struct CallGraphSummary {
+pub(all) struct CallGraphSummary {
   imported_function_count : UInt
   local_function_count : UInt
   roots : Array[UInt]
@@ -462,7 +462,7 @@ pub struct CallGraphSummary {
 }
 
 ///|
-pub struct HostCodeHint {
+pub(all) struct HostCodeHint {
   kind : String
   function_index : UInt
   function_name : String?
@@ -474,7 +474,7 @@ pub struct HostCodeHint {
 }
 
 ///|
-pub struct HostGeneratedCodeReport {
+pub(all) struct HostGeneratedCodeReport {
   imported_function_count : UInt
   local_function_count : UInt
   param_forwarding_thunk_count : UInt
@@ -488,7 +488,7 @@ pub struct HostGeneratedCodeReport {
 }
 
 ///|
-pub struct FunctionSizeDiff {
+pub(all) struct FunctionSizeDiff {
   function_index : UInt
   before_body_bytes : UInt
   after_body_bytes : UInt
@@ -500,7 +500,7 @@ pub struct FunctionSizeDiff {
 }
 
 ///|
-pub struct OptimizeStageMetadata {
+pub(all) struct OptimizeStageMetadata {
   stage : String
   before_size : UInt
   after_size : UInt
@@ -514,7 +514,7 @@ pub struct OptimizeStageMetadata {
 }
 
 ///|
-pub struct OptimizeMetadataReport {
+pub(all) struct OptimizeMetadataReport {
   before_size : UInt
   after_size : UInt
   total_gain_bytes : UInt
@@ -523,7 +523,7 @@ pub struct OptimizeMetadataReport {
 }
 
 ///|
-pub struct DceReport {
+pub(all) struct DceReport {
   roots : Array[UInt]
   partial : Bool
   removable_function_count : UInt
@@ -532,7 +532,7 @@ pub struct DceReport {
 }
 
 ///|
-pub struct ComponentProfile {
+pub(all) struct ComponentProfile {
   total_bytes : UInt
   import_count : UInt
   export_count : UInt
@@ -543,7 +543,7 @@ pub struct ComponentProfile {
 }
 
 ///|
-pub struct ComponentFunctionSizeReport {
+pub(all) struct ComponentFunctionSizeReport {
   module_index : UInt
   function_count : UInt
   total_body_bytes : UInt
@@ -551,13 +551,13 @@ pub struct ComponentFunctionSizeReport {
 }
 
 ///|
-pub struct ComponentCallGraphReport {
+pub(all) struct ComponentCallGraphReport {
   module_index : UInt
   graph : CallGraphReport
 }
 
 ///|
-pub struct ComponentCoreOptimizeEntry {
+pub(all) struct ComponentCoreOptimizeEntry {
   module_index : UInt
   before_bytes : UInt
   after_bytes : UInt
@@ -566,7 +566,7 @@ pub struct ComponentCoreOptimizeEntry {
 }
 
 ///|
-pub struct ComponentCoreOptimizeReport {
+pub(all) struct ComponentCoreOptimizeReport {
   total_component_bytes : UInt
   core_module_count : UInt
   total_core_before_bytes : UInt
@@ -575,7 +575,7 @@ pub struct ComponentCoreOptimizeReport {
 }
 
 ///|
-pub struct ContractReport {
+pub(all) struct ContractReport {
   component_imports : Array[String]
   component_exports : Array[String]
   wit_imports : Array[String]
@@ -585,7 +585,7 @@ pub struct ContractReport {
 }
 
 ///|
-pub struct KeepReasonEntry {
+pub(all) struct KeepReasonEntry {
   function_index : UInt
   name : String?
   export_names : Array[String]
@@ -593,13 +593,13 @@ pub struct KeepReasonEntry {
 }
 
 ///|
-pub struct KeepReasonReport {
+pub(all) struct KeepReasonReport {
   partial : Bool
   entries : Array[KeepReasonEntry]
 }
 
 ///|
-pub struct RetainPathEntry {
+pub(all) struct RetainPathEntry {
   function_index : UInt
   name : String?
   export_names : Array[String]
@@ -609,14 +609,14 @@ pub struct RetainPathEntry {
 }
 
 ///|
-pub struct RetainPathReport {
+pub(all) struct RetainPathReport {
   partial : Bool
   roots : Array[UInt]
   entries : Array[RetainPathEntry]
 }
 
 ///|
-pub struct HotnessSizeEntry {
+pub(all) struct HotnessSizeEntry {
   export_name : String
   function_index : UInt?
   function_name : String?
@@ -630,7 +630,7 @@ pub struct HotnessSizeEntry {
 }
 
 ///|
-pub struct HotnessSizeBucket {
+pub(all) struct HotnessSizeBucket {
   bucket : String
   count : UInt
   body_bytes : UInt
@@ -638,13 +638,13 @@ pub struct HotnessSizeBucket {
 }
 
 ///|
-pub struct HotnessUnresolvedReasonCount {
+pub(all) struct HotnessUnresolvedReasonCount {
   reason : String
   count : UInt
 }
 
 ///|
-pub struct HotnessSizeMatrixReport {
+pub(all) struct HotnessSizeMatrixReport {
   iterations : UInt
   instantiate_ns : UInt64
   hot_threshold_ns : UInt64
@@ -656,7 +656,7 @@ pub struct HotnessSizeMatrixReport {
 }
 
 ///|
-pub struct ComponentRootPolicyReport {
+pub(all) struct ComponentRootPolicyReport {
   component_imports : Array[String]
   component_exports : Array[String]
   wit_imports : Array[String]
@@ -666,7 +666,7 @@ pub struct ComponentRootPolicyReport {
 }
 
 ///|
-pub struct RuntimeFunctionProfile {
+pub(all) struct RuntimeFunctionProfile {
   name : String
   calls : UInt
   total_ns : UInt64
@@ -674,14 +674,14 @@ pub struct RuntimeFunctionProfile {
 }
 
 ///|
-pub struct RuntimeUnresolvedExport {
+pub(all) struct RuntimeUnresolvedExport {
   export_name : String
   reason : String
   detail : String
 }
 
 ///|
-pub struct RuntimeProfileScenario {
+pub(all) struct RuntimeProfileScenario {
   export_name : String
   args : Array[Int]
 }
@@ -695,16 +695,10 @@ pub fn make_runtime_profile_scenario(
 }
 
 ///|
-pub struct RuntimeProfile {
+pub(all) struct RuntimeProfile {
   instantiate_ns : UInt64
   iterations : UInt
   functions : Array[RuntimeFunctionProfile]
   skipped_exports : Array[String]
   unresolved_exports : Array[RuntimeUnresolvedExport]
-}
-
-///|
-priv struct Cursor {
-  bytes : Bytes
-  mut pos : Int
 }

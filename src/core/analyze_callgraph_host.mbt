@@ -547,4 +547,3 @@ pub fn analyze_host_generated_code(
     }
   }
 }
-

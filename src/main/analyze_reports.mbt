@@ -1102,4 +1102,3 @@ fn run_root_policy(args : Array[String]) -> Unit {
     component_path, wit_path, excludes,
   )
 }
-

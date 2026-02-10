@@ -7,4 +7,3 @@ async fn run_install_command(args : Array[String]) -> Unit {
   }
   @wite_deps.run_deps_sync_command(synth, print_usage)
 }
-

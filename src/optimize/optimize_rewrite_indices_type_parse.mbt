@@ -1,5 +1,5 @@
 ///|
-fn parse_instruction_spans(instr_bytes : Bytes) -> Array[InstrSpan]? {
+pub fn parse_instruction_spans(instr_bytes : Bytes) -> Array[InstrSpan]? {
   let result = try? parse_instruction_spans_raise(instr_bytes)
   match result {
     Ok(v) => Some(v)
@@ -32,7 +32,7 @@ fn decode_u32_leb128_range(bytes : Bytes, start : Int, end_ : Int) -> UInt? {
 }
 
 ///|
-fn collect_direct_callees(
+pub fn collect_direct_callees(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
 ) -> (Array[UInt], Bool) {
@@ -52,7 +52,7 @@ fn collect_direct_callees(
 }
 
 ///|
-fn collect_direct_callees_from_body_raise(
+pub fn collect_direct_callees_from_body_raise(
   body : Bytes,
 ) -> (Array[UInt], Bool) raise WiteError {
   let prefix_end = parse_local_decl_prefix_end(body)
@@ -372,4 +372,3 @@ fn push_unique_u32(out : Array[UInt], value : UInt) -> Unit {
     out.push(value)
   }
 }
-

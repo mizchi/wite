@@ -3,156 +3,156 @@ package "mizchi/wite"
 
 import {
   "mizchi/wit",
-  "mizchi/wite/core",
+  "mizchi/wite/types",
 }
 
 // Values
-pub fn analyze_call_graph(Bytes) -> Result[@core.CallGraphReport, @core.WiteError]
+pub fn analyze_call_graph(Bytes) -> Result[@types.CallGraphReport, @types.WiteError]
 
-pub fn analyze_call_graph_summary(Bytes) -> Result[@core.CallGraphSummary, @core.WiteError]
+pub fn analyze_call_graph_summary(Bytes) -> Result[@types.CallGraphSummary, @types.WiteError]
 
-pub fn analyze_code_block_sizes(Bytes) -> Result[@core.CodeBlockSizeReport, @core.WiteError]
+pub fn analyze_code_block_sizes(Bytes) -> Result[@types.CodeBlockSizeReport, @types.WiteError]
 
-pub fn analyze_component_call_graphs(Bytes) -> Result[Array[@core.ComponentCallGraphReport], String]
+pub fn analyze_component_call_graphs(Bytes) -> Result[Array[@types.ComponentCallGraphReport], String]
 
-pub fn analyze_component_contract(Bytes, @wit.ResolveInput) -> Result[@core.ContractReport, String]
+pub fn analyze_component_contract(Bytes, @wit.ResolveInput) -> Result[@types.ContractReport, String]
 
-pub fn analyze_component_core_optimize(Bytes, config? : @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.ComponentCoreOptimizeReport, String]
+pub fn analyze_component_core_optimize(Bytes, config? : @types.OptimizeConfig, exclude? : Array[String]) -> Result[@types.ComponentCoreOptimizeReport, String]
 
-pub fn analyze_component_function_sizes(Bytes) -> Result[Array[@core.ComponentFunctionSizeReport], String]
+pub fn analyze_component_function_sizes(Bytes) -> Result[Array[@types.ComponentFunctionSizeReport], String]
 
-pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput?, exclude? : Array[String]) -> Result[@core.ComponentRootPolicyReport, String]
+pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput?, exclude? : Array[String]) -> Result[@types.ComponentRootPolicyReport, String]
 
-pub fn analyze_dce_report(Bytes) -> Result[@core.DceReport, @core.WiteError]
+pub fn analyze_dce_report(Bytes) -> Result[@types.DceReport, @types.WiteError]
 
-pub fn analyze_function_size_gap(Bytes, Bytes, top_limit? : UInt) -> Result[@core.FunctionGapReport, @core.WiteError]
+pub fn analyze_function_size_gap(Bytes, Bytes, top_limit? : UInt) -> Result[@types.FunctionGapReport, @types.WiteError]
 
-pub fn analyze_function_sizes(Bytes) -> Result[Array[@core.FunctionSize], @core.WiteError]
+pub fn analyze_function_sizes(Bytes) -> Result[Array[@types.FunctionSize], @types.WiteError]
 
-pub fn analyze_host_generated_code(Bytes) -> Result[@core.HostGeneratedCodeReport, @core.WiteError]
+pub fn analyze_host_generated_code(Bytes) -> Result[@types.HostGeneratedCodeReport, @types.WiteError]
 
-pub fn analyze_hotness_size_matrix(Bytes, iterations? : UInt, scenarios? : Array[@core.RuntimeProfileScenario]) -> Result[@core.HotnessSizeMatrixReport, String]
+pub fn analyze_hotness_size_matrix(Bytes, iterations? : UInt, scenarios? : Array[@types.RuntimeProfileScenario]) -> Result[@types.HotnessSizeMatrixReport, String]
 
-pub fn analyze_keep_reasons(Bytes, config? : @core.OptimizeConfig) -> Result[@core.KeepReasonReport, @core.WiteError]
+pub fn analyze_keep_reasons(Bytes, config? : @types.OptimizeConfig) -> Result[@types.KeepReasonReport, @types.WiteError]
 
-pub fn analyze_optimize_metadata(Bytes, config? : @core.OptimizeConfig, function_diff_limit? : UInt) -> Result[@core.OptimizeMetadataReport, @core.WiteError]
+pub fn analyze_optimize_metadata(Bytes, config? : @types.OptimizeConfig, function_diff_limit? : UInt) -> Result[@types.OptimizeMetadataReport, @types.WiteError]
 
-pub fn analyze_retain_paths(Bytes, config? : @core.OptimizeConfig) -> Result[@core.RetainPathReport, @core.WiteError]
+pub fn analyze_retain_paths(Bytes, config? : @types.OptimizeConfig) -> Result[@types.RetainPathReport, @types.WiteError]
 
-pub fn analyze_section_sizes(Bytes) -> Result[Array[@core.SectionSize], @core.WiteError]
+pub fn analyze_section_sizes(Bytes) -> Result[Array[@types.SectionSize], @types.WiteError]
 
-pub fn analyze_wasm_breakdown(Bytes, top_limit? : UInt) -> Result[@core.WasmBreakdownReport, @core.WiteError]
+pub fn analyze_wasm_breakdown(Bytes, top_limit? : UInt) -> Result[@types.WasmBreakdownReport, @types.WiteError]
 
-pub fn error_to_string(@core.WiteError) -> String
+pub fn error_to_string(@types.WiteError) -> String
 
-pub fn make_component_optimize_config(base? : @core.OptimizeConfig, root_name_candidates? : Array[String], exclude? : Array[String]) -> @core.OptimizeConfig
+pub fn make_component_optimize_config(base? : @types.OptimizeConfig, root_name_candidates? : Array[String], exclude? : Array[String]) -> @types.OptimizeConfig
 
-pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> @core.OptimizeConfig
+pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> @types.OptimizeConfig
 
-pub fn make_runtime_profile_scenario(String, args? : Array[Int]) -> @core.RuntimeProfileScenario
+pub fn make_runtime_profile_scenario(String, args? : Array[Int]) -> @types.RuntimeProfileScenario
 
-pub fn optimize_binary_for_size(Bytes, config? : @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.OptimizeResult, String]
+pub fn optimize_binary_for_size(Bytes, config? : @types.OptimizeConfig, exclude? : Array[String]) -> Result[@types.OptimizeResult, String]
 
-pub fn optimize_component_for_size(Bytes, config? : @core.OptimizeConfig, exclude? : Array[String]) -> Result[@core.OptimizeResult, String]
+pub fn optimize_component_for_size(Bytes, config? : @types.OptimizeConfig, exclude? : Array[String]) -> Result[@types.OptimizeResult, String]
 
-pub fn optimize_config_from_opt_level(String) -> @core.OptimizeConfig?
+pub fn optimize_config_from_opt_level(String) -> @types.OptimizeConfig?
 
-pub fn optimize_for_size(Bytes, config? : @core.OptimizeConfig) -> Result[@core.OptimizeResult, @core.WiteError]
+pub fn optimize_for_size(Bytes, config? : @types.OptimizeConfig) -> Result[@types.OptimizeResult, @types.WiteError]
 
-pub fn profile_component(Bytes) -> Result[@core.ComponentProfile, String]
+pub fn profile_component(Bytes) -> Result[@types.ComponentProfile, String]
 
-pub fn profile_module(Bytes) -> Result[@core.ModuleProfile, @core.WiteError]
+pub fn profile_module(Bytes) -> Result[@types.ModuleProfile, @types.WiteError]
 
-pub fn profile_runtime_exports(Bytes, iterations? : UInt, scenarios? : Array[@core.RuntimeProfileScenario]) -> Result[@core.RuntimeProfile, String]
+pub fn profile_runtime_exports(Bytes, iterations? : UInt, scenarios? : Array[@types.RuntimeProfileScenario]) -> Result[@types.RuntimeProfile, String]
 
-pub fn profile_runtime_zero_arg_exports(Bytes, iterations? : UInt) -> Result[@core.RuntimeProfile, String]
+pub fn profile_runtime_zero_arg_exports(Bytes, iterations? : UInt) -> Result[@types.RuntimeProfile, String]
 
 // Errors
 
 // Types and methods
 
 // Type aliases
-pub using @core {type CallGraphNode}
+pub using @types {type CallGraphNode}
 
-pub using @core {type CallGraphReport}
+pub using @types {type CallGraphReport}
 
-pub using @core {type CallGraphSummary}
+pub using @types {type CallGraphSummary}
 
-pub using @core {type CodeBlockSize}
+pub using @types {type CodeBlockSize}
 
-pub using @core {type CodeBlockSizeReport}
+pub using @types {type CodeBlockSizeReport}
 
-pub using @core {type ComponentCallGraphReport}
+pub using @types {type ComponentCallGraphReport}
 
-pub using @core {type ComponentCoreOptimizeEntry}
+pub using @types {type ComponentCoreOptimizeEntry}
 
-pub using @core {type ComponentCoreOptimizeReport}
+pub using @types {type ComponentCoreOptimizeReport}
 
-pub using @core {type ComponentFunctionSizeReport}
+pub using @types {type ComponentFunctionSizeReport}
 
-pub using @core {type ComponentProfile}
+pub using @types {type ComponentProfile}
 
-pub using @core {type ComponentRootPolicyReport}
+pub using @types {type ComponentRootPolicyReport}
 
-pub using @core {type ContractReport}
+pub using @types {type ContractReport}
 
-pub using @core {type CustomSectionBreakdown}
+pub using @types {type CustomSectionBreakdown}
 
-pub using @core {type DceReport}
+pub using @types {type DceReport}
 
-pub using @core {type FunctionGapEntry}
+pub using @types {type FunctionGapEntry}
 
-pub using @core {type FunctionGapReport}
+pub using @types {type FunctionGapReport}
 
-pub using @core {type FunctionSize}
+pub using @types {type FunctionSize}
 
-pub using @core {type FunctionSizeDiff}
+pub using @types {type FunctionSizeDiff}
 
-pub using @core {type HostCodeHint}
+pub using @types {type HostCodeHint}
 
-pub using @core {type HostGeneratedCodeReport}
+pub using @types {type HostGeneratedCodeReport}
 
-pub using @core {type HotnessSizeBucket}
+pub using @types {type HotnessSizeBucket}
 
-pub using @core {type HotnessSizeEntry}
+pub using @types {type HotnessSizeEntry}
 
-pub using @core {type HotnessSizeMatrixReport}
+pub using @types {type HotnessSizeMatrixReport}
 
-pub using @core {type HotnessUnresolvedReasonCount}
+pub using @types {type HotnessUnresolvedReasonCount}
 
-pub using @core {type KeepReasonEntry}
+pub using @types {type KeepReasonEntry}
 
-pub using @core {type KeepReasonReport}
+pub using @types {type KeepReasonReport}
 
-pub using @core {type ModuleProfile}
+pub using @types {type ModuleProfile}
 
-pub using @core {type OpcodeStat}
+pub using @types {type OpcodeStat}
 
-pub using @core {type OptimizeConfig}
+pub using @types {type OptimizeConfig}
 
-pub using @core {type OptimizeMetadataReport}
+pub using @types {type OptimizeMetadataReport}
 
-pub using @core {type OptimizeResult}
+pub using @types {type OptimizeResult}
 
-pub using @core {type OptimizeStageMetadata}
+pub using @types {type OptimizeStageMetadata}
 
-pub using @core {type RetainPathEntry}
+pub using @types {type RetainPathEntry}
 
-pub using @core {type RetainPathReport}
+pub using @types {type RetainPathReport}
 
-pub using @core {type RuntimeFunctionProfile}
+pub using @types {type RuntimeFunctionProfile}
 
-pub using @core {type RuntimeProfile}
+pub using @types {type RuntimeProfile}
 
-pub using @core {type RuntimeProfileScenario}
+pub using @types {type RuntimeProfileScenario}
 
-pub using @core {type RuntimeUnresolvedExport}
+pub using @types {type RuntimeUnresolvedExport}
 
-pub using @core {type SectionSize}
+pub using @types {type SectionSize}
 
-pub using @core {type WasmBreakdownReport}
+pub using @types {type WasmBreakdownReport}
 
-pub using @core {type WiteError}
+pub using @types {type WiteError}
 
 // Traits
 

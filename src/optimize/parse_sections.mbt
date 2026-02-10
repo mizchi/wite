@@ -1,25 +1,25 @@
 ///|
-fn Cursor::new(bytes : Bytes) -> Self {
+pub fn Cursor::new(bytes : Bytes) -> Self {
   { bytes, pos: 0 }
 }
 
 ///|
-fn Cursor::eof(self : Cursor) -> Bool {
+pub fn Cursor::eof(self : Cursor) -> Bool {
   self.pos >= self.bytes.length()
 }
 
 ///|
-fn Cursor::get_pos(self : Cursor) -> Int {
+pub fn Cursor::get_pos(self : Cursor) -> Int {
   self.pos
 }
 
 ///|
-fn Cursor::set_pos(self : Cursor, pos : Int) -> Unit {
+pub fn Cursor::set_pos(self : Cursor, pos : Int) -> Unit {
   self.pos = pos
 }
 
 ///|
-fn Cursor::read_byte(self : Cursor) -> Byte raise WiteError {
+pub fn Cursor::read_byte(self : Cursor) -> Byte raise WiteError {
   if self.pos < self.bytes.length() {
     let b = self.bytes.unsafe_get(self.pos)
     self.pos = self.pos + 1
@@ -30,7 +30,7 @@ fn Cursor::read_byte(self : Cursor) -> Byte raise WiteError {
 }
 
 ///|
-fn Cursor::read_u32_leb128(self : Cursor) -> UInt raise WiteError {
+pub fn Cursor::read_u32_leb128(self : Cursor) -> UInt raise WiteError {
   fn read_loop(shift : Int, result : UInt) -> UInt raise WiteError {
     let byte = self.read_byte()
     if shift >= 28 && (byte & 0x80) != 0 {
@@ -52,7 +52,7 @@ fn Cursor::read_u32_leb128(self : Cursor) -> UInt raise WiteError {
 }
 
 ///|
-fn Cursor::skip(self : Cursor, n : Int) -> Unit raise WiteError {
+pub fn Cursor::skip(self : Cursor, n : Int) -> Unit raise WiteError {
   if n < 0 {
     raise WiteError::InvalidFormat("negative skip")
   }
@@ -64,7 +64,7 @@ fn Cursor::skip(self : Cursor, n : Int) -> Unit raise WiteError {
 }
 
 ///|
-priv struct RawSection {
+pub(all) struct RawSection {
   section_id : UInt
   section_start : Int
   payload_start : Int
@@ -175,7 +175,7 @@ fn parse_sections_from(
 }
 
 ///|
-fn parse_core_sections_raise(
+pub fn parse_core_sections_raise(
   bytes : Bytes,
 ) -> Array[RawSection] raise WiteError {
   ensure_core_header(bytes)
@@ -183,7 +183,7 @@ fn parse_core_sections_raise(
 }
 
 ///|
-fn parse_component_sections_raise(
+pub fn parse_component_sections_raise(
   bytes : Bytes,
 ) -> Array[RawSection] raise WiteError {
   ensure_component_header(bytes)
@@ -191,7 +191,7 @@ fn parse_component_sections_raise(
 }
 
 ///|
-fn section_total_bytes(section : RawSection) -> UInt {
+pub fn section_total_bytes(section : RawSection) -> UInt {
   (section.section_end - section.section_start).reinterpret_as_uint()
 }
 
@@ -249,7 +249,7 @@ fn section_key(section : RawSection, component : Bool) -> String {
 }
 
 ///|
-fn summarize_sections(
+pub fn summarize_sections(
   sections : Array[RawSection],
   component : Bool,
 ) -> Array[SectionSize] {
@@ -285,13 +285,15 @@ fn summarize_sections(
 }
 
 ///|
-fn parse_vec_count(payload : Bytes) -> UInt raise WiteError {
+pub fn parse_vec_count(payload : Bytes) -> UInt raise WiteError {
   let parser = Cursor::new(payload)
   parser.read_u32_leb128()
 }
 
 ///|
-fn parse_code_section_metrics(payload : Bytes) -> (UInt, UInt) raise WiteError {
+pub fn parse_code_section_metrics(
+  payload : Bytes,
+) -> (UInt, UInt) raise WiteError {
   let parser = Cursor::new(payload)
   let body_count = parser.read_u32_leb128()
   let mut total_body_bytes = 0U
@@ -353,7 +355,7 @@ fn bytes_to_name_string(bytes : Bytes) -> String {
 }
 
 ///|
-fn parse_code_body_sizes(payload : Bytes) -> Array[UInt] raise WiteError {
+pub fn parse_code_body_sizes(payload : Bytes) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
   let body_count = parser.read_u32_leb128()
   let body_sizes : Array[UInt] = []
@@ -370,7 +372,7 @@ fn parse_code_body_sizes(payload : Bytes) -> Array[UInt] raise WiteError {
 }
 
 ///|
-fn parse_code_bodies(payload : Bytes) -> Array[Bytes] raise WiteError {
+pub fn parse_code_bodies(payload : Bytes) -> Array[Bytes] raise WiteError {
   let parser = Cursor::new(payload)
   let body_count = parser.read_u32_leb128()
   let out : Array[Bytes] = []
@@ -392,7 +394,7 @@ fn parse_code_bodies(payload : Bytes) -> Array[Bytes] raise WiteError {
 }
 
 ///|
-fn parse_start_function_index(payload : Bytes) -> UInt raise WiteError {
+pub fn parse_start_function_index(payload : Bytes) -> UInt raise WiteError {
   let parser = Cursor::new(payload)
   parser.read_u32_leb128()
 }
@@ -407,7 +409,7 @@ fn parse_limits(parser : Cursor) -> Unit raise WiteError {
 }
 
 ///|
-fn parse_import_function_count(payload : Bytes) -> UInt raise WiteError {
+pub fn parse_import_function_count(payload : Bytes) -> UInt raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let mut function_import_count = 0U
@@ -611,7 +613,7 @@ fn rewrite_import_section_payload_for_keep_kinds_raise(
 }
 
 ///|
-fn parse_import_function_type_indices(
+pub fn parse_import_function_type_indices(
   payload : Bytes,
 ) -> Array[UInt] raise WiteError {
   let parser = Cursor::new(payload)
@@ -646,7 +648,7 @@ fn parse_import_function_type_indices(
 }
 
 ///|
-fn map_push_string_array(
+pub fn map_push_string_array(
   grouped : Map[UInt, Array[String]],
   key : UInt,
   value : String,
@@ -662,7 +664,7 @@ fn map_push_string_array(
 }
 
 ///|
-fn parse_export_function_names(
+pub fn parse_export_function_names(
   payload : Bytes,
 ) -> Map[UInt, Array[String]] raise WiteError {
   let parser = Cursor::new(payload)
@@ -695,7 +697,20 @@ fn parse_export_global_indices(payload : Bytes) -> Array[UInt] raise WiteError {
 }
 
 ///|
-fn parse_export_indices_by_kind(
+fn push_unique_u32_with_seen(
+  out : Array[UInt],
+  seen : Map[UInt, Bool],
+  value : UInt,
+) -> Unit {
+  if seen.get(value) is Some(_) {
+    return
+  }
+  seen.set(value, true)
+  out.push(value)
+}
+
+///|
+pub fn parse_export_indices_by_kind(
   payload : Bytes,
   kind_filter : UInt,
 ) -> Array[UInt] raise WiteError {
@@ -715,7 +730,7 @@ fn parse_export_indices_by_kind(
 }
 
 ///|
-fn merge_export_function_names(
+pub fn merge_export_function_names(
   target : Map[UInt, Array[String]],
   source : Map[UInt, Array[String]],
 ) -> Unit {
@@ -725,7 +740,9 @@ fn merge_export_function_names(
 }
 
 ///|
-fn parse_custom_section_name_prefix_end(payload : Bytes) -> Int raise WiteError {
+pub fn parse_custom_section_name_prefix_end(
+  payload : Bytes,
+) -> Int raise WiteError {
   let parser = Cursor::new(payload)
   let name_len_u = parser.read_u32_leb128()
   let name_len = UInt::reinterpret_as_int(name_len_u)
@@ -737,7 +754,7 @@ fn parse_custom_section_name_prefix_end(payload : Bytes) -> Int raise WiteError 
 }
 
 ///|
-fn parse_name_section_function_names(
+pub fn parse_name_section_function_names(
   payload : Bytes,
 ) -> Map[UInt, String] raise WiteError {
   let parser = Cursor::new(payload)
@@ -804,7 +821,7 @@ fn encode_nonnegative_i32_leb128(value : UInt) -> Array[Byte] {
 }
 
 ///|
-fn append_encoded_section(
+pub fn append_encoded_section(
   out : Array[Byte],
   section_id : UInt,
   payload : Bytes,
@@ -990,14 +1007,14 @@ fn skip_instruction_immediate_raise(
 }
 
 ///|
-priv struct InstrSpan {
+pub(all) struct InstrSpan {
   start : Int
   end_ : Int
   opcode : UInt
 }
 
 ///|
-priv struct OpenCodeBlock {
+pub(all) struct OpenCodeBlock {
   entry_index : Int
   start_span_index : Int
   start_offset : Int

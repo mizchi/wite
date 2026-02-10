@@ -465,4 +465,3 @@ fn index_count_in_array(counts : Array[UInt], index : UInt) -> UInt {
   }
   counts[pos]
 }
-

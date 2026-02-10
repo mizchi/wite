@@ -16,7 +16,7 @@ test "optimize with kind supports core fixture on auto and core" {
       return
     }
   }
-  let config = @wite.OptimizeConfig::o1()
+  let config = @wite_types.OptimizeConfig::o1()
   guard optimize_with_kind(bytes, optimize_kind_auto(), config)
     is Ok(auto_result) else {
     assert_true(false)

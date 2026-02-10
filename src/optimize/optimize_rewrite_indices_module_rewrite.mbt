@@ -489,4 +489,3 @@ fn rewrite_export_section_payload_for_module_index_maps_raise(
   encoded.append(out[:])
   (Bytes::from_array(encoded[:]), removed_count)
 }
-

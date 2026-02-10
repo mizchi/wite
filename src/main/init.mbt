@@ -85,4 +85,3 @@ fn run_init_command(args : Array[String]) -> Unit {
   println("  # edit main.wac")
   println("  wite build")
 }
-

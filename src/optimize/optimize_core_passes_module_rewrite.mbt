@@ -694,7 +694,7 @@ fn rewrite_code_section_payload_for_directize_raise(
 }
 
 ///|
-priv struct DirectizeApplyResult {
+pub(all) struct DirectizeApplyResult {
   bytes : Bytes
   rewritten_call_count : UInt
 }
@@ -718,7 +718,9 @@ priv struct MemoryPackingApplyResult {
 }
 
 ///|
-fn apply_directize_raise(bytes : Bytes) -> DirectizeApplyResult raise WiteError {
+pub fn apply_directize_raise(
+  bytes : Bytes,
+) -> DirectizeApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
   let mut import_payload : Bytes? = None
   let mut function_payload : Bytes? = None

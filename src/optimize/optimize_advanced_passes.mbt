@@ -243,7 +243,7 @@ fn apply_merge_similar_functions_raise(
 }
 
 ///|
-fn unique_sorted(xs : Array[String]) -> Array[String] {
+pub fn unique_sorted(xs : Array[String]) -> Array[String] {
   let out = xs.copy()
   out.sort()
   out.dedup()
@@ -251,7 +251,7 @@ fn unique_sorted(xs : Array[String]) -> Array[String] {
 }
 
 ///|
-fn merge_root_names(
+pub fn merge_root_names(
   base : Array[String],
   extra : Array[String],
 ) -> Array[String] {
@@ -261,7 +261,7 @@ fn merge_root_names(
 }
 
 ///|
-fn clone_optimize_config(
+pub fn clone_optimize_config(
   config : OptimizeConfig,
   pass_rounds? : UInt = config.pass_rounds,
   closed_world_root_exports? : Array[String] = config.closed_world_root_exports,
