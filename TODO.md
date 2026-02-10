@@ -78,6 +78,8 @@
 - [x] P2: `signature-refine` を拡張し、`call; drop; end` / `call; drop; return; end` 形の result-drop wrapper を callsite で直接化可能にした
 - [x] P2: `signature-refine` を拡張し、`param-drop + const-forward`（`local.get*; i32.const*; call; [return]; end`）合成パターンを直接化可能にした
 - [x] P5: `optimize-instructions` に const-first 形（`i32.const 0/-1; local/global.get; op`）の簡約を追加
+- [x] P5: `optimize-instructions` を拡張し、`i32.const*; i32.const*; i32.cmp*` の定数畳み込みを追加
+- [x] P5: `optimize-instructions` を拡張し、`local/global.get; i32.const; i32.add; i32.load*` を `load offset` に畳み込み
 - [x] テスト追加: `optimize-instructions simplifies const-first bitwise and cmp patterns`
 - [x] Analyze: `analyze-opt` に pass 単位 function 差分（gain/regression, TopK）を追加
 - [x] Analyze: `runtime-profile` / `hot-size` に unresolved 理由分類（import-missing / signature-mismatch / runtime-exception）を追加

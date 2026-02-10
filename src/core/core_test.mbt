@@ -1370,6 +1370,116 @@ fn sample_module_with_i32_add_precompute_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_i32_add_precompute_multibyte_consts_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // i32.const 1044 (0x94 0x08)
+  // i32.const 32   (0x20)
+  // i32.add
+  // end
+  // folded result: i32.const 1076 (0xb4 0x08), end
+  append_section(
+    out,
+    10U,
+    bytes_of([0x01, 0x08, 0x00, 0x41, 0x94, 0x08, 0x41, 0x20, 0x6a, 0x0b]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_i32_add_precompute_overflow_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // i32.const 2147483647 (0xff 0xff 0xff 0xff 0x07)
+  // i32.const 1
+  // i32.add
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0b, 0x00, 0x41, 0xff, 0xff, 0xff, 0xff, 0x07, 0x41, 0x01, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_i32_const_cmp_precompute_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // i32.const 31
+  // i32.const 16777215 (0xff 0xff 0xff 0x07)
+  // i32.gt_u => 0
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0a, 0x00, 0x41, 0x1f, 0x41, 0xff, 0xff, 0xff, 0x07, 0x4b, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_i32_load_offset_precompute_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // memory section: min 1 page
+  append_section(out, 5U, bytes_of([0x01, 0x00, 0x01]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // local.get 0
+  // i32.const 32
+  // i32.add
+  // i32.load align=2 offset=8
+  // end
+  // folded result:
+  // local.get 0
+  // i32.load align=2 offset=40
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0a, 0x00, 0x20, 0x00, 0x41, 0x20, 0x6a, 0x28, 0x02, 0x08, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_local_set_get_pair_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -4556,8 +4666,9 @@ test "optimize with dfe apply merges duplicate functions" {
     return
   }
   assert_true(
-    functions.any(f => f.function_index == 1U &&
-      f.export_names.contains("alias")),
+    functions.any(f => {
+      f.function_index == 1U && f.export_names.contains("alias")
+    }),
   )
 }
 
@@ -4677,9 +4788,9 @@ test "optimize signature pruning removes unused trailing params and rewrites cal
     return
   }
   assert_true(
-    optimized.removed_sections.any(s => s.contains(
-      "signature-prune:functions:1",
-    )),
+    optimized.removed_sections.any(s => {
+      s.contains("signature-prune:functions:1")
+    }),
   )
   assert_true(optimized.removed_sections.any(s => s.contains("types:1")))
   assert_true(bytes_contains_seq(optimized.bytes, [0x60, 0x01, 0x7f, 0x00]))
@@ -4866,9 +4977,9 @@ test "optimize dae-optimizing removes pure expression for dropped argument" {
     return
   }
   assert_true(
-    optimized.removed_sections.any(s => s.contains(
-      "signature-prune:functions:1",
-    )),
+    optimized.removed_sections.any(s => {
+      s.contains("signature-prune:functions:1")
+    }),
   )
   assert_true(optimized.removed_sections.any(s => s.contains("dae:instrs:")))
   assert_true(
@@ -5073,8 +5184,9 @@ test "optimize with merge-similar-functions removes forwarding thunks" {
     return
   }
   assert_true(
-    functions.any(f => f.function_index == 1U &&
-      f.export_names.contains("alias")),
+    functions.any(f => {
+      f.function_index == 1U && f.export_names.contains("alias")
+    }),
   )
 }
 
@@ -5809,9 +5921,9 @@ test "optimize dce cluster rolls back when passes regress size" {
   }
   assert_true(optimized.after_size <= optimized.before_size)
   assert_true(
-    optimized.removed_sections.any(s => s.contains(
-      "dce-cluster:rollback:size-regress",
-    )),
+    optimized.removed_sections.any(s => {
+      s.contains("dce-cluster:rollback:size-regress")
+    }),
   )
   assert_true(
     not(optimized.removed_sections.any(s => s.contains("cfp-const:calls:"))),
@@ -5882,6 +5994,154 @@ test "optimize peephole precomputes i32.const+i32.const+i32.add" {
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x2a, 0x0b]))
   assert_true(
     not(bytes_contains_seq(optimized.bytes, [0x41, 0x14, 0x41, 0x16, 0x6a])),
+  )
+}
+
+///|
+test "optimize peephole precomputes i32.add with multibyte nonnegative consts" {
+  let bytes = sample_module_with_i32_add_precompute_multibyte_consts_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 8U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 5U)
+  assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0xb4, 0x08, 0x0b]))
+  assert_true(
+    not(
+      bytes_contains_seq(optimized.bytes, [0x41, 0x94, 0x08, 0x41, 0x20, 0x6a]),
+    ),
+  )
+}
+
+///|
+test "optimize peephole does not precompute overflowing i32.add constants" {
+  let bytes = sample_module_with_i32_add_precompute_overflow_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(optimized.bytes, bytes)
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x41, 0xff, 0xff, 0xff, 0xff, 0x07, 0x41, 0x01, 0x6a,
+    ]),
+  )
+}
+
+///|
+test "optimize peephole precomputes i32.const+i32.const+i32.cmp" {
+  let bytes = sample_module_with_i32_const_cmp_precompute_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 10U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 4U)
+  assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0b]))
+  assert_true(
+    not(
+      bytes_contains_seq(optimized.bytes, [
+        0x41, 0x1f, 0x41, 0xff, 0xff, 0xff, 0x07, 0x4b,
+      ]),
+    ),
+  )
+}
+
+///|
+test "optimize peephole folds local.get+i32.const+i32.add into i32.load offset" {
+  let bytes = sample_module_with_i32_load_offset_precompute_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 10U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 7U)
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x28, 0x02, 0x28]),
+  )
+  assert_true(
+    not(
+      bytes_contains_seq(optimized.bytes, [
+        0x20, 0x00, 0x41, 0x20, 0x6a, 0x28, 0x02, 0x08,
+      ]),
+    ),
   )
 }
 
@@ -6764,12 +7024,14 @@ test "runtime profiler reports signature mismatch in argument scenarios" {
     return
   }
   assert_true(
-    profile.unresolved_exports.any(u => u.export_name == "add1" &&
-      u.reason == "signature-mismatch"),
+    profile.unresolved_exports.any(u => {
+      u.export_name == "add1" && u.reason == "signature-mismatch"
+    }),
   )
   assert_true(
-    profile.unresolved_exports.any(u => u.export_name == "missing(1)" &&
-      u.reason == "export-not-found"),
+    profile.unresolved_exports.any(u => {
+      u.export_name == "missing(1)" && u.reason == "export-not-found"
+    }),
   )
 }
 
@@ -6910,12 +7172,16 @@ test "analyze hotness-size matrix reports scenario unresolved reasons" {
     return
   }
   assert_true(
-    report.entries.any(entry => entry.export_name == "add1" &&
-      entry.unresolved_reason == Some("signature-mismatch")),
+    report.entries.any(entry => {
+      entry.export_name == "add1" &&
+      entry.unresolved_reason == Some("signature-mismatch")
+    }),
   )
   assert_true(
-    report.entries.any(entry => entry.export_name == "missing(1)" &&
-      entry.unresolved_reason == Some("export-not-found")),
+    report.entries.any(entry => {
+      entry.export_name == "missing(1)" &&
+      entry.unresolved_reason == Some("export-not-found")
+    }),
   )
   guard find_hotness_unresolved_reason(
       report.unresolved_reason_counts,
@@ -7369,9 +7635,9 @@ test "component dce corpus applies dce and strictly shrinks core size" {
     }
     assert_true(report.total_core_after_bytes < report.total_core_before_bytes)
     assert_true(
-      report.entries.any(entry => entry.removed_sections.any(s => s.contains(
-        "dce:functions:",
-      ))),
+      report.entries.any(entry => {
+        entry.removed_sections.any(s => s.contains("dce:functions:"))
+      }),
     )
   }
 }
@@ -7456,9 +7722,9 @@ test "component optimize reports no-change reasons when all passes are disabled"
   }
   assert_eq(optimized.before_size, optimized.after_size)
   assert_true(
-    optimized.no_change_reasons.any(r => r.contains(
-      "no optimization pass is enabled in config",
-    )),
+    optimized.no_change_reasons.any(r => {
+      r.contains("no optimization pass is enabled in config")
+    }),
   )
   guard analyze_component_core_optimize(bytes, config~) is Ok(report) else {
     assert_true(false)
@@ -7561,9 +7827,9 @@ test "component optimize converge loops until no size improvement" {
   }
   assert_true(converged_result.after_size < single_result.after_size)
   assert_true(
-    converged_result.removed_sections.any(s => s.contains(
-      "core#0:dce:functions:1",
-    )),
+    converged_result.removed_sections.any(s => {
+      s.contains("core#0:dce:functions:1")
+    }),
   )
   assert_true(
     converged_result.removed_sections.any(s => s.contains("component-converge:")),
@@ -7597,9 +7863,9 @@ test "component optimize converge stops on non-improving round" {
   }
   assert_eq(result.before_size, result.after_size)
   assert_true(
-    result.removed_sections.any(s => s.contains(
-      "component-converge:no-improve:",
-    )),
+    result.removed_sections.any(s => {
+      s.contains("component-converge:no-improve:")
+    }),
   )
 }
 

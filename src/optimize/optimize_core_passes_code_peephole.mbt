@@ -334,6 +334,12 @@ fn append_i32_const_small(out : Array[Byte], value : UInt) -> Unit {
 }
 
 ///|
+fn append_i32_const_nonnegative(out : Array[Byte], value : UInt) -> Unit {
+  out.push(0x41U.to_byte())
+  out.append(encode_nonnegative_i32_leb128(value)[:])
+}
+
+///|
 fn is_i32_shift_rotate_opcode(opcode : UInt) -> Bool {
   opcode == 0x74U || // i32.shl
   opcode == 0x75U || // i32.shr_s
@@ -603,6 +609,7 @@ fn apply_optimize_instructions_same_local_get_pair(
 
 ///|
 fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
+  let max_nonnegative_i32 = 0x7fffffffU
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
@@ -614,23 +621,200 @@ fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
       spans[i].opcode == 0x41U &&
       spans[i + 1].opcode == 0x41U &&
       spans[i + 2].opcode == 0x6aU {
-      match
-        decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
+      match decode_i32_const_nonnegative_from_span(instr_bytes, spans[i]) {
         Some(lhs) =>
           match
-            decode_i32_const_small_nonnegative_from_span(
-              instr_bytes,
-              spans[i + 1],
-            ) {
-            Some(rhs) => {
-              let sum = lhs + rhs
-              if sum <= 63U {
-                out.push(0x41U.to_byte())
-                out.push(sum.to_byte())
-                i += 3
-                continue
+            decode_i32_const_nonnegative_from_span(instr_bytes, spans[i + 1]) {
+            Some(rhs) =>
+              if lhs <= max_nonnegative_i32 &&
+                rhs <= max_nonnegative_i32 &&
+                lhs <= max_nonnegative_i32 - rhs {
+                let sum = lhs + rhs
+                let original_len = spans[i].end_ -
+                  spans[i].start +
+                  (spans[i + 1].end_ - spans[i + 1].start) +
+                  1
+                let folded_imm = encode_nonnegative_i32_leb128(sum)
+                let folded_len = 1 + folded_imm.length()
+                if folded_len < original_len {
+                  append_i32_const_nonnegative(out, sum)
+                  i += 3
+                  continue
+                }
               }
-            }
+            None => ()
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn eval_i32_const_cmp_nonnegative(
+  lhs : UInt,
+  rhs : UInt,
+  opcode : UInt,
+) -> UInt? {
+  match opcode {
+    0x46U => Some(if lhs == rhs { 1U } else { 0U })
+    0x47U => Some(if lhs != rhs { 1U } else { 0U })
+    0x48U | 0x49U => Some(if lhs < rhs { 1U } else { 0U })
+    0x4aU | 0x4bU => Some(if lhs > rhs { 1U } else { 0U })
+    0x4cU | 0x4dU => Some(if lhs <= rhs { 1U } else { 0U })
+    0x4eU | 0x4fU => Some(if lhs >= rhs { 1U } else { 0U })
+    _ => None
+  }
+}
+
+///|
+fn apply_precompute_i32_const_cmp(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 2 < spans.length() &&
+      spans[i].opcode == 0x41U &&
+      spans[i + 1].opcode == 0x41U {
+      match decode_i32_const_nonnegative_from_span(instr_bytes, spans[i]) {
+        Some(lhs) =>
+          match
+            decode_i32_const_nonnegative_from_span(instr_bytes, spans[i + 1]) {
+            Some(rhs) =>
+              match
+                eval_i32_const_cmp_nonnegative(lhs, rhs, spans[i + 2].opcode) {
+                Some(value) => {
+                  let original_len = spans[i].end_ -
+                    spans[i].start +
+                    (spans[i + 1].end_ - spans[i + 1].start) +
+                    1
+                  if 2 < original_len {
+                    append_i32_const_small(out, value)
+                    i += 3
+                    continue
+                  }
+                }
+                None => ()
+              }
+            None => ()
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn is_memory_load_opcode(opcode : UInt) -> Bool {
+  opcode == 0x28U || // i32.load
+  opcode == 0x29U || // i64.load
+  opcode == 0x2aU || // f32.load
+  opcode == 0x2bU || // f64.load
+  opcode == 0x2cU || // i32.load8_s
+  opcode == 0x2dU || // i32.load8_u
+  opcode == 0x2eU || // i32.load16_s
+  opcode == 0x2fU || // i32.load16_u
+  opcode == 0x30U || // i64.load8_s
+  opcode == 0x31U || // i64.load8_u
+  opcode == 0x32U || // i64.load16_s
+  opcode == 0x33U || // i64.load16_u
+  opcode == 0x34U || // i64.load32_s
+  opcode == 0x35U // i64.load32_u
+}
+
+///|
+fn decode_memory_memarg_from_span(
+  instr_bytes : Bytes,
+  span : InstrSpan,
+) -> (UInt, UInt)? {
+  if not(is_memory_load_opcode(span.opcode)) || span.end_ <= span.start + 1 {
+    return None
+  }
+  let parser = Cursor::new(instr_bytes)
+  parser.set_pos(span.start + 1)
+  let align_result = try? parser.read_u32_leb128()
+  let align = match align_result {
+    Ok(v) => v
+    Err(_) => return None
+  }
+  let offset_result = try? parser.read_u32_leb128()
+  let offset = match offset_result {
+    Ok(v) => v
+    Err(_) => return None
+  }
+  if parser.get_pos() != span.end_ {
+    return None
+  }
+  Some((align, offset))
+}
+
+///|
+fn append_memory_load_with_memarg(
+  out : Array[Byte],
+  opcode : UInt,
+  align : UInt,
+  offset : UInt,
+) -> Unit {
+  out.push(opcode.to_byte())
+  out.append(encode_u32_leb128(align)[:])
+  out.append(encode_u32_leb128(offset)[:])
+}
+
+///|
+fn apply_precompute_i32_add_into_load_offset(instr_bytes : Bytes) -> Bytes {
+  let max_u32 = 0xffffffffU
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 3 < spans.length() &&
+      is_optimize_instructions_i32_get_opcode(spans[i].opcode) &&
+      spans[i + 1].opcode == 0x41U &&
+      spans[i + 2].opcode == 0x6aU &&
+      is_memory_load_opcode(spans[i + 3].opcode) {
+      match decode_i32_const_nonnegative_from_span(instr_bytes, spans[i + 1]) {
+        Some(addend) =>
+          match decode_memory_memarg_from_span(instr_bytes, spans[i + 3]) {
+            Some((align, offset)) =>
+              if addend <= max_u32 - offset {
+                let new_offset = offset + addend
+                let rewritten_load_len = 1 +
+                  encode_u32_leb128(align).length() +
+                  encode_u32_leb128(new_offset).length()
+                let original_len = spans[i].end_ -
+                  spans[i].start +
+                  (spans[i + 1].end_ - spans[i + 1].start) +
+                  1 +
+                  (spans[i + 3].end_ - spans[i + 3].start)
+                let rewritten_len = spans[i].end_ -
+                  spans[i].start +
+                  rewritten_load_len
+                if rewritten_len < original_len {
+                  out.append(
+                    instr_bytes[spans[i].start:spans[i].end_].to_array(),
+                  )
+                  append_memory_load_with_memarg(
+                    out,
+                    spans[i + 3].opcode,
+                    align,
+                    new_offset,
+                  )
+                  i += 4
+                  continue
+                }
+              }
             None => ()
           }
         None => ()
@@ -1190,11 +1374,15 @@ fn optimize_instruction_bytes(
     while local_simplify_round < 6 {
       let before_local_simplify = current_bytes
       current_bytes = apply_precompute_i32_add(current_bytes)
+      current_bytes = apply_precompute_i32_add_into_load_offset(current_bytes)
+      current_bytes = apply_precompute_i32_const_cmp(current_bytes)
       current_bytes = apply_precompute_i32_identity_ops(current_bytes)
       current_bytes = apply_precompute_i32_eqz_const(current_bytes)
       current_bytes = apply_precompute_i32_double_eqz_br_if(current_bytes)
       current_bytes = apply_precompute_local_const_propagation(current_bytes)
       current_bytes = apply_precompute_i32_add(current_bytes)
+      current_bytes = apply_precompute_i32_add_into_load_offset(current_bytes)
+      current_bytes = apply_precompute_i32_const_cmp(current_bytes)
       current_bytes = apply_precompute_i32_double_eqz_br_if(current_bytes)
       current_bytes = apply_precompute_br_if_const(current_bytes)
       current_bytes = apply_optimize_instructions_i32_identity_ops(
