@@ -1,5 +1,8 @@
 import {
-  "mizchi/mwac/composer" as @wac,
-  "mizchi/oci_wasm/types" as @oci_types,
-  "moonbitlang/x/fs" as @fs,
+  "mizchi/mwac/composer" @wac,
+  "mizchi/oci_wasm/types" @oci_types,
 }
+
+import {
+  "moonbitlang/x/fs",
+} for "test"

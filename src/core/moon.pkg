@@ -1,11 +1,11 @@
 import {
-  "mizchi/wite/analyze" as @wite_analyze,
-  "mizchi/mwac/component" as @mwac_component,
-  "mizchi/wite/optimize" as @wite_optimize,
-  "mizchi/wite/types" as @wite_types,
-  "mizchi/wit" as @wit,
+  "mizchi/wite/analyze" @wite_analyze,
+  "mizchi/mwac/component" @mwac_component,
+  "mizchi/wite/optimize" @wite_optimize,
+  "mizchi/wite/types" @wite_types,
+  "mizchi/wit" @wit,
   "moonbitlang/core/bench",
-  "moonbitlang/x/fs" as @fs,
+  "moonbitlang/x/fs" @fs,
 }
 
 options(

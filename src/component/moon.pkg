@@ -1,6 +1,6 @@
 import {
-  "mizchi/wite/core" as @wite,
-  "mizchi/wit" as @wit,
-  "moonbitlang/x/fs" as @fs,
-  "moonbitlang/x/sys" as @sys,
+  "mizchi/wite/core" @wite,
+  "mizchi/wit" @wit,
+  "moonbitlang/x/fs" @fs,
+  "moonbitlang/x/sys" @sys,
 }

@@ -1,4 +1,7 @@
 import {
-  "mizchi/wite/types" as @wite_types,
-  "moonbitlang/x/fs" as @fs,
+  "mizchi/wite/types" @wite_types,
 }
+
+import {
+  "moonbitlang/x/fs",
+} for "test"

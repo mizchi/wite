@@ -1,12 +1,11 @@
 import {
-  "mizchi/oci_wasm/discovery" as @oci_discovery,
-  "mizchi/oci_wasm/oci" as @oci_client,
-  "mizchi/oci_wasm/types" as @oci_types,
-  "mizchi/wite/bundle" as @wite_bundle,
-  "moonbitlang/async",
-  "moonbitlang/x/fs" as @fs,
-  "moonbitlang/x/json5" as @json5,
-  "moonbitlang/x/sys" as @sys,
+  "mizchi/oci_wasm/discovery" @oci_discovery,
+  "mizchi/oci_wasm/oci" @oci_client,
+  "mizchi/oci_wasm/types" @oci_types,
+  "mizchi/wite/bundle" @wite_bundle,
+  "moonbitlang/x/fs" @fs,
+  "moonbitlang/x/json5" @json5,
+  "moonbitlang/x/sys" @sys,
 }
 
 options(
