@@ -105,13 +105,13 @@ parse_optimized_before_after() {
 
 parse_profile_code_body_bytes() {
   local wasm_path="$1"
-  moon run src/main --target js -- profile "$wasm_path" 2>/dev/null |
+  moon run src/main --target js -- analyze profile "$wasm_path" 2>/dev/null |
     awk -F ': ' '/^  code_body_bytes: / { print $2; exit }'
 }
 
 parse_block_total_instruction_bytes() {
   local wasm_path="$1"
-  moon run src/main --target js -- block-sizes "$wasm_path" 0 2>/dev/null |
+  moon run src/main --target js -- analyze block-sizes "$wasm_path" 0 2>/dev/null |
     awk -F ': ' '/^  total_instruction_bytes: / { print $2; exit }'
 }
 
@@ -511,16 +511,16 @@ generate_zlib_gap_report() {
     zlib_gap_type_section_to_wasm_opt_bytes=$((zlib_type_gain_wasm_opt - zlib_type_gain_wite))
   fi
 
-  moon run src/main --target js -- top-functions "$zlib_rel" 20 > "$tmp_zlib_fn_before" 2>&1 || true
-  moon run src/main --target js -- top-functions "$tmp_zlib_wite" 20 > "$tmp_zlib_fn_wite" 2>&1 || true
+  moon run src/main --target js -- analyze top-functions "$zlib_rel" 20 > "$tmp_zlib_fn_before" 2>&1 || true
+  moon run src/main --target js -- analyze top-functions "$tmp_zlib_wite" 20 > "$tmp_zlib_fn_wite" 2>&1 || true
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
-    moon run src/main --target js -- top-functions "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_fn_wasm_opt" 2>&1 || true
+    moon run src/main --target js -- analyze top-functions "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_fn_wasm_opt" 2>&1 || true
   else
     echo "wasm-opt unavailable" > "$tmp_zlib_fn_wasm_opt"
   fi
   echo -e "rank\tkind\tkey\tleft_idx\tright_idx\tleft_body_bytes\tright_body_bytes\tdelta_bytes\tabs_gap_bytes\tleft_exports\tright_exports" > "$ZLIB_FUNCTION_GAP_TSV"
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
-    moon run src/main --target js -- function-gap "$tmp_zlib_wite" "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_function_gap_raw" 2>&1 || true
+    moon run src/main --target js -- analyze function-gap "$tmp_zlib_wite" "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_function_gap_raw" 2>&1 || true
     awk -F '\t' '
       /^[[:space:]]*tsv\t/ {
         rank += 1
@@ -536,10 +536,10 @@ generate_zlib_gap_report() {
     zlib_function_gap_positive_sum_bytes="NA"
   fi
 
-  moon run src/main --target js -- block-sizes "$zlib_rel" 20 > "$tmp_zlib_block_before" 2>&1 || true
-  moon run src/main --target js -- block-sizes "$tmp_zlib_wite" 20 > "$tmp_zlib_block_wite" 2>&1 || true
+  moon run src/main --target js -- analyze block-sizes "$zlib_rel" 20 > "$tmp_zlib_block_before" 2>&1 || true
+  moon run src/main --target js -- analyze block-sizes "$tmp_zlib_wite" 20 > "$tmp_zlib_block_wite" 2>&1 || true
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
-    moon run src/main --target js -- block-sizes "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_block_wasm_opt" 2>&1 || true
+    moon run src/main --target js -- analyze block-sizes "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_block_wasm_opt" 2>&1 || true
   else
     echo "wasm-opt unavailable" > "$tmp_zlib_block_wasm_opt"
   fi
@@ -1016,7 +1016,7 @@ component_total_after=0
 
 while IFS= read -r file; do
   rel="${file#$ROOT_DIR/}"
-  moon run src/main --target js -- component-dce-kpi "$rel" > "$tmp_component"
+  moon run src/main --target js -- analyze component-dce-kpi "$rel" > "$tmp_component"
 
   component_bytes="$(awk -F '=' '/^kpi-total-component-bytes=/{print $2; exit}' "$tmp_component")"
   core_before="$(awk -F '=' '/^kpi-total-core-before-bytes=/{print $2; exit}' "$tmp_component")"
@@ -1065,7 +1065,7 @@ while IFS= read -r file; do
   dead_body_bytes="NA"
   status="ok"
 
-  if profile_output="$(moon run src/main --target js -- profile "$rel" 2>&1)"; then
+  if profile_output="$(moon run src/main --target js -- analyze profile "$rel" 2>&1)"; then
     module_bytes="$(awk -F ': ' '/^  total_bytes: / { print $2; exit }' <<< "$profile_output")"
     code_body_bytes="$(awk -F ': ' '/^  code_body_bytes: / { print $2; exit }' <<< "$profile_output")"
     import_count="$(awk -F ': ' '/^  import_count: / { print $2; exit }' <<< "$profile_output")"
