@@ -1,7 +1,7 @@
 ///|
 pub fn run_analyze_host(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_host_generated_code(bytes) {
+  match @wite_analyze.analyze_host_generated_code(bytes) {
     Ok(report) => {
       println("host/generated code analysis:")
       println(
@@ -112,7 +112,12 @@ pub fn run_analyze_opt(
   function_diff_limit : UInt,
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_optimize_metadata(bytes, config~, function_diff_limit~) {
+  match
+    @wite_analyze.analyze_optimize_metadata(
+      bytes,
+      config~,
+      function_diff_limit~,
+    ) {
     Ok(report) => {
       println("optimize metadata analysis:")
       println(
@@ -140,14 +145,14 @@ pub fn run_analyze_opt(
 ///|
 pub fn run_analyze(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_section_sizes(bytes) {
+  match @wite_analyze.analyze_section_sizes(bytes) {
     Ok(sections) => {
       println("section size analysis:")
       print_section_sizes_with_share(
         sections,
         bytes.length().reinterpret_as_uint(),
       )
-      match @wite.analyze_call_graph_summary(bytes) {
+      match @wite_analyze.analyze_call_graph_summary(bytes) {
         Ok(summary) => print_call_graph_summary(summary)
         Err(e) => {
           println("analyze failed: " + @wite.error_to_string(e))
@@ -165,7 +170,7 @@ pub fn run_analyze(path : String) -> Unit {
 ///|
 pub fn run_deep_analyze(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_wasm_breakdown(bytes, top_limit=limit) {
+  match @wite_analyze.analyze_wasm_breakdown(bytes, top_limit=limit) {
     Ok(report) => {
       println("wasm deep analysis:")
       println("  total_bytes: " + report.total_bytes.to_string())
@@ -219,7 +224,7 @@ pub fn run_deep_analyze(path : String, limit : UInt) -> Unit {
 ///|
 fn run_profile(path : String) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.profile_module(bytes) {
+  match @wite_analyze.profile_module(bytes) {
     Ok(profile) => {
       println("core wasm profile:")
       println("  total_bytes: " + profile.total_bytes.to_string())

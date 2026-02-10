@@ -11,7 +11,7 @@ fn read_fixture_or_fail(path : String) -> Bytes {
 
 ///|
 fn must_profile_module_total(bytes : Bytes) -> UInt {
-  match profile_module(bytes) {
+  match @wite_analyze.profile_module(bytes) {
     Ok(profile) => profile.total_bytes
     Err(err) => {
       println("profile_module failed: " + error_to_string(err))
@@ -35,7 +35,7 @@ fn must_profile_component_total(bytes : Bytes) -> UInt {
 
 ///|
 fn must_optimize_after_size(bytes : Bytes, config : OptimizeConfig) -> UInt {
-  match optimize_for_size(bytes, config~) {
+  match @wite_analyze.optimize_for_size(bytes, config~) {
     Ok(result) => result.after_size
     Err(err) => {
       println("optimize_for_size failed: " + error_to_string(err))
@@ -47,7 +47,7 @@ fn must_optimize_after_size(bytes : Bytes, config : OptimizeConfig) -> UInt {
 
 ///|
 fn must_analyze_wasm_breakdown_score(bytes : Bytes, top_limit : UInt) -> UInt {
-  match analyze_wasm_breakdown(bytes, top_limit~) {
+  match @wite_analyze.analyze_wasm_breakdown(bytes, top_limit~) {
     Ok(report) => report.instruction_count + report.dead_body_bytes
     Err(err) => {
       println("analyze_wasm_breakdown failed: " + error_to_string(err))
@@ -59,7 +59,7 @@ fn must_analyze_wasm_breakdown_score(bytes : Bytes, top_limit : UInt) -> UInt {
 
 ///|
 fn must_analyze_call_graph_summary_score(bytes : Bytes) -> UInt {
-  match analyze_call_graph_summary(bytes) {
+  match @wite_analyze.analyze_call_graph_summary(bytes) {
     Ok(summary) =>
       summary.reachable_function_count + summary.reachable_body_bytes
     Err(err) => {

@@ -1,7 +1,7 @@
 ///|
 pub fn run_dce_report(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_dce_report(bytes) {
+  match @wite_analyze.analyze_dce_report(bytes) {
     Ok(report) => {
       println("dce report:")
       println("  roots: " + report.roots.map(i => i.to_string()).join(", "))
@@ -374,7 +374,7 @@ fn print_code_block_sizes(
 ///|
 pub fn run_block_sizes(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_code_block_sizes(bytes) {
+  match @wite_analyze.analyze_code_block_sizes(bytes) {
     Ok(report) => {
       println("code block size analysis:")
       println("  partial: " + report.partial.to_string())
@@ -398,7 +398,7 @@ pub fn run_block_sizes(path : String, limit : UInt) -> Unit {
 ///|
 pub fn run_top_functions(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_function_sizes(bytes) {
+  match @wite_analyze.analyze_function_sizes(bytes) {
     Ok(functions) => {
       println("top functions:")
       println("  count: " + functions.length().to_string())
@@ -420,7 +420,11 @@ pub fn run_function_gap(
   let left_bytes = read_bytes_or_exit(left_path)
   let right_bytes = read_bytes_or_exit(right_path)
   match
-    @wite.analyze_function_size_gap(left_bytes, right_bytes, top_limit=limit) {
+    @wite_analyze.analyze_function_size_gap(
+      left_bytes,
+      right_bytes,
+      top_limit=limit,
+    ) {
     Ok(report) => {
       println("function-gap:")
       println(
@@ -550,7 +554,7 @@ pub fn run_section_gap(
 ) -> Unit {
   let left_bytes = read_bytes_or_exit(left_path)
   let right_bytes = read_bytes_or_exit(right_path)
-  let left_sections = match @wite.analyze_section_sizes(left_bytes) {
+  let left_sections = match @wite_analyze.analyze_section_sizes(left_bytes) {
     Ok(v) => v
     Err(e) => {
       println("section diff failed (left): " + @wite.error_to_string(e))
@@ -558,7 +562,7 @@ pub fn run_section_gap(
       []
     }
   }
-  let right_sections = match @wite.analyze_section_sizes(right_bytes) {
+  let right_sections = match @wite_analyze.analyze_section_sizes(right_bytes) {
     Ok(v) => v
     Err(e) => {
       println("section diff failed (right): " + @wite.error_to_string(e))
@@ -704,7 +708,7 @@ pub fn run_block_gap(
 ) -> Unit {
   let left_bytes = read_bytes_or_exit(left_path)
   let right_bytes = read_bytes_or_exit(right_path)
-  let left_report = match @wite.analyze_code_block_sizes(left_bytes) {
+  let left_report = match @wite_analyze.analyze_code_block_sizes(left_bytes) {
     Ok(v) => v
     Err(e) => {
       println("block diff failed (left): " + @wite.error_to_string(e))
@@ -712,7 +716,7 @@ pub fn run_block_gap(
       panic()
     }
   }
-  let right_report = match @wite.analyze_code_block_sizes(right_bytes) {
+  let right_report = match @wite_analyze.analyze_code_block_sizes(right_bytes) {
     Ok(v) => v
     Err(e) => {
       println("block diff failed (right): " + @wite.error_to_string(e))
@@ -821,7 +825,7 @@ fn print_call_graph_nodes(
 ///|
 pub fn run_callgraph(path : String, limit : UInt) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_call_graph(bytes) {
+  match @wite_analyze.analyze_call_graph(bytes) {
     Ok(report) => {
       println("call graph:")
       println(
@@ -860,7 +864,7 @@ fn run_keep_reasons_with_options(
     closed_world_root_exports~,
     safe_mode~,
   )
-  match @wite.analyze_keep_reasons(bytes, config~) {
+  match @wite_analyze.analyze_keep_reasons(bytes, config~) {
     Ok(report) => {
       println("keep reasons:")
       println("  partial: " + report.partial.to_string())
@@ -985,7 +989,7 @@ fn run_retain_path_with_options(
     closed_world_root_exports~,
     safe_mode~,
   )
-  match @wite.analyze_retain_paths(bytes, config~) {
+  match @wite_analyze.analyze_retain_paths(bytes, config~) {
     Ok(report) => {
       println("retain-path analysis:")
       println("  partial: " + report.partial.to_string())

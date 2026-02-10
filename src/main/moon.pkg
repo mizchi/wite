@@ -3,6 +3,7 @@ import {
   "mizchi/wite/config" as @wite_config,
   "mizchi/wite/deps" as @wite_deps,
   "mizchi/wite/bundle" as @wite_bundle,
+  "mizchi/wite/analyze" as @wite_analyze,
   "mizchi/wite/optimize" as @wite_optimize,
   "mizchi/wite/core" as @wite,
   "mizchi/wit" as @wit,

@@ -1,3 +1,4 @@
 import {
+  "mizchi/wite/analyze" as @analyze,
   "mizchi/wite/core" as @core,
 }

@@ -2841,7 +2841,7 @@ fn find_hotness_unresolved_reason(
 ///|
 test "analyze section sizes for core module" {
   let bytes = sample_module_bytes()
-  guard analyze_section_sizes(bytes) is Ok(sections) else {
+  guard @wite_analyze.analyze_section_sizes(bytes) is Ok(sections) else {
     assert_true(false)
     return
   }
@@ -2858,12 +2858,13 @@ test "analyze section sizes for core module" {
 test "optimize for size strips custom sections" {
   let bytes = sample_module_bytes()
   let config = OptimizeConfig::aggressive()
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_true(optimized.after_size < optimized.before_size)
-  guard analyze_section_sizes(optimized.bytes) is Ok(sections_after) else {
+  guard @wite_analyze.analyze_section_sizes(optimized.bytes)
+    is Ok(sections_after) else {
     assert_true(false)
     return
   }
@@ -2889,11 +2890,12 @@ test "optimize can strip debug/dwarf/target-features sections" {
     enable_merge_blocks=false,
     enable_remove_unused_brs=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard analyze_section_sizes(optimized.bytes) is Ok(sections_after) else {
+  guard @wite_analyze.analyze_section_sizes(optimized.bytes)
+    is Ok(sections_after) else {
     assert_true(false)
     return
   }
@@ -2985,11 +2987,11 @@ test "optimize with -O0 preset disables size passes" {
       return
     }
   }
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -3006,11 +3008,11 @@ test "optimize with -O2 preset applies dce" {
       return
     }
   }
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -3020,7 +3022,7 @@ test "optimize with -O2 preset applies dce" {
 ///|
 test "profile core module metrics" {
   let bytes = sample_module_bytes()
-  guard profile_module(bytes) is Ok(profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(profile) else {
     assert_true(false)
     return
   }
@@ -3035,7 +3037,7 @@ test "profile core module metrics" {
 ///|
 test "analyze function sizes with names and exports" {
   let bytes = sample_module_with_named_functions_bytes()
-  guard analyze_function_sizes(bytes) is Ok(functions) else {
+  guard @wite_analyze.analyze_function_sizes(bytes) is Ok(functions) else {
     assert_true(false)
     return
   }
@@ -3066,11 +3068,15 @@ test "analyze function gap matches exports and reports byte deltas" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(before, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(before, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard analyze_function_size_gap(before, optimized.bytes, top_limit=10U)
+  guard @wite_analyze.analyze_function_size_gap(
+      before,
+      optimized.bytes,
+      top_limit=10U,
+    )
     is Ok(report) else {
     assert_true(false)
     return
@@ -3093,7 +3099,8 @@ test "analyze function gap matches exports and reports byte deltas" {
 test "analyze function gap reports unmatched side entries" {
   let left = sample_module_with_two_exported_functions_bytes()
   let right = sample_module_with_peephole_bytes()
-  guard analyze_function_size_gap(left, right, top_limit=10U) is Ok(report) else {
+  guard @wite_analyze.analyze_function_size_gap(left, right, top_limit=10U)
+    is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3106,7 +3113,7 @@ test "analyze function gap reports unmatched side entries" {
 ///|
 test "analyze code block sizes for nested block module" {
   let bytes = sample_module_with_nested_blocks_bytes()
-  guard analyze_code_block_sizes(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_code_block_sizes(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3132,7 +3139,7 @@ test "analyze code block sizes for nested block module" {
 ///|
 test "analyze wasm breakdown reports deep section and opcode details" {
   let bytes = sample_module_with_named_functions_bytes()
-  guard analyze_wasm_breakdown(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_wasm_breakdown(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3171,7 +3178,7 @@ test "analyze wasm breakdown reports deep section and opcode details" {
 ///|
 test "analyze wasm breakdown respects top_limit" {
   let bytes = sample_module_with_named_functions_bytes()
-  guard analyze_wasm_breakdown(bytes, top_limit=1U) is Ok(report) else {
+  guard @wite_analyze.analyze_wasm_breakdown(bytes, top_limit=1U) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3184,7 +3191,7 @@ test "analyze wasm breakdown respects top_limit" {
 ///|
 test "analyze wasm breakdown splits prefixed opcodes" {
   let bytes = sample_module_with_fc_opcode_bytes()
-  guard analyze_wasm_breakdown(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_wasm_breakdown(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3199,7 +3206,7 @@ test "analyze wasm breakdown splits prefixed opcodes" {
 ///|
 test "analyze call graph with dead function" {
   let bytes = sample_module_with_dead_function_bytes()
-  guard analyze_call_graph(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_call_graph(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3222,7 +3229,7 @@ test "analyze call graph with dead function" {
 ///|
 test "analyze call graph summary with dead function" {
   let bytes = sample_module_with_dead_function_bytes()
-  guard analyze_call_graph_summary(bytes) is Ok(summary) else {
+  guard @wite_analyze.analyze_call_graph_summary(bytes) is Ok(summary) else {
     assert_true(false)
     return
   }
@@ -3240,11 +3247,11 @@ test "analyze call graph summary with dead function" {
 ///|
 test "analyze call graph summary matches call graph report counters" {
   let bytes = sample_module_with_dead_function_bytes()
-  guard analyze_call_graph(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_call_graph(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
-  guard analyze_call_graph_summary(bytes) is Ok(summary) else {
+  guard @wite_analyze.analyze_call_graph_summary(bytes) is Ok(summary) else {
     assert_true(false)
     return
   }
@@ -3271,7 +3278,7 @@ test "analyze call graph summary matches call graph report counters" {
 ///|
 test "analyze call graph summary deduplicates duplicate export roots" {
   let bytes = sample_module_with_duplicate_export_roots_bytes()
-  guard analyze_call_graph_summary(bytes) is Ok(summary) else {
+  guard @wite_analyze.analyze_call_graph_summary(bytes) is Ok(summary) else {
     assert_true(false)
     return
   }
@@ -3285,7 +3292,7 @@ test "analyze call graph summary deduplicates duplicate export roots" {
 ///|
 test "analyze call graph summary marks indirect calls" {
   let bytes = sample_module_with_call_indirect_type_gap_bytes()
-  guard analyze_call_graph_summary(bytes) is Ok(summary) else {
+  guard @wite_analyze.analyze_call_graph_summary(bytes) is Ok(summary) else {
     assert_true(false)
     return
   }
@@ -3300,7 +3307,7 @@ test "analyze call graph summary marks indirect calls" {
 ///|
 test "analyze call graph deduplicates duplicate direct callees" {
   let bytes = sample_module_with_duplicate_direct_calls_bytes()
-  guard analyze_call_graph(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_call_graph(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3315,7 +3322,7 @@ test "analyze call graph deduplicates duplicate direct callees" {
 ///|
 test "analyze host-generated code detects forwarding thunks" {
   let bytes = sample_module_with_const_forwarding_thunk_bytes()
-  guard analyze_host_generated_code(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_host_generated_code(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3336,7 +3343,7 @@ test "analyze host-generated code detects forwarding thunks" {
 ///|
 test "analyze host-generated code detects signature-refine thunk" {
   let bytes = sample_module_with_gc_signature_refining_thunk_bytes()
-  guard analyze_host_generated_code(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_host_generated_code(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3353,13 +3360,14 @@ test "analyze host-generated code detects signature-refine thunk" {
 ///|
 test "analyze host-generated code reports directize and dce metadata" {
   let directize_bytes = sample_module_with_call_indirect_type_gap_bytes()
-  guard analyze_host_generated_code(directize_bytes) is Ok(directize_report) else {
+  guard @wite_analyze.analyze_host_generated_code(directize_bytes)
+    is Ok(directize_report) else {
     assert_true(false)
     return
   }
   assert_eq(directize_report.directize_candidate_call_count, 1U)
   let dead_bytes = sample_module_with_dead_function_bytes()
-  guard analyze_host_generated_code(dead_bytes) is Ok(dead_report) else {
+  guard @wite_analyze.analyze_host_generated_code(dead_bytes) is Ok(dead_report) else {
     assert_true(false)
     return
   }
@@ -3371,7 +3379,10 @@ test "analyze host-generated code reports directize and dce metadata" {
 ///|
 test "analyze optimize metadata reports stage waterfall" {
   let bytes = sample_module_with_dead_function_bytes()
-  guard analyze_optimize_metadata(bytes, config=OptimizeConfig::o1())
+  guard @wite_analyze.analyze_optimize_metadata(
+      bytes,
+      config=OptimizeConfig::o1(),
+    )
     is Ok(report) else {
     assert_true(false)
     return
@@ -3404,7 +3415,7 @@ test "analyze optimize metadata reports stage waterfall" {
 ///|
 test "analyze call graph supports fc opcodes" {
   let bytes = sample_module_with_fc_opcode_bytes()
-  guard analyze_call_graph(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_call_graph(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3418,7 +3429,7 @@ test "analyze call graph supports fc opcodes" {
 ///|
 test "analyze call graph supports fd memarg opcodes" {
   let bytes = sample_module_with_fd_memarg_bytes()
-  guard analyze_call_graph(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_call_graph(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3432,7 +3443,7 @@ test "analyze call graph supports fd memarg opcodes" {
 ///|
 test "analyze dce report extracts removable functions" {
   let bytes = sample_module_with_dead_function_bytes()
-  guard analyze_dce_report(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_dce_report(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3449,7 +3460,7 @@ test "analyze keep reasons reports export and call-based keep causes" {
   let config = make_optimize_config(closed_world=true, closed_world_root_exports=[
     "main",
   ])
-  guard analyze_keep_reasons(bytes, config~) is Ok(report) else {
+  guard @wite_analyze.analyze_keep_reasons(bytes, config~) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3479,7 +3490,7 @@ test "analyze keep reasons honors safe-mode override" {
     closed_world_root_exports=["keep"],
     safe_mode=true,
   )
-  guard analyze_keep_reasons(bytes, config~) is Ok(report) else {
+  guard @wite_analyze.analyze_keep_reasons(bytes, config~) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3502,7 +3513,7 @@ test "analyze retain paths reports root to callee chain" {
   let config = make_optimize_config(closed_world=true, closed_world_root_exports=[
     "main",
   ])
-  guard analyze_retain_paths(bytes, config~) is Ok(report) else {
+  guard @wite_analyze.analyze_retain_paths(bytes, config~) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3530,7 +3541,7 @@ test "analyze retain paths reports root to callee chain" {
 ///|
 test "analyze retain paths records element roots" {
   let bytes = sample_module_with_call_indirect_type_gap_bytes()
-  guard analyze_retain_paths(bytes) is Ok(report) else {
+  guard @wite_analyze.analyze_retain_paths(bytes) is Ok(report) else {
     assert_true(false)
     return
   }
@@ -3546,7 +3557,7 @@ test "analyze retain paths records element roots" {
 ///|
 test "optimize with dce apply removes dead and rewrites calls" {
   let bytes = sample_module_with_dce_reindex_bytes()
-  guard analyze_call_graph(bytes) is Ok(before_graph) else {
+  guard @wite_analyze.analyze_call_graph(bytes) is Ok(before_graph) else {
     assert_true(false)
     return
   }
@@ -3560,20 +3571,20 @@ test "optimize with dce apply removes dead and rewrites calls" {
     enable_peephole=false,
     enable_dce=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
   assert_true(after_profile.function_count <= 2U)
   assert_true(after_profile.code_body_count <= 2U)
-  guard analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
+  guard @wite_analyze.analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
     assert_true(false)
     return
   }
@@ -3599,7 +3610,7 @@ test "optimize with dce apply preserves runtime output" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -3612,7 +3623,7 @@ test "optimize with dce apply preserves runtime output" {
 ///|
 test "optimize with closed-world dce filters export roots by name" {
   let bytes = sample_module_with_two_exported_functions_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -3630,14 +3641,14 @@ test "optimize with closed-world dce filters export roots by name" {
     closed_world=true,
     closed_world_root_exports=["keep"],
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -3672,14 +3683,14 @@ test "optimize with safe-mode disables closed-world dce filtering" {
     closed_world_root_exports=["keep"],
     safe_mode=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_true(
     not(optimized.removed_sections.any(s => s.contains("dce:functions:"))),
   )
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -3698,7 +3709,7 @@ test "optimize with dce prunes now-unused function types" {
     closed_world=true,
     closed_world_root_exports=["main"],
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -3706,12 +3717,13 @@ test "optimize with dce prunes now-unused function types" {
     optimized.removed_sections.any(s => s.contains("dce:functions:2")),
   )
   assert_true(optimized.removed_sections.any(s => s.contains("types:2")))
-  guard analyze_section_sizes(optimized.bytes) is Ok(sections_after) else {
+  guard @wite_analyze.analyze_section_sizes(optimized.bytes)
+    is Ok(sections_after) else {
     assert_true(false)
     return
   }
   assert_eq(find_section_size(sections_after, "type"), Some(6U))
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -3728,7 +3740,7 @@ test "optimize rewrites call_indirect type indices after type pruning" {
     enable_remove_unused_brs=false,
     enable_remove_unused_module_elements=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -3751,16 +3763,16 @@ test "optimize with dce apply rewrites global and element refs" {
     enable_remove_unused_brs=false,
     enable_dce=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
   assert_eq(after_profile.function_count, 2U)
-  guard analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
+  guard @wite_analyze.analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
     assert_true(false)
     return
   }
@@ -3776,7 +3788,7 @@ test "optimize with dce apply rewrites global and element refs" {
 ///|
 test "analyze call graph treats global and element refs as roots" {
   let bytes = sample_module_with_global_and_element_root_only_bytes()
-  guard analyze_call_graph(bytes) is Ok(graph) else {
+  guard @wite_analyze.analyze_call_graph(bytes) is Ok(graph) else {
     assert_true(false)
     return
   }
@@ -3798,11 +3810,11 @@ test "optimize with dce keeps functions referenced by global/element roots" {
     enable_remove_unused_brs=false,
     enable_dce=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -3825,7 +3837,7 @@ test "optimize with rume apply removes unused table and element segment" {
     enable_remove_unused_brs=false,
     enable_remove_unused_module_elements=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -3850,7 +3862,7 @@ test "optimize with rume apply rewrites table.init elem index after element remo
     enable_remove_unused_brs=false,
     enable_remove_unused_module_elements=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -3878,7 +3890,7 @@ test "optimize with rume apply honors closed-world export roots" {
     closed_world=true,
     closed_world_root_exports=["keep"],
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -3900,7 +3912,7 @@ test "optimize with rume apply honors closed-world export roots" {
 ///|
 test "optimize with rume apply removes unused import/global/memory/table and remaps indices" {
   let bytes = sample_module_with_unused_import_memory_global_table_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -3915,12 +3927,12 @@ test "optimize with rume apply removes unused import/global/memory/table and rem
     enable_remove_unused_brs=false,
     enable_remove_unused_module_elements=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_true(optimized.removed_sections.any(s => s.contains("imports:3")))
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -3962,7 +3974,7 @@ test "optimize with rume apply removes unused import/global/memory/table and rem
 ///|
 test "optimize removes duplicate imports and remaps all related indices" {
   let bytes = sample_module_with_duplicate_imports_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -3980,12 +3992,12 @@ test "optimize removes duplicate imports and remaps all related indices" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_true(optimized.removed_sections.any(s => s.contains("dup-imports:")))
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -4031,7 +4043,7 @@ test "optimize simplify-globals rewrites immutable global.get to i32.const" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4059,7 +4071,7 @@ test "optimize reorder-globals remaps global indices in code and exports" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4090,7 +4102,7 @@ test "optimize memory-packing reorders local memories and remaps users" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4165,15 +4177,17 @@ test "kpi rume gain fixture has positive post-dce to post-rume delta" {
     enable_merge_similar_functions=true,
     enable_remove_unused_module_elements=true,
   )
-  guard optimize_for_size(bytes, config=pre_config) is Ok(pre) else {
+  guard @wite_analyze.optimize_for_size(bytes, config=pre_config) is Ok(pre) else {
     assert_true(false)
     return
   }
-  guard optimize_for_size(bytes, config=post_dce_config) is Ok(post_dce) else {
+  guard @wite_analyze.optimize_for_size(bytes, config=post_dce_config)
+    is Ok(post_dce) else {
     assert_true(false)
     return
   }
-  guard optimize_for_size(bytes, config=post_rume_config) is Ok(post_rume) else {
+  guard @wite_analyze.optimize_for_size(bytes, config=post_rume_config)
+    is Ok(post_rume) else {
     assert_true(false)
     return
   }
@@ -4194,7 +4208,7 @@ test "optimize -O1 shrinks rume gain fixture by removing table.size drop" {
     }
   }
   let config = OptimizeConfig::o1()
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4254,15 +4268,17 @@ test "kpi directize gain fixture records directize call rewrite" {
     enable_merge_similar_functions=true,
     enable_remove_unused_module_elements=true,
   )
-  guard optimize_for_size(bytes, config=pre_config) is Ok(pre) else {
+  guard @wite_analyze.optimize_for_size(bytes, config=pre_config) is Ok(pre) else {
     assert_true(false)
     return
   }
-  guard optimize_for_size(bytes, config=post_dce_config) is Ok(post_dce) else {
+  guard @wite_analyze.optimize_for_size(bytes, config=post_dce_config)
+    is Ok(post_dce) else {
     assert_true(false)
     return
   }
-  guard optimize_for_size(bytes, config=post_rume_config) is Ok(post_rume) else {
+  guard @wite_analyze.optimize_for_size(bytes, config=post_rume_config)
+    is Ok(post_rume) else {
     assert_true(false)
     return
   }
@@ -4277,7 +4293,7 @@ test "kpi directize gain fixture records directize call rewrite" {
 ///|
 test "optimize with dfe apply merges duplicate functions" {
   let bytes = sample_module_with_duplicate_functions_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -4291,26 +4307,26 @@ test "optimize with dfe apply merges duplicate functions" {
     enable_dce=false,
     enable_dfe=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_true(
     optimized.removed_sections.any(s => s.contains("dfe:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
   assert_eq(after_profile.function_count, 2U)
   assert_eq(after_profile.code_body_count, 2U)
-  guard analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
+  guard @wite_analyze.analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
     assert_true(false)
     return
   }
   assert_eq(after_graph.nodes.length(), 2)
   assert_eq(after_graph.nodes[0].direct_callees, [1U])
-  guard analyze_function_sizes(optimized.bytes) is Ok(functions) else {
+  guard @wite_analyze.analyze_function_sizes(optimized.bytes) is Ok(functions) else {
     assert_true(false)
     return
   }
@@ -4334,7 +4350,7 @@ test "optimize type refining unlocks dfe across duplicated type entries" {
     enable_dce=false,
     enable_dfe=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4344,7 +4360,7 @@ test "optimize type refining unlocks dfe across duplicated type entries" {
   assert_true(
     optimized.removed_sections.any(s => s.contains("dfe:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -4365,7 +4381,7 @@ test "optimize type refining works on gc-mixed type section and unlocks dfe" {
     enable_dce=false,
     enable_dfe=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4375,7 +4391,7 @@ test "optimize type refining works on gc-mixed type section and unlocks dfe" {
   assert_true(
     optimized.removed_sections.any(s => s.contains("dfe:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -4399,7 +4415,7 @@ test "optimize type refining considers gc hierarchy-equivalent refs and unlocks 
     closed_world=true,
     closed_world_root_exports=["run", "a", "b"],
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4409,7 +4425,7 @@ test "optimize type refining considers gc hierarchy-equivalent refs and unlocks 
   assert_true(
     optimized.removed_sections.any(s => s.contains("dfe:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -4431,7 +4447,7 @@ test "optimize signature pruning removes unused trailing params and rewrites cal
     enable_dce=true,
     enable_dfe=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4474,7 +4490,7 @@ test "optimize inlining-optimizing rewrites call to inline const and enables dce
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4486,7 +4502,7 @@ test "optimize inlining-optimizing rewrites call to inline const and enables dce
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x2a, 0x0b]))
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
-  guard profile_module(optimized.bytes) is Ok(profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
     assert_true(false)
     return
   }
@@ -4511,7 +4527,7 @@ test "optimize inlining-optimizing removes identity call and enables dce" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4522,7 +4538,7 @@ test "optimize inlining-optimizing removes identity call and enables dce" {
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
   assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
-  guard profile_module(optimized.bytes) is Ok(profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
     assert_true(false)
     return
   }
@@ -4548,7 +4564,7 @@ test "optimize dae-optimizing removes pure expression for dropped argument" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4585,7 +4601,7 @@ test "optimize remove-unused-types prunes unused private gc type" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4611,7 +4627,7 @@ test "optimize remove-unused-types keeps referenced private gc type" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4622,7 +4638,7 @@ test "optimize remove-unused-types keeps referenced private gc type" {
 ///|
 test "optimize vacuum removes unreachable tail" {
   let bytes = sample_module_with_unreachable_tail_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -4634,11 +4650,11 @@ test "optimize vacuum removes unreachable tail" {
     enable_peephole=true,
     enable_vacuum=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -4658,11 +4674,11 @@ test "optimize vacuum works even when peephole is disabled" {
     enable_merge_blocks=false,
     enable_remove_unused_brs=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -4672,7 +4688,7 @@ test "optimize vacuum works even when peephole is disabled" {
 ///|
 test "optimize remove-unused-brs and merge-blocks shrink block wrapper" {
   let bytes = sample_module_with_redundant_block_branch_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -4685,11 +4701,11 @@ test "optimize remove-unused-brs and merge-blocks shrink block wrapper" {
     enable_merge_blocks=true,
     enable_remove_unused_brs=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -4709,11 +4725,11 @@ test "optimize treats pass_rounds=0 as one round" {
     enable_merge_blocks=false,
     enable_remove_unused_brs=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -4723,7 +4739,7 @@ test "optimize treats pass_rounds=0 as one round" {
 ///|
 test "optimize with merge-similar-functions removes forwarding thunks" {
   let bytes = sample_module_with_similar_thunks_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -4737,25 +4753,25 @@ test "optimize with merge-similar-functions removes forwarding thunks" {
     enable_dfe=false,
     enable_merge_similar_functions=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_true(
     optimized.removed_sections.any(s => s.contains("msf:functions:2")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
   assert_eq(after_profile.function_count, 2U)
-  guard analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
+  guard @wite_analyze.analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
     assert_true(false)
     return
   }
   assert_eq(after_graph.nodes.length(), 2)
   assert_eq(after_graph.nodes[0].direct_callees, [1U])
-  guard analyze_function_sizes(optimized.bytes) is Ok(functions) else {
+  guard @wite_analyze.analyze_function_sizes(optimized.bytes) is Ok(functions) else {
     assert_true(false)
     return
   }
@@ -4768,7 +4784,7 @@ test "optimize with merge-similar-functions removes forwarding thunks" {
 ///|
 test "optimize with merge-similar-functions removes param-forwarding thunk" {
   let bytes = sample_module_with_param_forwarding_thunk_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -4785,12 +4801,12 @@ test "optimize with merge-similar-functions removes param-forwarding thunk" {
     enable_dfe=false,
     enable_merge_similar_functions=true,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_true(optimized.removed_sections.any(s => s.contains("msf:functions:")))
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -4806,7 +4822,7 @@ test "optimize with merge-similar-functions removes param-forwarding thunk" {
 ///|
 test "optimize cfp rewrites forwarding calls and enables dce without msf" {
   let bytes = sample_module_with_similar_thunks_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -4823,7 +4839,7 @@ test "optimize cfp rewrites forwarding calls and enables dce without msf" {
     enable_dfe=false,
     enable_merge_similar_functions=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4831,12 +4847,12 @@ test "optimize cfp rewrites forwarding calls and enables dce without msf" {
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
   assert_eq(after_profile.function_count, 3U)
-  guard analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
+  guard @wite_analyze.analyze_call_graph(optimized.bytes) is Ok(after_graph) else {
     assert_true(false)
     return
   }
@@ -4848,7 +4864,7 @@ test "optimize cfp rewrites forwarding calls and enables dce without msf" {
 ///|
 test "optimize cfp phase2 rewrites param-forwarding thunk and enables dce" {
   let bytes = sample_module_with_param_forwarding_thunk_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -4865,7 +4881,7 @@ test "optimize cfp phase2 rewrites param-forwarding thunk and enables dce" {
     enable_dfe=false,
     enable_merge_similar_functions=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4873,7 +4889,7 @@ test "optimize cfp phase2 rewrites param-forwarding thunk and enables dce" {
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -4888,7 +4904,7 @@ test "optimize cfp phase2 rewrites param-forwarding thunk and enables dce" {
 ///|
 test "optimize cfp phase2 rewrites forwarding thunk with unused locals and enables dce" {
   let bytes = sample_module_with_param_forwarding_thunk_with_unused_local_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -4905,7 +4921,7 @@ test "optimize cfp phase2 rewrites forwarding thunk with unused locals and enabl
     enable_dfe=false,
     enable_merge_similar_functions=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4913,7 +4929,7 @@ test "optimize cfp phase2 rewrites forwarding thunk with unused locals and enabl
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -4928,7 +4944,7 @@ test "optimize cfp phase2 rewrites forwarding thunk with unused locals and enabl
 ///|
 test "optimize cfp phase2 rewrites forwarding thunk with call+return and enables dce" {
   let bytes = sample_module_with_param_forwarding_call_return_thunk_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -4945,7 +4961,7 @@ test "optimize cfp phase2 rewrites forwarding thunk with call+return and enables
     enable_dfe=false,
     enable_merge_similar_functions=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4953,7 +4969,7 @@ test "optimize cfp phase2 rewrites forwarding thunk with call+return and enables
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -4968,7 +4984,7 @@ test "optimize cfp phase2 rewrites forwarding thunk with call+return and enables
 ///|
 test "optimize cfp rewrites param-forwarding thunk when wrapper/target type indices differ but signatures match" {
   let bytes = sample_module_with_param_forwarding_thunk_with_duplicate_type_indices_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -4985,7 +5001,7 @@ test "optimize cfp rewrites param-forwarding thunk when wrapper/target type indi
     enable_dfe=false,
     enable_merge_similar_functions=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -4993,7 +5009,7 @@ test "optimize cfp rewrites param-forwarding thunk when wrapper/target type indi
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -5022,7 +5038,7 @@ test "optimize cfp skips rewrites that increase call immediate leb size" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -5030,11 +5046,11 @@ test "optimize cfp skips rewrites that increase call immediate leb size" {
   assert_true(
     not(optimized.removed_sections.any(s => s.contains("cfp:calls:"))),
   )
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -5045,7 +5061,7 @@ test "optimize cfp skips rewrites that increase call immediate leb size" {
 ///|
 test "optimize cfp-const rewrites const-forwarding thunk and enables dce" {
   let bytes = sample_module_with_const_forwarding_thunk_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -5062,7 +5078,7 @@ test "optimize cfp-const rewrites const-forwarding thunk and enables dce" {
     enable_dfe=false,
     enable_merge_similar_functions=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -5072,7 +5088,7 @@ test "optimize cfp-const rewrites const-forwarding thunk and enables dce" {
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -5087,7 +5103,7 @@ test "optimize cfp-const rewrites const-forwarding thunk and enables dce" {
 ///|
 test "optimize cfp-const rewrites thunk with unused locals and enables dce" {
   let bytes = sample_module_with_const_forwarding_thunk_with_unused_local_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -5104,7 +5120,7 @@ test "optimize cfp-const rewrites thunk with unused locals and enables dce" {
     enable_dfe=false,
     enable_merge_similar_functions=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -5114,7 +5130,7 @@ test "optimize cfp-const rewrites thunk with unused locals and enables dce" {
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -5129,7 +5145,7 @@ test "optimize cfp-const rewrites thunk with unused locals and enables dce" {
 ///|
 test "optimize cfp-const rewrites thunk with call+return and enables dce" {
   let bytes = sample_module_with_const_forwarding_call_return_thunk_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -5146,7 +5162,7 @@ test "optimize cfp-const rewrites thunk with call+return and enables dce" {
     enable_dfe=false,
     enable_merge_similar_functions=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -5156,7 +5172,7 @@ test "optimize cfp-const rewrites thunk with call+return and enables dce" {
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -5171,7 +5187,7 @@ test "optimize cfp-const rewrites thunk with call+return and enables dce" {
 ///|
 test "optimize signature-refining phase3 rewrites mismatched forwarding thunk in gc mixed module" {
   let bytes = sample_module_with_gc_signature_refining_thunk_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -5191,7 +5207,7 @@ test "optimize signature-refining phase3 rewrites mismatched forwarding thunk in
     closed_world=true,
     closed_world_root_exports=["run"],
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -5201,7 +5217,7 @@ test "optimize signature-refining phase3 rewrites mismatched forwarding thunk in
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -5216,7 +5232,7 @@ test "optimize signature-refining phase3 rewrites mismatched forwarding thunk in
 ///|
 test "optimize signature-refining phase3 rewrites forwarding thunk with call+return in gc mixed module" {
   let bytes = sample_module_with_gc_signature_refining_call_return_thunk_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -5236,7 +5252,7 @@ test "optimize signature-refining phase3 rewrites forwarding thunk with call+ret
     closed_world=true,
     closed_world_root_exports=["run"],
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -5246,7 +5262,7 @@ test "optimize signature-refining phase3 rewrites forwarding thunk with call+ret
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -5261,7 +5277,7 @@ test "optimize signature-refining phase3 rewrites forwarding thunk with call+ret
 ///|
 test "optimize signature-refining phase3 rewrites forwarding thunk with unused locals in gc mixed module" {
   let bytes = sample_module_with_gc_signature_refining_thunk_with_unused_local_bytes()
-  guard profile_module(bytes) is Ok(before_profile) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
   }
@@ -5281,7 +5297,7 @@ test "optimize signature-refining phase3 rewrites forwarding thunk with unused l
     closed_world=true,
     closed_world_root_exports=["run"],
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -5291,7 +5307,7 @@ test "optimize signature-refining phase3 rewrites forwarding thunk with unused l
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -5320,7 +5336,7 @@ test "optimize dce cluster rolls back when passes regress size" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -5333,7 +5349,7 @@ test "optimize dce cluster rolls back when passes regress size" {
   assert_true(
     not(optimized.removed_sections.any(s => s.contains("cfp-const:calls:"))),
   )
-  guard profile_module(optimized.bytes) is Ok(after_profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
     return
   }
@@ -5343,7 +5359,7 @@ test "optimize dce cluster rolls back when passes regress size" {
 ///|
 test "optimize peephole removes nop and const-drop" {
   let bytes = sample_module_with_peephole_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5353,12 +5369,12 @@ test "optimize peephole removes nop and const-drop" {
     strip_name_section=false,
     strip_producers_section=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_eq(optimized.removed_sections.length(), 0)
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5369,7 +5385,7 @@ test "optimize peephole removes nop and const-drop" {
 ///|
 test "optimize peephole precomputes i32.const+i32.const+i32.add" {
   let bytes = sample_module_with_i32_add_precompute_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5387,11 +5403,11 @@ test "optimize peephole precomputes i32.const+i32.const+i32.add" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5405,7 +5421,7 @@ test "optimize peephole precomputes i32.const+i32.const+i32.add" {
 ///|
 test "optimize peephole rewrites local.set+local.get to local.tee" {
   let bytes = sample_module_with_local_set_get_pair_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5423,11 +5439,11 @@ test "optimize peephole rewrites local.set+local.get to local.tee" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5441,7 +5457,7 @@ test "optimize peephole rewrites local.set+local.get to local.tee" {
 ///|
 test "optimize peephole removes local.get+drop" {
   let bytes = sample_module_with_local_get_drop_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5459,11 +5475,11 @@ test "optimize peephole removes local.get+drop" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5474,7 +5490,7 @@ test "optimize peephole removes local.get+drop" {
 ///|
 test "optimize peephole rewrites local.tee+drop to local.set" {
   let bytes = sample_module_with_local_tee_drop_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5492,11 +5508,11 @@ test "optimize peephole rewrites local.tee+drop to local.set" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5508,7 +5524,7 @@ test "optimize peephole rewrites local.tee+drop to local.set" {
 ///|
 test "optimize peephole removes local.get+local.set noop" {
   let bytes = sample_module_with_local_get_set_noop_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5526,11 +5542,11 @@ test "optimize peephole removes local.get+local.set noop" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5543,7 +5559,7 @@ test "optimize peephole removes local.get+local.set noop" {
 ///|
 test "optimize peephole simplifies local.get+local.tee to local.get" {
   let bytes = sample_module_with_local_get_tee_pair_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5561,11 +5577,11 @@ test "optimize peephole simplifies local.get+local.tee to local.get" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5578,7 +5594,7 @@ test "optimize peephole simplifies local.get+local.tee to local.get" {
 ///|
 test "optimize peephole removes i32 arithmetic identity operations" {
   let bytes = sample_module_with_i32_identity_ops_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5596,11 +5612,11 @@ test "optimize peephole removes i32 arithmetic identity operations" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5614,7 +5630,7 @@ test "optimize peephole removes i32 arithmetic identity operations" {
 ///|
 test "optimize-instructions simplifies i32 identity and same-local patterns" {
   let bytes = sample_module_with_optimize_instructions_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5632,11 +5648,11 @@ test "optimize-instructions simplifies i32 identity and same-local patterns" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5657,7 +5673,7 @@ test "optimize-instructions simplifies i32 identity and same-local patterns" {
 ///|
 test "optimize-instructions simplifies bitwise and cmp with i32.const 0" {
   let bytes = sample_module_with_optimize_instructions_bitwise_cmp_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5675,11 +5691,11 @@ test "optimize-instructions simplifies bitwise and cmp with i32.const 0" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5698,7 +5714,7 @@ test "optimize-instructions simplifies bitwise and cmp with i32.const 0" {
 ///|
 test "optimize-instructions simplifies const-first bitwise and cmp patterns" {
   let bytes = sample_module_with_optimize_instructions_const_first_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5716,11 +5732,11 @@ test "optimize-instructions simplifies const-first bitwise and cmp patterns" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5747,7 +5763,7 @@ test "optimize-instructions simplifies const-first bitwise and cmp patterns" {
 ///|
 test "optimize local-cse rewrites local.get+local.set+local.get" {
   let bytes = sample_module_with_local_cse_get_set_get_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5765,11 +5781,11 @@ test "optimize local-cse rewrites local.get+local.set+local.get" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5787,7 +5803,7 @@ test "optimize local-cse rewrites local.get+local.set+local.get" {
 ///|
 test "optimize rse rewrites local.tee+local.set(same) to local.set" {
   let bytes = sample_module_with_local_tee_set_same_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5805,11 +5821,11 @@ test "optimize rse rewrites local.tee+local.set(same) to local.set" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5825,7 +5841,7 @@ test "optimize rse rewrites local.tee+local.set(same) to local.set" {
 ///|
 test "optimize local simplify chain reaches fixed-point" {
   let bytes = sample_module_with_local_chain_simplify_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5843,11 +5859,11 @@ test "optimize local simplify chain reaches fixed-point" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5863,7 +5879,7 @@ test "optimize local simplify chain reaches fixed-point" {
 ///|
 test "optimize precompute removes i32.const 0 + br_if" {
   let bytes = sample_module_with_br_if_const_zero_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5883,11 +5899,11 @@ test "optimize precompute removes i32.const 0 + br_if" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5900,7 +5916,7 @@ test "optimize precompute removes i32.const 0 + br_if" {
 ///|
 test "optimize precompute rewrites i32.const nonzero + br_if to br" {
   let bytes = sample_module_with_br_if_const_nonzero_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5920,11 +5936,11 @@ test "optimize precompute rewrites i32.const nonzero + br_if to br" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5940,7 +5956,7 @@ test "optimize precompute rewrites i32.const nonzero + br_if to br" {
 ///|
 test "optimize precompute removes i32.eqz+i32.eqz before br_if" {
   let bytes = sample_module_with_double_eqz_br_if_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -5960,11 +5976,11 @@ test "optimize precompute removes i32.eqz+i32.eqz before br_if" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -5985,7 +6001,7 @@ test "optimize precompute removes i32.eqz+i32.eqz before br_if" {
 ///|
 test "optimize precompute propagates local const and folds arithmetic" {
   let bytes = sample_module_with_local_const_propagation_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -6003,11 +6019,11 @@ test "optimize precompute propagates local const and folds arithmetic" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -6033,19 +6049,19 @@ test "optimize peephole preserves runtime outputs for zero-arg i32 exports" {
     enable_remove_unused_module_elements=false,
   )
   let bytes0 = sample_module_with_peephole_bytes()
-  guard optimize_for_size(bytes0, config~) is Ok(optimized0) else {
+  guard @wite_analyze.optimize_for_size(bytes0, config~) is Ok(optimized0) else {
     assert_true(false)
     return
   }
   assert_true(runtime_export_outputs_equal(bytes0, optimized0.bytes, "run", []))
   let bytes1 = sample_module_with_i32_add_precompute_bytes()
-  guard optimize_for_size(bytes1, config~) is Ok(optimized1) else {
+  guard @wite_analyze.optimize_for_size(bytes1, config~) is Ok(optimized1) else {
     assert_true(false)
     return
   }
   assert_true(runtime_export_outputs_equal(bytes1, optimized1.bytes, "run", []))
   let bytes2 = sample_module_with_local_set_get_pair_bytes()
-  guard optimize_for_size(bytes2, config~) is Ok(optimized2) else {
+  guard @wite_analyze.optimize_for_size(bytes2, config~) is Ok(optimized2) else {
     assert_true(false)
     return
   }
@@ -6068,7 +6084,7 @@ test "optimize peephole preserves runtime outputs for unary i32 export" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -6095,7 +6111,7 @@ test "optimize with dce apply directizes const call_indirect to call" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -6132,7 +6148,7 @@ test "optimize with dce apply skips partial call graph modules" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -6146,7 +6162,7 @@ test "optimize with dce apply skips partial call graph modules" {
 ///|
 test "optimize coalesces unused locals and remaps local indices" {
   let bytes = sample_module_with_unused_locals_for_coalesce_bytes()
-  guard profile_module(bytes) is Ok(before) else {
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
     return
   }
@@ -6164,11 +6180,11 @@ test "optimize coalesces unused locals and remaps local indices" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
-  guard profile_module(optimized.bytes) is Ok(after) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
     return
   }
@@ -6200,7 +6216,7 @@ test "optimize reports no-change reasons when all passes are disabled" {
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
   )
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -6223,12 +6239,12 @@ test "optimize -O1 runs dce and drops empty function/code sections" {
     }
   }
   let config = OptimizeConfig::o1()
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
   assert_eq(optimized.after_size, 8U)
-  guard profile_module(optimized.bytes) is Ok(profile) else {
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
     assert_true(false)
     return
   }
@@ -6493,7 +6509,7 @@ test "optimize -O1 preserves zlib runtime behavior with stub imports" {
     }
   }
   let config = OptimizeConfig::o1()
-  guard optimize_for_size(bytes, config~) is Ok(optimized) else {
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)
     return
   }
@@ -6637,7 +6653,7 @@ test "bench corpus core optimize fixtures are parseable as core wasm" {
         return
       }
     }
-    guard profile_module(bytes) is Ok(profile) else {
+    guard @wite_analyze.profile_module(bytes) is Ok(profile) else {
       inspect(path, content="core parse failed")
       assert_true(false)
       return
@@ -6657,7 +6673,7 @@ test "kpi binaryen core corpus -O1 does not increase size" {
         return
       }
     }
-    guard optimize_for_size(bytes, config~) is Ok(result) else {
+    guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(result) else {
       inspect(path, content="optimize failed")
       assert_true(false)
       return
@@ -6677,7 +6693,7 @@ test "kpi core optimize corpus -O1 can run on extended fixtures" {
         return
       }
     }
-    guard optimize_for_size(bytes, config~) is Ok(result) else {
+    guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(result) else {
       inspect(path, content="optimize failed")
       assert_true(false)
       return
@@ -6698,7 +6714,7 @@ test "kpi core runtime corpus -O1 preserves runtime behavior" {
         return
       }
     }
-    guard optimize_for_size(bytes, config~) is Ok(result) else {
+    guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(result) else {
       inspect(path, content="optimize failed")
       assert_true(false)
       return
@@ -6726,13 +6742,13 @@ test "bench corpus analyze-only core fixtures are parseable and analyzable" {
         return
       }
     }
-    guard profile_module(bytes) is Ok(profile) else {
+    guard @wite_analyze.profile_module(bytes) is Ok(profile) else {
       inspect(path, content="core parse failed")
       assert_true(false)
       return
     }
     assert_true(profile.total_bytes > 0U)
-    guard analyze_call_graph_summary(bytes) is Ok(summary) else {
+    guard @wite_analyze.analyze_call_graph_summary(bytes) is Ok(summary) else {
       inspect(path, content="call graph summary failed")
       assert_true(false)
       return

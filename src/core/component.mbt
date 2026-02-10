@@ -33,7 +33,7 @@ pub fn profile_component(bytes : Bytes) -> Result[ComponentProfile, String] {
   let core_modules : Array[ModuleProfile] = []
   for i in 0..<detail.core_modules.length() {
     let core_bytes = detail.core_modules[i]
-    match profile_module(core_bytes) {
+    match @wite_analyze.profile_module(core_bytes) {
       Ok(profile) => core_modules.push(profile)
       Err(e) =>
         return Err(
@@ -66,7 +66,7 @@ pub fn analyze_component_function_sizes(
   let reports : Array[ComponentFunctionSizeReport] = []
   for i in 0..<detail.core_modules.length() {
     let core_bytes = detail.core_modules[i]
-    let functions = match analyze_function_sizes(core_bytes) {
+    let functions = match @wite_analyze.analyze_function_sizes(core_bytes) {
       Ok(v) => v
       Err(e) =>
         return Err(
@@ -101,7 +101,7 @@ pub fn analyze_component_call_graphs(
   let reports : Array[ComponentCallGraphReport] = []
   for i in 0..<detail.core_modules.length() {
     let core_bytes = detail.core_modules[i]
-    let graph = match analyze_call_graph(core_bytes) {
+    let graph = match @wite_analyze.analyze_call_graph(core_bytes) {
       Ok(v) => v
       Err(e) =>
         return Err(
@@ -565,7 +565,7 @@ pub fn analyze_hotness_size_matrix(
     Ok(v) => v
     Err(msg) => return Err(msg)
   }
-  let function_sizes = match analyze_function_sizes(bytes) {
+  let function_sizes = match @wite_analyze.analyze_function_sizes(bytes) {
     Ok(v) => v
     Err(err) =>
       return Err("function size analysis failed: " + error_to_string(err))

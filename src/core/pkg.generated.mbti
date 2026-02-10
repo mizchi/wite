@@ -8,12 +8,6 @@ import {
 }
 
 // Values
-pub fn analyze_call_graph(Bytes) -> Result[@types.CallGraphReport, @types.WiteError]
-
-pub fn analyze_call_graph_summary(Bytes) -> Result[@types.CallGraphSummary, @types.WiteError]
-
-pub fn analyze_code_block_sizes(Bytes) -> Result[@types.CodeBlockSizeReport, @types.WiteError]
-
 pub fn analyze_component_call_graphs(Bytes) -> Result[Array[@types.ComponentCallGraphReport], String]
 
 pub fn analyze_component_contract(Bytes, @wit.ResolveInput) -> Result[@types.ContractReport, String]
@@ -24,25 +18,7 @@ pub fn analyze_component_function_sizes(Bytes) -> Result[Array[@types.ComponentF
 
 pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput?, exclude? : Array[String]) -> Result[@types.ComponentRootPolicyReport, String]
 
-pub fn analyze_dce_report(Bytes) -> Result[@types.DceReport, @types.WiteError]
-
-pub fn analyze_function_size_gap(Bytes, Bytes, top_limit? : UInt) -> Result[@types.FunctionGapReport, @types.WiteError]
-
-pub fn analyze_function_sizes(Bytes) -> Result[Array[@types.FunctionSize], @types.WiteError]
-
-pub fn analyze_host_generated_code(Bytes) -> Result[@types.HostGeneratedCodeReport, @types.WiteError]
-
 pub fn analyze_hotness_size_matrix(Bytes, iterations? : UInt, scenarios? : Array[@types.RuntimeProfileScenario]) -> Result[@types.HotnessSizeMatrixReport, String]
-
-pub fn analyze_keep_reasons(Bytes, config? : @types.OptimizeConfig) -> Result[@types.KeepReasonReport, @types.WiteError]
-
-pub fn analyze_optimize_metadata(Bytes, config? : @types.OptimizeConfig, function_diff_limit? : UInt) -> Result[@types.OptimizeMetadataReport, @types.WiteError]
-
-pub fn analyze_retain_paths(Bytes, config? : @types.OptimizeConfig) -> Result[@types.RetainPathReport, @types.WiteError]
-
-pub fn analyze_section_sizes(Bytes) -> Result[Array[@types.SectionSize], @types.WiteError]
-
-pub fn analyze_wasm_breakdown(Bytes, top_limit? : UInt) -> Result[@types.WasmBreakdownReport, @types.WiteError]
 
 pub fn apply_directize_raise(Bytes) -> @optimize.DirectizeApplyResult raise @types.WiteError
 
@@ -83,8 +59,6 @@ pub fn optimize_binary_for_size(Bytes, config? : @types.OptimizeConfig, exclude?
 pub fn optimize_component_for_size(Bytes, config? : @types.OptimizeConfig, exclude? : Array[String]) -> Result[@types.OptimizeResult, String]
 
 pub fn optimize_config_from_opt_level(String) -> @types.OptimizeConfig?
-
-pub fn optimize_for_size(Bytes, config? : @types.OptimizeConfig) -> Result[@types.OptimizeResult, @types.WiteError]
 
 pub fn parse_code_bodies(Bytes) -> Array[Bytes] raise @types.WiteError
 
@@ -129,8 +103,6 @@ pub fn parse_type_section_entries_with_refs_raise(Bytes, String) -> Array[@optim
 pub fn parse_vec_count(Bytes) -> UInt raise @types.WiteError
 
 pub fn profile_component(Bytes) -> Result[@types.ComponentProfile, String]
-
-pub fn profile_module(Bytes) -> Result[@types.ModuleProfile, @types.WiteError]
 
 pub fn profile_runtime_exports(Bytes, iterations? : UInt, scenarios? : Array[@types.RuntimeProfileScenario]) -> Result[@types.RuntimeProfile, String]
 
