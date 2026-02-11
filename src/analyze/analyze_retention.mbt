@@ -1,7 +1,7 @@
 ///|
 fn export_root_names_from_config(config : OptimizeConfig) -> Array[String]? {
   if config.closed_world &&
-    not(config.safe_mode) &&
+    !config.safe_mode &&
     config.closed_world_root_exports.length() > 0 {
     Some(config.closed_world_root_exports)
   } else {
@@ -22,11 +22,11 @@ fn collect_root_reasons_raise(
     match section.section_id {
       7U => {
         let exports = parse_export_function_names(payload)
-        exports.each((index, names) => if should_include_export_root(
-            names, export_root_names,
-          ) {
-          for export_name in names {
-            map_push_string_array(reasons_map, index, "export:" + export_name)
+        exports.each((index, names) => {
+          if should_include_export_root(names, export_root_names) {
+            for export_name in names {
+              map_push_string_array(reasons_map, index, "export:" + export_name)
+            }
           }
         })
       }
@@ -99,7 +99,7 @@ pub fn analyze_keep_reasons(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
 ) -> Result[KeepReasonReport, WiteError] {
-  try? {
+  try? ({
     let export_root_names = export_root_names_from_config(config)
     let graph = analyze_call_graph_raise(bytes, export_root_names)
     let (reasons_map, reasons_partial) = collect_root_reasons_raise(
@@ -156,15 +156,17 @@ pub fn analyze_keep_reasons(
         })
       }
     }
-    entries.sort_by((a, b) => if a.function_index < b.function_index {
-      -1
-    } else if a.function_index > b.function_index {
-      1
-    } else {
-      0
+    entries.sort_by((a, b) => {
+      if a.function_index < b.function_index {
+        -1
+      } else if a.function_index > b.function_index {
+        1
+      } else {
+        0
+      }
     })
     { partial: graph.partial || reasons_partial, entries }
-  }
+  })
 }
 
 ///|
@@ -172,7 +174,7 @@ pub fn analyze_retain_paths(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
 ) -> Result[RetainPathReport, WiteError] {
-  try? {
+  try? ({
     let export_root_names = export_root_names_from_config(config)
     let graph = analyze_call_graph_raise(bytes, export_root_names)
     let (root_reasons_map, root_reason_partial) = collect_root_reasons_raise(
@@ -208,7 +210,7 @@ pub fn analyze_retain_paths(
     }
     let entries : Array[RetainPathEntry] = []
     for node in graph.nodes {
-      if not(node.reachable_from_roots) {
+      if !node.reachable_from_roots {
         continue
       }
       let path = build_retain_path_from_parent_map(
@@ -244,7 +246,7 @@ pub fn analyze_retain_paths(
       roots: graph.roots,
       entries,
     }
-  }
+  })
 }
 
 ///|
@@ -253,7 +255,7 @@ pub fn analyze_dce_report(bytes : Bytes) -> Result[DceReport, WiteError] {
     Ok(graph) => {
       let removable_functions : Array[FunctionSize] = []
       for node in graph.nodes {
-        if not(node.reachable_from_roots) {
+        if !node.reachable_from_roots {
           removable_functions.push({
             function_index: node.function_index,
             body_bytes: node.body_bytes,
@@ -262,16 +264,18 @@ pub fn analyze_dce_report(bytes : Bytes) -> Result[DceReport, WiteError] {
           })
         }
       }
-      removable_functions.sort_by((a, b) => if a.body_bytes > b.body_bytes {
-        -1
-      } else if a.body_bytes < b.body_bytes {
-        1
-      } else if a.function_index < b.function_index {
-        -1
-      } else if a.function_index > b.function_index {
-        1
-      } else {
-        0
+      removable_functions.sort_by((a, b) => {
+        if a.body_bytes > b.body_bytes {
+          -1
+        } else if a.body_bytes < b.body_bytes {
+          1
+        } else if a.function_index < b.function_index {
+          -1
+        } else if a.function_index > b.function_index {
+          1
+        } else {
+          0
+        }
       })
       Ok({
         roots: graph.roots,

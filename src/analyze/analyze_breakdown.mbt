@@ -34,30 +34,27 @@ fn collect_function_code_blocks(
   let open_stack : Array[OpenCodeBlock] = []
   for i in 0..<spans.length() {
     let span = spans[i]
-    match code_block_kind_from_opcode(span.opcode) {
-      Some(kind) => {
-        let depth = open_stack.length().reinterpret_as_uint() + 1U
-        let start_offset = span.start.reinterpret_as_uint()
-        entries.push({
-          function_index,
-          function_name,
-          export_names,
-          block_index: next_block_index,
-          depth,
-          kind,
-          start_offset,
-          end_offset: start_offset,
-          instruction_count: 0U,
-          total_bytes: 0U,
-        })
-        open_stack.push({
-          entry_index: entries.length() - 1,
-          start_span_index: i,
-          start_offset: span.start,
-        })
-        next_block_index += 1U
-      }
-      None => ()
+    if code_block_kind_from_opcode(span.opcode) is Some(kind) {
+      let depth = open_stack.length().reinterpret_as_uint() + 1U
+      let start_offset = span.start.reinterpret_as_uint()
+      entries.push({
+        function_index,
+        function_name,
+        export_names,
+        block_index: next_block_index,
+        depth,
+        kind,
+        start_offset,
+        end_offset: start_offset,
+        instruction_count: 0U,
+        total_bytes: 0U,
+      })
+      open_stack.push({
+        entry_index: entries.length() - 1,
+        start_span_index: i,
+        start_offset: span.start,
+      })
+      next_block_index += 1U
     }
     if span.opcode == 0x0bU && open_stack.length() > 0 {
       let open = open_stack[open_stack.length() - 1]
@@ -93,7 +90,7 @@ fn collect_function_code_blocks(
 pub fn analyze_code_block_sizes(
   bytes : Bytes,
 ) -> Result[CodeBlockSizeReport, WiteError] {
-  try? {
+  try? ({
     let sections = parse_core_sections_raise(bytes)
     let mut imported_function_count = 0U
     let mut local_function_count = 0U
@@ -160,7 +157,7 @@ pub fn analyze_code_block_sizes(
                 spans,
               )
               blocks.append(function_blocks[:])
-              if not(complete) {
+              if !complete {
                 partial = true
               }
             }
@@ -170,20 +167,22 @@ pub fn analyze_code_block_sizes(
         Err(_) => partial = true
       }
     }
-    blocks.sort_by((a, b) => if a.total_bytes > b.total_bytes {
-      -1
-    } else if a.total_bytes < b.total_bytes {
-      1
-    } else if a.function_index < b.function_index {
-      -1
-    } else if a.function_index > b.function_index {
-      1
-    } else if a.block_index < b.block_index {
-      -1
-    } else if a.block_index > b.block_index {
-      1
-    } else {
-      0
+    blocks.sort_by((a, b) => {
+      if a.total_bytes > b.total_bytes {
+        -1
+      } else if a.total_bytes < b.total_bytes {
+        1
+      } else if a.function_index < b.function_index {
+        -1
+      } else if a.function_index > b.function_index {
+        1
+      } else if a.block_index < b.block_index {
+        -1
+      } else if a.block_index > b.block_index {
+        1
+      } else {
+        0
+      }
     })
     {
       partial,
@@ -193,7 +192,7 @@ pub fn analyze_code_block_sizes(
       total_instruction_bytes,
       blocks,
     }
-  }
+  })
 }
 
 ///|
@@ -206,10 +205,7 @@ fn summarize_custom_sections_raise(
     if section.section_id != 0U {
       continue
     }
-    let name = match section.custom_name {
-      Some(v) => v
-      None => "(anon)"
-    }
+    let name = section.custom_name.unwrap_or("(anon)")
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
     let payload_bytes = payload.length().reinterpret_as_uint()
     let prefix_end = parse_custom_section_name_prefix_end(payload)
@@ -236,16 +232,18 @@ fn summarize_custom_sections_raise(
   }
   let out : Array[CustomSectionBreakdown] = []
   grouped.each((_, value) => out.push(value))
-  out.sort_by((a, b) => if a.total_bytes > b.total_bytes {
-    -1
-  } else if a.total_bytes < b.total_bytes {
-    1
-  } else if a.count > b.count {
-    -1
-  } else if a.count < b.count {
-    1
-  } else {
-    a.name.compare(b.name)
+  out.sort_by((a, b) => {
+    if a.total_bytes > b.total_bytes {
+      -1
+    } else if a.total_bytes < b.total_bytes {
+      1
+    } else if a.count > b.count {
+      -1
+    } else if a.count < b.count {
+      1
+    } else {
+      a.name.compare(b.name)
+    }
   })
   out
 }
@@ -572,22 +570,26 @@ fn opcode_stats_from_counters(
       total_bytes: counter.total_bytes,
     })
   })
-  prefixed_grouped.each((key, counter) => out.push({
-    key,
-    mnemonic: opcode_mnemonic_or_key(counter.opcode, counter.subopcode, key),
-    count: counter.count,
-    total_bytes: counter.total_bytes,
-  }))
-  out.sort_by((a, b) => if a.total_bytes > b.total_bytes {
-    -1
-  } else if a.total_bytes < b.total_bytes {
-    1
-  } else if a.count > b.count {
-    -1
-  } else if a.count < b.count {
-    1
-  } else {
-    a.key.compare(b.key)
+  prefixed_grouped.each((key, counter) => {
+    out.push({
+      key,
+      mnemonic: opcode_mnemonic_or_key(counter.opcode, counter.subopcode, key),
+      count: counter.count,
+      total_bytes: counter.total_bytes,
+    })
+  })
+  out.sort_by((a, b) => {
+    if a.total_bytes > b.total_bytes {
+      -1
+    } else if a.total_bytes < b.total_bytes {
+      1
+    } else if a.count > b.count {
+      -1
+    } else if a.count < b.count {
+      1
+    } else {
+      a.key.compare(b.key)
+    }
   })
   out
 }
@@ -597,7 +599,7 @@ pub fn analyze_wasm_breakdown(
   bytes : Bytes,
   top_limit? : UInt = 0U,
 ) -> Result[WasmBreakdownReport, WiteError] {
-  try? {
+  try? ({
     let sections = parse_core_sections_raise(bytes)
     let section_sizes = summarize_sections(sections, false)
     let custom_sections = summarize_custom_sections_raise(sections, bytes)
@@ -617,9 +619,9 @@ pub fn analyze_wasm_breakdown(
         7U => {
           let parsed = parse_export_function_names(payload)
           merge_export_function_names(export_names, parsed)
-          parsed.each((index, _names) => push_unique_u32_with_seen(
-            roots, root_seen, index,
-          ))
+          parsed.each((index, _names) => {
+            push_unique_u32_with_seen(roots, root_seen, index)
+          })
         }
         8U =>
           push_unique_u32_with_seen(
@@ -726,7 +728,7 @@ pub fn analyze_wasm_breakdown(
               for block in function_blocks {
                 push_code_block_size_with_limit(top_blocks, block, top_limit)
               }
-              if not(complete) {
+              if !complete {
                 opcode_partial = true
               }
               let (callees, body_has_indirect) = collect_direct_callees(
@@ -795,14 +797,10 @@ pub fn analyze_wasm_breakdown(
     let mut reachable_body_bytes = 0U
     let mut dead_body_bytes = 0U
     for function_index in local_function_indices {
-      let body_bytes = match body_bytes_map.get(function_index) {
-        Some(v) => v
-        None => 0U
-      }
-      if visited.get(function_index) is Some(_) {
-        reachable_body_bytes += body_bytes
-      } else {
-        dead_body_bytes += body_bytes
+      let body_bytes = body_bytes_map.get(function_index).unwrap_or(0U)
+      match visited.get(function_index) {
+        Some(_) => reachable_body_bytes += body_bytes
+        None => dead_body_bytes += body_bytes
       }
     }
     {
@@ -823,5 +821,5 @@ pub fn analyze_wasm_breakdown(
       reachable_body_bytes,
       dead_body_bytes,
     }
-  }
+  })
 }

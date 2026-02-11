@@ -12,10 +12,9 @@ pub fn print_function_sizes(
       Some(name) => name
       None => "#\{fn_size.function_index.to_string()}"
     }
-    let exports = if fn_size.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + fn_size.export_names.join(",")
+    let exports = match fn_size.export_names {
+      [] => ""
+      [_, ..] => " exports=" + fn_size.export_names.join(",")
     }
     println(
       "    " +
@@ -54,15 +53,13 @@ fn print_function_gap_entries(entries : Array[@wite.FunctionGapEntry]) -> Unit {
   }
   println("  entries:")
   for entry in entries {
-    let left_exports = if entry.left_export_names.length() == 0 {
-      "-"
-    } else {
-      entry.left_export_names.join(",")
+    let left_exports = match entry.left_export_names {
+      [] => "-"
+      [_, ..] => entry.left_export_names.join(",")
     }
-    let right_exports = if entry.right_export_names.length() == 0 {
-      "-"
-    } else {
-      entry.right_export_names.join(",")
+    let right_exports = match entry.right_export_names {
+      [] => "-"
+      [_, ..] => entry.right_export_names.join(",")
     }
     println(
       "    kind=" +
@@ -129,10 +126,9 @@ fn print_code_block_sizes(
       Some(name) => name
       None => "#\{block.function_index.to_string()}"
     }
-    let exports = if block.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + block.export_names.join(",")
+    let exports = match block.export_names {
+      [] => ""
+      [_, ..] => " exports=" + block.export_names.join(",")
     }
     println(
       "    " +

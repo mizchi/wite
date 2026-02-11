@@ -65,14 +65,8 @@ fn collect_section_gap_entries(
       return
     }
     seen.set(key, true)
-    let left_bytes = match left_map.get(key) {
-      Some(v) => v
-      None => 0U
-    }
-    let right_bytes = match right_map.get(key) {
-      Some(v) => v
-      None => 0U
-    }
+    let left_bytes = left_map.get(key).unwrap_or(0U)
+    let right_bytes = right_map.get(key).unwrap_or(0U)
     let delta_bytes = diff_uint(left_bytes, right_bytes)
     entries.push({
       key,

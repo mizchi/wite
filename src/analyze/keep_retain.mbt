@@ -15,29 +15,29 @@ pub fn run_keep_reasons_with_options(
     Ok(report) => {
       println("keep reasons:")
       println("  partial: " + report.partial.to_string())
-      if report.entries.length() == 0 {
-        println("  entries: (none)")
-      } else {
-        println("  entries:")
-        for entry in report.entries {
-          let label = match entry.name {
-            Some(v) => v
-            None => "#\{entry.function_index.to_string()}"
+      match report.entries {
+        [] => println("  entries: (none)")
+        [_, ..] => {
+          println("  entries:")
+          for entry in report.entries {
+            let label = match entry.name {
+              Some(v) => v
+              None => "#\{entry.function_index.to_string()}"
+            }
+            let exports = match entry.export_names {
+              [] => ""
+              [_, ..] => " exports=" + entry.export_names.join(",")
+            }
+            println(
+              "    " +
+              label +
+              " idx=" +
+              entry.function_index.to_string() +
+              exports +
+              " reasons=" +
+              entry.reasons.join(","),
+            )
           }
-          let exports = if entry.export_names.length() == 0 {
-            ""
-          } else {
-            " exports=" + entry.export_names.join(",")
-          }
-          println(
-            "    " +
-            label +
-            " idx=" +
-            entry.function_index.to_string() +
-            exports +
-            " reasons=" +
-            entry.reasons.join(","),
-          )
         }
       }
     }
@@ -53,9 +53,12 @@ fn print_retain_path_entries(
   entries : Array[@wite.RetainPathEntry],
   limit : UInt,
 ) -> Unit {
-  if entries.length() == 0 {
-    println("  entries: (none)")
-    return
+  match entries {
+    [] => {
+      println("  entries: (none)")
+      return
+    }
+    [_, ..] => ()
   }
   println("  entries:")
   let mut printed = 0U
@@ -67,20 +70,17 @@ fn print_retain_path_entries(
       Some(v) => v
       None => "#\{entry.function_index.to_string()}"
     }
-    let exports = if entry.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + entry.export_names.join(",")
+    let exports = match entry.export_names {
+      [] => ""
+      [_, ..] => " exports=" + entry.export_names.join(",")
     }
-    let root_reasons = if entry.root_reasons.length() == 0 {
-      "reachable"
-    } else {
-      entry.root_reasons.join(",")
+    let root_reasons = match entry.root_reasons {
+      [] => "reachable"
+      [_, ..] => entry.root_reasons.join(",")
     }
-    let path = if entry.path.length() == 0 {
-      "(none)"
-    } else {
-      entry.path.map(i => i.to_string()).join(" -> ")
+    let path = match entry.path {
+      [] => "(none)"
+      [_, ..] => entry.path.map(i => i.to_string()).join(" -> ")
     }
     println(
       "    " +
@@ -117,10 +117,10 @@ pub fn run_retain_path_with_options(
     Ok(report) => {
       println("retain-path analysis:")
       println("  partial: " + report.partial.to_string())
-      if report.roots.length() == 0 {
-        println("  roots: (none)")
-      } else {
-        println("  roots: " + report.roots.map(i => i.to_string()).join(", "))
+      match report.roots {
+        [] => println("  roots: (none)")
+        [_, ..] =>
+          println("  roots: " + report.roots.map(i => i.to_string()).join(", "))
       }
       print_retain_path_entries(report.entries, limit)
     }

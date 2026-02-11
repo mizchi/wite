@@ -109,9 +109,11 @@ fn collect_function_size_diff_indices(
     seen.set(function_index, true)
     out.push(function_index)
   })
-  after_map.each((function_index, _) => if seen.get(function_index) is None {
-    seen.set(function_index, true)
-    out.push(function_index)
+  after_map.each((function_index, _) => {
+    if seen.get(function_index) is None {
+      seen.set(function_index, true)
+      out.push(function_index)
+    }
   })
   out
 }
@@ -122,18 +124,15 @@ fn merged_export_names_for_function_diff(
   after : FunctionSize?,
 ) -> Array[String] {
   let names : Array[String] = []
-  match before {
-    Some(v) => names.append(v.export_names[:])
-    None => ()
+  if before is Some(v) {
+    names.append(v.export_names[:])
   }
-  match after {
-    Some(v) =>
-      for name in v.export_names {
-        if not(names.contains(name)) {
-          names.push(name)
-        }
+  if after is Some(v) {
+    for name in v.export_names {
+      if !names.contains(name) {
+        names.push(name)
       }
-    None => ()
+    }
   }
   names
 }
@@ -184,14 +183,8 @@ fn collect_function_size_diffs_raise(
         after_body_bytes,
         gain_bytes,
         regression_bytes,
-        before_name: match before_function {
-          Some(v) => v.name
-          None => None
-        },
-        after_name: match after_function {
-          Some(v) => v.name
-          None => None
-        },
+        before_name: before_function.bind(v => v.name),
+        after_name: after_function.bind(v => v.name),
         export_names: merged_export_names_for_function_diff(
           before_function, after_function,
         ),
@@ -257,7 +250,7 @@ pub fn analyze_optimize_metadata(
   config? : OptimizeConfig = OptimizeConfig::o1(),
   function_diff_limit? : UInt = 20U,
 ) -> Result[OptimizeMetadataReport, WiteError] {
-  try? {
+  try? ({
     let strip_stage = run_optimize_stage_raise(
       "strip",
       bytes,
@@ -296,5 +289,5 @@ pub fn analyze_optimize_metadata(
         rume_stage.stage,
       ],
     }
-  }
+  })
 }

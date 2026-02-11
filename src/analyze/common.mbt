@@ -204,10 +204,9 @@ fn print_host_code_hints(
       Some(name) => name
       None => "#\{hint.target_function_index.to_string()}"
     }
-    let export_part = if hint.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + hint.export_names.join(",")
+    let export_part = match hint.export_names {
+      [] => ""
+      [_, ..] => " exports=" + hint.export_names.join(",")
     }
     println(
       "    " +

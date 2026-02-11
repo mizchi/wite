@@ -80,10 +80,9 @@ fn print_optimize_metadata_stage(stage : @wite.OptimizeStageMetadata) -> Unit {
             None => "#\{diff.function_index.to_string()}"
           }
       }
-      let exports = if diff.export_names.length() == 0 {
-        ""
-      } else {
-        " exports=" + diff.export_names.join(",")
+      let exports = match diff.export_names {
+        [] => ""
+        [_, ..] => " exports=" + diff.export_names.join(",")
       }
       println(
         "        " +

@@ -19,7 +19,7 @@ fn map_merge_unique_u32_array(
       Some(prev) => {
         let next = prev.copy()
         for value in values {
-          if not(next.contains(value)) {
+          if !next.contains(value) {
             next.push(value)
           }
         }
@@ -176,13 +176,13 @@ fn analyze_call_graph_raise(
   while head < queue.length() {
     let index = queue[head]
     head += 1
-    if not(mark_visited_function_index(visited, index)) {
+    if !mark_visited_function_index(visited, index) {
       continue
     }
     match index_to_pos.get(index) {
       Some(pos) =>
         for callee in nodes[pos].direct_callees {
-          if not(is_visited_function_index(visited, callee)) {
+          if !is_visited_function_index(visited, callee) {
             queue.push(callee)
           }
         }
@@ -338,7 +338,7 @@ fn analyze_call_graph_summary_raise(
   while head < queue.length() {
     let index = queue[head]
     head += 1
-    if not(mark_visited_function_index(visited, index)) {
+    if !mark_visited_function_index(visited, index) {
       continue
     }
     if index < imported_function_count {
@@ -350,7 +350,7 @@ fn analyze_call_graph_summary_raise(
       continue
     }
     for callee in direct_callees_by_local[pos] {
-      if not(is_visited_function_index(visited, callee)) {
+      if !is_visited_function_index(visited, callee) {
         queue.push(callee)
       }
     }

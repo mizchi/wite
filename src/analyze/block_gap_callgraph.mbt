@@ -186,15 +186,14 @@ pub fn print_call_graph_nodes(
       None => "#\{node.function_index.to_string()}"
     }
     let status = if node.reachable_from_roots { "reachable" } else { "dead" }
-    let export_part = if node.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + node.export_names.join(",")
+    let export_part = match node.export_names {
+      [] => ""
+      [_, ..] => " exports=" + node.export_names.join(",")
     }
-    let callee_part = if node.direct_callees.length() == 0 {
-      ""
-    } else {
-      " callees=" + node.direct_callees.map(i => i.to_string()).join(",")
+    let callee_part = match node.direct_callees {
+      [] => ""
+      [_, ..] =>
+        " callees=" + node.direct_callees.map(i => i.to_string()).join(",")
     }
     println(
       "    " +

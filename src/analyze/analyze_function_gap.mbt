@@ -47,7 +47,7 @@ fn build_name_match_map(
   for function in functions {
     match function.name {
       Some(name) =>
-        if not(name.is_empty()) {
+        if !name.is_empty() {
           map_push_uint_array(grouped, "name:" + name, function.function_index)
         }
       None => ()
@@ -168,22 +168,10 @@ fn make_function_gap_entry(
   {
     match_kind,
     match_key,
-    left_function_index: match left {
-      Some(v) => Some(v.function_index)
-      None => None
-    },
-    right_function_index: match right {
-      Some(v) => Some(v.function_index)
-      None => None
-    },
-    left_name: match left {
-      Some(v) => v.name
-      None => None
-    },
-    right_name: match right {
-      Some(v) => v.name
-      None => None
-    },
+    left_function_index: left.map(v => v.function_index),
+    right_function_index: right.map(v => v.function_index),
+    left_name: left.bind(v => v.name),
+    right_name: right.bind(v => v.name),
     left_export_names: match left {
       Some(v) => v.export_names
       None => []
@@ -231,7 +219,7 @@ pub fn analyze_function_size_gap(
   right_bytes : Bytes,
   top_limit? : UInt = 20U,
 ) -> Result[FunctionGapReport, WiteError] {
-  try? {
+  try? ({
     let left_functions = match analyze_function_sizes(left_bytes) {
       Ok(v) => v
       Err(e) => raise e
@@ -359,5 +347,5 @@ pub fn analyze_function_size_gap(
       unmatched_right_count,
       entries: limited_entries,
     }
-  }
+  })
 }

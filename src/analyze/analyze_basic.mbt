@@ -2,10 +2,10 @@
 pub fn analyze_section_sizes(
   bytes : Bytes,
 ) -> Result[Array[SectionSize], WiteError] {
-  try? {
+  try? ({
     let sections = parse_core_sections_raise(bytes)
     summarize_sections(sections, false)
-  }
+  })
 }
 
 ///|
@@ -18,7 +18,7 @@ pub fn optimize_for_size(
 
 ///|
 pub fn profile_module(bytes : Bytes) -> Result[ModuleProfile, WiteError] {
-  try? {
+  try? ({
     let sections = parse_core_sections_raise(bytes)
     let mut function_count = 0U
     let mut import_count = 0U
@@ -48,14 +48,14 @@ pub fn profile_module(bytes : Bytes) -> Result[ModuleProfile, WiteError] {
       code_body_bytes,
       sections: summarize_sections(sections, false),
     }
-  }
+  })
 }
 
 ///|
 pub fn analyze_function_sizes(
   bytes : Bytes,
 ) -> Result[Array[FunctionSize], WiteError] {
-  try? {
+  try? ({
     let sections = parse_core_sections_raise(bytes)
     let mut imported_function_count = 0U
     let mut local_function_count = 0U
@@ -108,17 +108,19 @@ pub fn analyze_function_sizes(
         },
       })
     }
-    functions.sort_by((a, b) => if a.body_bytes > b.body_bytes {
-      -1
-    } else if a.body_bytes < b.body_bytes {
-      1
-    } else if a.function_index < b.function_index {
-      -1
-    } else if a.function_index > b.function_index {
-      1
-    } else {
-      0
+    functions.sort_by((a, b) => {
+      if a.body_bytes > b.body_bytes {
+        -1
+      } else if a.body_bytes < b.body_bytes {
+        1
+      } else if a.function_index < b.function_index {
+        -1
+      } else if a.function_index > b.function_index {
+        1
+      } else {
+        0
+      }
     })
     functions
-  }
+  })
 }
