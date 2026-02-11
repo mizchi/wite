@@ -6347,8 +6347,13 @@ test "optimize peephole precomputes i32.add with multibyte nonnegative consts" {
 }
 
 ///|
-test "optimize peephole does not precompute overflowing i32.add constants" {
+test "optimize peephole precomputes wrapping i32.add constants" {
   let bytes = sample_module_with_i32_add_precompute_overflow_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 11U)
   let config = make_optimize_config(
     strip_all_custom=false,
     strip_name_section=false,
@@ -6366,12 +6371,18 @@ test "optimize peephole does not precompute overflowing i32.add constants" {
     assert_true(false)
     return
   }
-  assert_eq(optimized.bytes, bytes)
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 8U)
+  assert_true(optimized.after_size < optimized.before_size)
   assert_true(
     bytes_contains_seq(optimized.bytes, [
-      0x41, 0xff, 0xff, 0xff, 0xff, 0x07, 0x41, 0x01, 0x6a,
+      0x41, 0x80, 0x80, 0x80, 0x80, 0x78, 0x0b,
     ]),
   )
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
 ///|
@@ -6415,7 +6426,7 @@ test "optimize peephole precomputes i32.const+i32.const+i32.cmp" {
 }
 
 ///|
-test "optimize peephole folds local.get+i32.const+i32.add into i32.load offset" {
+test "optimize peephole keeps local.get+i32.const+i32.add before i32.load (wrap-safe)" {
   let bytes = sample_module_with_i32_load_offset_precompute_bytes()
   guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
@@ -6443,21 +6454,20 @@ test "optimize peephole folds local.get+i32.const+i32.add into i32.load offset" 
     assert_true(false)
     return
   }
-  assert_eq(after.code_body_bytes, 7U)
+  assert_eq(after.code_body_bytes, 10U)
+  assert_eq(after.code_body_bytes, before.code_body_bytes)
   assert_true(
-    bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x28, 0x02, 0x28]),
+    bytes_contains_seq(optimized.bytes, [
+      0x20, 0x00, 0x41, 0x20, 0x6a, 0x28, 0x02, 0x08,
+    ]),
   )
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [
-        0x20, 0x00, 0x41, 0x20, 0x6a, 0x28, 0x02, 0x08,
-      ]),
-    ),
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [-1, 0, 1, 42]),
   )
 }
 
 ///|
-test "optimize peephole folds local.get+i32.const+i32.add into i32.store offset" {
+test "optimize peephole keeps local.get+i32.const+i32.add before i32.store (wrap-safe)" {
   let bytes = sample_module_with_i32_store_offset_precompute_bytes()
   guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
@@ -6485,18 +6495,12 @@ test "optimize peephole folds local.get+i32.const+i32.add into i32.store offset"
     assert_true(false)
     return
   }
-  assert_eq(after.code_body_bytes, 9U)
+  assert_eq(after.code_body_bytes, 12U)
+  assert_eq(after.code_body_bytes, before.code_body_bytes)
   assert_true(
     bytes_contains_seq(optimized.bytes, [
-      0x20, 0x00, 0x20, 0x01, 0x36, 0x02, 0x28,
+      0x20, 0x00, 0x41, 0x20, 0x6a, 0x20, 0x01, 0x36, 0x02, 0x08,
     ]),
-  )
-  assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [
-        0x20, 0x00, 0x41, 0x20, 0x6a, 0x20, 0x01, 0x36, 0x02, 0x08,
-      ]),
-    ),
   )
 }
 
@@ -6524,9 +6528,9 @@ test "optimize peephole store offset folding preserves runtime semantics" {
     assert_true(false)
     return
   }
-  assert_eq(after.code_body_bytes, 14U)
+  assert_eq(after.code_body_bytes, 20U)
   assert_true(
-    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [0, 4, 100]),
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [-1, 0, 4, 100]),
   )
 }
 
