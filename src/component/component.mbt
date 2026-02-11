@@ -10,6 +10,30 @@ pub fn read_bytes_or_exit(path : String) -> Bytes {
 }
 
 ///|
+pub fn verify_component_interface(
+  component_bytes : Bytes,
+  wit_path : String,
+  world? : String,
+) -> Result[Unit, String] {
+  let resolved = match world {
+    Some(world_name) =>
+      match @wit.resolve_path(wit_path, world=world_name) {
+        Ok(v) => v
+        Err(e) => return Err("wit resolve failed: " + e.to_string())
+      }
+    None =>
+      match @wit.resolve_path(wit_path) {
+        Ok(v) => v
+        Err(e) => return Err("wit resolve failed: " + e.to_string())
+      }
+  }
+  match @mwac_component.check_component_targets(component_bytes, resolved) {
+    Ok(_) => Ok(())
+    Err(msg) => Err("interface verify failed: " + msg)
+  }
+}
+
+///|
 fn print_section_sizes(sections : Array[@wite.SectionSize]) -> Unit {
   for section in sections {
     println(
@@ -32,10 +56,9 @@ fn print_function_sizes(
       Some(name) => name
       None => "#\{fn_size.function_index.to_string()}"
     }
-    let exports = if fn_size.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + fn_size.export_names.join(",")
+    let exports = match fn_size.export_names {
+      [] => ""
+      [_, ..] => " exports=" + fn_size.export_names.join(",")
     }
     println(
       "    " +
@@ -65,15 +88,14 @@ fn print_call_graph_nodes(
       None => "#\{node.function_index.to_string()}"
     }
     let status = if node.reachable_from_roots { "reachable" } else { "dead" }
-    let export_part = if node.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + node.export_names.join(",")
+    let export_part = match node.export_names {
+      [] => ""
+      [_, ..] => " exports=" + node.export_names.join(",")
     }
-    let callee_part = if node.direct_callees.length() == 0 {
-      ""
-    } else {
-      " callees=" + node.direct_callees.map(i => i.to_string()).join(",")
+    let callee_part = match node.direct_callees {
+      [] => ""
+      [_, ..] =>
+        " callees=" + node.direct_callees.map(i => i.to_string()).join(",")
     }
     println(
       "    " +
@@ -197,20 +219,26 @@ pub fn run_component_dce_kpi_with_options(
   verbose : Bool,
 ) -> Unit {
   let bytes = read_bytes_or_exit(component_path)
-  let resolved_wit : @wit.ResolveInput? = match wit_path {
-    Some(path) =>
-      match @wit.resolve_path(path) {
-        Ok(v) => Some(v)
-        Err(e) => {
-          println("wit resolve failed: " + e.to_string())
-          @sys.exit(1)
-          None
-        }
+  let resolved_wit : @wit.ResolveInput? = wit_path.bind(path => {
+    match @wit.resolve_path(path) {
+      Ok(v) => Some(v)
+      Err(e) => {
+        println("wit resolve failed: " + e.to_string())
+        @sys.exit(1)
+        None
       }
-    None => None
+    }
+  })
+  let policy_result = match resolved_wit {
+    Some(resolved) =>
+      @wite.analyze_component_root_policy(
+        bytes,
+        resolved_wit=resolved,
+        exclude=excludes,
+      )
+    None => @wite.analyze_component_root_policy(bytes, exclude=excludes)
   }
-  let policy = match
-    @wite.analyze_component_root_policy(bytes, resolved_wit~, exclude=excludes) {
+  let policy = match policy_result {
     Ok(v) => v
     Err(msg) => {
       println("component-dce-kpi root policy failed: " + msg)
@@ -331,26 +359,100 @@ pub fn run_contract(component_path : String, wit_path : String) -> Unit {
 }
 
 ///|
+pub fn run_interface_with_options(
+  component_path : String,
+  wit_path : String?,
+  world : String?,
+  strict : Bool,
+) -> Unit {
+  let bytes = read_bytes_or_exit(component_path)
+  let policy_result = match wit_path {
+    Some(path) => {
+      let resolved = match world {
+        Some(world_name) =>
+          match @wit.resolve_path(path, world=world_name) {
+            Ok(v) => v
+            Err(e) => {
+              println("wit resolve failed: " + e.to_string())
+              @sys.exit(1)
+              return
+            }
+          }
+        None =>
+          match @wit.resolve_path(path) {
+            Ok(v) => v
+            Err(e) => {
+              println("wit resolve failed: " + e.to_string())
+              @sys.exit(1)
+              return
+            }
+          }
+      }
+      @wite.analyze_component_root_policy(bytes, resolved_wit=resolved)
+    }
+    None => @wite.analyze_component_root_policy(bytes)
+  }
+  let policy = match policy_result {
+    Ok(v) => v
+    Err(msg) => {
+      println("interface analyze failed: " + msg)
+      @sys.exit(1)
+      return
+    }
+  }
+  println("component imports: " + policy.component_imports.join(", "))
+  println("component exports: " + policy.component_exports.join(", "))
+  if wit_path is Some(path) {
+    println("wit imports: " + policy.wit_imports.join(", "))
+    println("wit exports: " + policy.wit_exports.join(", "))
+    let verify_result = match world {
+      Some(world_name) =>
+        verify_component_interface(bytes, path, world=world_name)
+      None => verify_component_interface(bytes, path)
+    }
+    match verify_result {
+      Ok(_) => println("interface verify: ok")
+      Err(msg) => {
+        println("interface verify: fail")
+        println(msg)
+        if strict {
+          @sys.exit(1)
+        }
+      }
+    }
+  } else if strict {
+    println("--strict requires [wit-dir]")
+    @sys.exit(1)
+  }
+}
+
+///|
 pub fn run_root_policy_with_options(
   component_path : String,
   wit_path : String?,
   excludes : Array[String],
 ) -> Unit {
   let bytes = read_bytes_or_exit(component_path)
-  let resolved_wit : @wit.ResolveInput? = match wit_path {
-    Some(path) =>
-      match @wit.resolve_path(path) {
-        Ok(v) => Some(v)
-        Err(e) => {
-          println("wit resolve failed: " + e.to_string())
-          @sys.exit(1)
-          None
-        }
+  let resolved_wit : @wit.ResolveInput? = wit_path.bind(path => {
+    match @wit.resolve_path(path) {
+      Ok(v) => Some(v)
+      Err(e) => {
+        println("wit resolve failed: " + e.to_string())
+        @sys.exit(1)
+        None
       }
-    None => None
+    }
+  })
+  let policy_result = match resolved_wit {
+    Some(resolved) =>
+      @wite.analyze_component_root_policy(
+        bytes,
+        resolved_wit=resolved,
+        exclude=excludes,
+      )
+    None => @wite.analyze_component_root_policy(bytes, exclude=excludes)
   }
-  match
-    @wite.analyze_component_root_policy(bytes, resolved_wit~, exclude=excludes) {
+  match policy_result {
     Ok(policy) => {
       println("component imports: " + policy.component_imports.join(", "))
       println("component exports: " + policy.component_exports.join(", "))

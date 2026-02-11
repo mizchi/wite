@@ -1,6 +1,6 @@
 ///|
 fn replace_suffix(text : String, from : String, to : String) -> String {
-  if not(text.has_suffix(from)) {
+  if !text.has_suffix(from) {
     return text + to
   }
   let prefix = text[:text.length() - from.length()].to_string() catch {
@@ -97,6 +97,17 @@ priv struct BuildInputResolution {
 }
 
 ///|
+priv struct BuildFlagParseResult {
+  output_path : String?
+  best_effort : Bool
+  compose_dce : Bool
+  kind : BinaryKind
+  optimize_flags : Array[String]
+  interface_path : String?
+  interface_world : String?
+}
+
+///|
 fn pick_default_build_input_path(
   has_main_wac : Bool,
   has_main_wasm : Bool,
@@ -145,6 +156,118 @@ fn resolve_build_input_from_args(
 }
 
 ///|
+fn parse_build_flags(
+  merged_flags : Array[String],
+  default_kind : BinaryKind,
+) -> BuildFlagParseResult {
+  let mut output_path : String? = None
+  let mut best_effort = false
+  let mut compose_dce = true
+  let mut kind = default_kind
+  let mut interface_path : String? = None
+  let mut interface_world : String? = None
+  let optimize_flags : Array[String] = []
+  let mut i = 0
+  while i < merged_flags.length() {
+    let arg = merged_flags[i]
+    if arg == "-o" || arg == "--out" {
+      if i + 1 >= merged_flags.length() {
+        println("missing output path after " + arg)
+        @sys.exit(1)
+      }
+      output_path = Some(merged_flags[i + 1])
+      i += 2
+      continue
+    }
+    if arg.strip_prefix("--out=") is Some(path) {
+      output_path = Some(path.to_string())
+      i += 1
+      continue
+    }
+    if arg == "--best-effort" {
+      best_effort = true
+      i += 1
+      continue
+    }
+    if arg == "--no-compose-dce" {
+      compose_dce = false
+      i += 1
+      continue
+    }
+    if arg == "--kind" {
+      if i + 1 >= merged_flags.length() {
+        println("missing value after --kind")
+        @sys.exit(1)
+      }
+      kind = parse_binary_kind_or_exit(merged_flags[i + 1], "build kind")
+      i += 2
+      continue
+    }
+    if arg.strip_prefix("--kind=") is Some(value) {
+      kind = parse_binary_kind_or_exit(value.to_string(), "build kind")
+      i += 1
+      continue
+    }
+    if arg == "--interface" {
+      if i + 1 >= merged_flags.length() {
+        println("missing value after --interface")
+        @sys.exit(1)
+      }
+      interface_path = Some(merged_flags[i + 1])
+      i += 2
+      continue
+    }
+    if arg.strip_prefix("--interface=") is Some(value) {
+      interface_path = Some(value.to_string())
+      i += 1
+      continue
+    }
+    if arg == "--world" {
+      if i + 1 >= merged_flags.length() {
+        println("missing value after --world")
+        @sys.exit(1)
+      }
+      interface_world = Some(merged_flags[i + 1])
+      i += 2
+      continue
+    }
+    if arg.strip_prefix("--world=") is Some(value) {
+      interface_world = Some(value.to_string())
+      i += 1
+      continue
+    }
+    optimize_flags.push(arg)
+    i += 1
+  }
+  if interface_world is Some(_) && interface_path is None {
+    println("--world requires --interface")
+    @sys.exit(1)
+  }
+  {
+    output_path,
+    best_effort,
+    compose_dce,
+    kind,
+    optimize_flags,
+    interface_path,
+    interface_world,
+  }
+}
+
+///|
+fn is_component_wasm(bytes : Bytes) -> Bool {
+  bytes.length() >= 8 &&
+  bytes[0] == 0x00 &&
+  bytes[1] == 0x61 &&
+  bytes[2] == 0x73 &&
+  bytes[3] == 0x6d &&
+  bytes[4] == 0x0d &&
+  bytes[5] == 0x00 &&
+  bytes[6] == 0x01 &&
+  bytes[7] == 0x00
+}
+
+///|
 async fn run_build(args : Array[String]) -> Unit {
   let default_input = pick_default_build_input_path(
     @fs.path_exists("main.wac"),
@@ -176,90 +299,38 @@ async fn run_build(args : Array[String]) -> Unit {
       Some(config_input) =>
         resolve_path_from_config_dir(config_dir, config_input)
       None =>
-        if default_input is Some(_) {
-          resolved.input_path
-        } else {
-          println(
-            "build requires entry.(wac|wasm), config input, or main.wac/main.wasm in cwd",
-          )
-          print_usage()
-          @sys.exit(1)
-          ""
+        match default_input {
+          Some(_) => resolved.input_path
+          None => {
+            println(
+              "build requires entry.(wac|wasm), config input, or main.wac/main.wasm in cwd",
+            )
+            print_usage()
+            @sys.exit(1)
+            ""
+          }
         }
     }
   }
-  let has_config_input = not(
-    config_file.input is @wite_config.ConfigInput::None,
-  )
+  let has_config_input = !(config_file.input is @wite_config.ConfigInput::None)
   let is_wac_input = input_path.has_suffix(".wac")
-  if not(is_wac_input) {
+  if !is_wac_input {
     auto_sync_deps_from_config_if_needed(config_selection)
   }
   let merged_flags = @wite_config.merge_command_flags(
     config_file.build_flags,
     config_selection.remaining_flags,
   )
-  let mut output_path : String? = None
-  let mut best_effort = false
-  let mut compose_dce = true
-  let mut kind = from_config_binary_kind(config_file.build_kind)
-  let optimize_flags : Array[String] = []
-  let mut i = 0
-  while i < merged_flags.length() {
-    let arg = merged_flags[i]
-    if arg == "-o" || arg == "--out" {
-      if i + 1 >= merged_flags.length() {
-        println("missing output path after " + arg)
-        @sys.exit(1)
-      }
-      output_path = Some(merged_flags[i + 1])
-      i += 2
-      continue
-    }
-    match arg.strip_prefix("--out=") {
-      Some(path) => {
-        output_path = Some(path.to_string())
-        i += 1
-        continue
-      }
-      None => ()
-    }
-    if arg == "--best-effort" {
-      best_effort = true
-      i += 1
-      continue
-    }
-    if arg == "--no-compose-dce" {
-      compose_dce = false
-      i += 1
-      continue
-    }
-    if arg == "--kind" {
-      if i + 1 >= merged_flags.length() {
-        println("missing value after --kind")
-        @sys.exit(1)
-      }
-      kind = parse_binary_kind_or_exit(merged_flags[i + 1], "build kind")
-      i += 2
-      continue
-    }
-    match arg.strip_prefix("--kind=") {
-      Some(value) => {
-        kind = parse_binary_kind_or_exit(value.to_string(), "build kind")
-        i += 1
-        continue
-      }
-      None => ()
-    }
-    optimize_flags.push(arg)
-    i += 1
-  }
-  let out = match output_path {
+  let parsed_flags = parse_build_flags(
+    merged_flags,
+    from_config_binary_kind(config_file.build_kind),
+  )
+  let out = match parsed_flags.output_path {
     Some(path) => path
     None =>
       if has_config_input {
         // config に input がある場合: config_dir/output.dir + basename
-        let basename = derive_build_output_path(path_basename(input_path))
+        let basename = input_path |> path_basename |> derive_build_output_path
         let output_dir = resolve_path_from_config_dir(
           config_dir,
           config_file.output.dir,
@@ -278,7 +349,7 @@ async fn run_build(args : Array[String]) -> Unit {
       @wite_deps.materialize_wac_dependencies_from_config(
         config_selection.config_path,
         input_path,
-        best_effort,
+        parsed_flags.best_effort,
       ) {
       Ok(synced) =>
         if synced > 0U {
@@ -292,7 +363,11 @@ async fn run_build(args : Array[String]) -> Unit {
   }
   let built = if is_wac_input {
     match
-      @wite_bundle.compose_wac_file(input_path, best_effort~, dce=compose_dce) {
+      @wite_bundle.compose_wac_file(
+        input_path,
+        best_effort=parsed_flags.best_effort,
+        dce=parsed_flags.compose_dce,
+      ) {
       Ok(bytes) => bytes
       Err(msg) => {
         println("build failed: " + msg)
@@ -303,10 +378,47 @@ async fn run_build(args : Array[String]) -> Unit {
   } else {
     read_bytes_or_exit(input_path)
   }
-  let options = parse_optimize_cli_options(optimize_flags)
+  let options = parse_optimize_cli_options(parsed_flags.optimize_flags)
   match
-    optimize_with_kind(built, kind, options.config, options.excluded_roots) {
+    optimize_with_kind(
+      built,
+      parsed_flags.kind,
+      options.config,
+      options.excluded_roots,
+    ) {
     Ok(result) => {
+      if parsed_flags.interface_path is Some(interface_path) {
+        if !is_component_wasm(result.bytes) {
+          println("build failed: --interface requires component output")
+          @sys.exit(1)
+        }
+        let verify_result = match parsed_flags.interface_world {
+          Some(world) =>
+            @wite_component.verify_component_interface(
+              result.bytes,
+              interface_path,
+              world~,
+            )
+          None =>
+            @wite_component.verify_component_interface(
+              result.bytes,
+              interface_path,
+            )
+        }
+        match verify_result {
+          Ok(_) => {
+            let world_suffix = match parsed_flags.interface_world {
+              Some(world) => " world=" + world
+              None => ""
+            }
+            println("interface verified: " + interface_path + world_suffix)
+          }
+          Err(msg) => {
+            println("build failed: " + msg)
+            @sys.exit(1)
+          }
+        }
+      }
       write_output_or_exit(out, result.bytes)
       println(
         "built: " +
@@ -321,7 +433,7 @@ async fn run_build(args : Array[String]) -> Unit {
       if options.verbose && result.no_change_reasons.length() > 0 {
         println("no-change reasons: " + result.no_change_reasons.join(", "))
       }
-      println("kind: " + binary_kind_name(kind))
+      println("kind: " + binary_kind_name(parsed_flags.kind))
       println("output: " + out)
     }
     Err(msg) => {

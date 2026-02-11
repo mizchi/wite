@@ -111,8 +111,8 @@ test "parse optimize cli options accepts wasm-opt style aliases" {
 ///|
 test "parse optimize cli options supports debuginfo alias override" {
   let parsed = parse_optimize_cli_options(["--strip", "-g"])
-  assert_true(not(parsed.config.strip_debug_sections))
-  assert_true(not(parsed.config.strip_name_section))
+  assert_true(!parsed.config.strip_debug_sections)
+  assert_true(!parsed.config.strip_name_section)
 }
 
 ///|
@@ -122,21 +122,21 @@ test "parse optimize cli options keeps metadata-strip policy across presets" {
   assert_true(o1.strip_dwarf_sections)
   assert_true(o1.strip_target_features_section)
   let o2 = parse_optimize_cli_options(["-O2"]).config
-  assert_true(not(o2.strip_debug_sections))
-  assert_true(not(o2.strip_dwarf_sections))
-  assert_true(not(o2.strip_target_features_section))
+  assert_true(!o2.strip_debug_sections)
+  assert_true(!o2.strip_dwarf_sections)
+  assert_true(!o2.strip_target_features_section)
   let o3 = parse_optimize_cli_options(["-O3"]).config
-  assert_true(not(o3.strip_debug_sections))
-  assert_true(not(o3.strip_dwarf_sections))
-  assert_true(not(o3.strip_target_features_section))
+  assert_true(!o3.strip_debug_sections)
+  assert_true(!o3.strip_dwarf_sections)
+  assert_true(!o3.strip_target_features_section)
   let os = parse_optimize_cli_options(["-Os"]).config
-  assert_true(not(os.strip_debug_sections))
-  assert_true(not(os.strip_dwarf_sections))
-  assert_true(not(os.strip_target_features_section))
+  assert_true(!os.strip_debug_sections)
+  assert_true(!os.strip_dwarf_sections)
+  assert_true(!os.strip_target_features_section)
   let oz = parse_optimize_cli_options(["-Oz"]).config
-  assert_true(not(oz.strip_debug_sections))
-  assert_true(not(oz.strip_dwarf_sections))
-  assert_true(not(oz.strip_target_features_section))
+  assert_true(!oz.strip_debug_sections)
+  assert_true(!oz.strip_dwarf_sections)
+  assert_true(!oz.strip_target_features_section)
 }
 
 ///|
@@ -161,7 +161,7 @@ test "analyze view support matrix distinguishes component compatible views" {
     analyze_view_supports_kind(AnalyzeView::Callgraph, BinaryKind::Component),
   )
   assert_true(
-    not(analyze_view_supports_kind(AnalyzeView::Deep, BinaryKind::Component)),
+    !analyze_view_supports_kind(AnalyzeView::Deep, BinaryKind::Component),
   )
   assert_true(analyze_view_supports_kind(AnalyzeView::Deep, BinaryKind::Core))
 }
@@ -194,7 +194,7 @@ test "resolve build input accepts omitted entry with default" {
   }
   assert_eq(resolved.input_path, "main.wac")
   assert_eq(resolved.raw_flags, [])
-  assert_true(not(resolved.explicit_input))
+  assert_true(!resolved.explicit_input)
 }
 
 ///|
@@ -208,7 +208,7 @@ test "resolve build input accepts flags-only invocation with default" {
   }
   assert_eq(resolved.input_path, "main.wac")
   assert_eq(resolved.raw_flags, ["-Oz"])
-  assert_true(not(resolved.explicit_input))
+  assert_true(!resolved.explicit_input)
 }
 
 ///|
@@ -231,6 +231,89 @@ test "resolve build input fails without explicit entry or default" {
   assert_true(
     resolve_build_input_from_args(["wite", "build", "-Oz"], None) is Err(_),
   )
+}
+
+///|
+test "parse build flags extracts interface and world options" {
+  let parsed = parse_build_flags(
+    [
+      "-o", "bundle.wasm", "--kind=component", "--interface", "api.wit", "--world",
+      "local:hello/hello", "-Oz", "--closed-world",
+    ],
+    BinaryKind::Auto,
+  )
+  assert_eq(parsed.output_path, Some("bundle.wasm"))
+  assert_true(parsed.kind is BinaryKind::Component)
+  assert_eq(parsed.interface_path, Some("api.wit"))
+  assert_eq(parsed.interface_world, Some("local:hello/hello"))
+  assert_eq(parsed.optimize_flags, ["-Oz", "--closed-world"])
+  assert_true(!parsed.best_effort)
+  assert_true(parsed.compose_dce)
+}
+
+///|
+test "parse build flags supports equals form for interface and world" {
+  let parsed = parse_build_flags(
+    [
+      "--interface=wit/api.wit", "--world=local:hello/hello", "--best-effort", "--no-compose-dce",
+      "-O1",
+    ],
+    BinaryKind::Auto,
+  )
+  assert_eq(parsed.interface_path, Some("wit/api.wit"))
+  assert_eq(parsed.interface_world, Some("local:hello/hello"))
+  assert_true(parsed.best_effort)
+  assert_true(!parsed.compose_dce)
+  assert_eq(parsed.optimize_flags, ["-O1"])
+}
+
+///|
+test "parse interface command options supports wit world strict" {
+  guard parse_interface_command_options([
+      "wite", "interface", "app.component.wasm", "wit", "--world", "hello", "--strict",
+    ])
+    is Ok(parsed) else {
+    fail("expected interface command options")
+  }
+  assert_eq(parsed.component_path, "app.component.wasm")
+  assert_eq(parsed.wit_path, Some("wit"))
+  assert_eq(parsed.world, Some("hello"))
+  assert_true(parsed.strict)
+}
+
+///|
+test "parse interface command options accepts component only mode" {
+  guard parse_interface_command_options([
+      "wite", "interface", "app.component.wasm",
+    ])
+    is Ok(parsed) else {
+    fail("expected interface command options without wit")
+  }
+  assert_eq(parsed.component_path, "app.component.wasm")
+  assert_eq(parsed.wit_path, None)
+  assert_eq(parsed.world, None)
+  assert_true(!parsed.strict)
+}
+
+///|
+test "parse interface command options validates world and strict dependencies" {
+  assert_true(
+    parse_interface_command_options([
+      "wite", "interface", "app.component.wasm", "--world", "hello",
+    ])
+    is Err(_),
+  )
+  assert_true(
+    parse_interface_command_options([
+      "wite", "interface", "app.component.wasm", "--strict",
+    ])
+    is Err(_),
+  )
+}
+
+///|
+test "analyze subcommand list includes interface" {
+  assert_true(is_analyze_subcommand("interface"))
 }
 
 ///|
@@ -308,7 +391,7 @@ test "parse new command options supports moonbit rust and force" {
     fail("expected default new command options")
   }
   assert_true(default_opts.template is NewTemplateKind::Moonbit)
-  assert_true(not(default_opts.force))
+  assert_true(!default_opts.force)
   guard parse_new_command_options(["wite", "new", "--rust", "--force"])
     is Ok(rust_opts) else {
     fail("expected rust template options")
@@ -408,22 +491,22 @@ test "new --moonbit generates buildable moonbit guest template" {
   let temp_dir = js_make_temp_dir("wite-new-moonbit-")
   let original_cwd = js_get_process_cwd()
   let cd_error = js_set_process_cwd(temp_dir)
-  if not(cd_error.is_empty()) {
+  if !cd_error.is_empty() {
     js_remove_dir_recursive(temp_dir)
     fail("failed to chdir to moonbit template workspace: " + cd_error)
   }
   run_new_command(["wite", "new", "--moonbit"])
   let restore_error = js_set_process_cwd(original_cwd)
-  if not(restore_error.is_empty()) {
+  if !restore_error.is_empty() {
     js_remove_dir_recursive(temp_dir)
     fail(
       "failed to restore cwd after moonbit template generation: " +
       restore_error,
     )
   }
-  assert_true(@fs.path_exists(temp_dir + "/wite.config.jsonc"))
-  assert_true(@fs.path_exists(temp_dir + "/main.wac"))
-  assert_true(@fs.path_exists(temp_dir + "/guest/moonbit/moon.mod.json"))
+  (temp_dir + "/wite.config.jsonc") |> @fs.path_exists |> assert_true
+  (temp_dir + "/main.wac") |> @fs.path_exists |> assert_true
+  (temp_dir + "/guest/moonbit/moon.mod.json") |> @fs.path_exists |> assert_true
   let raw = js_run_command_in_dir(
     "moon",
     "build\t--target\tjs",
@@ -455,21 +538,21 @@ test "new --rust generates cargo-component template and build command works" {
   let temp_dir = js_make_temp_dir("wite-new-rust-")
   let original_cwd = js_get_process_cwd()
   let cd_error = js_set_process_cwd(temp_dir)
-  if not(cd_error.is_empty()) {
+  if !cd_error.is_empty() {
     js_remove_dir_recursive(temp_dir)
     fail("failed to chdir to rust template workspace: " + cd_error)
   }
   run_new_command(["wite", "new", "--rust"])
   let restore_error = js_set_process_cwd(original_cwd)
-  if not(restore_error.is_empty()) {
+  if !restore_error.is_empty() {
     js_remove_dir_recursive(temp_dir)
     fail(
       "failed to restore cwd after rust template generation: " + restore_error,
     )
   }
   let rust_dir = temp_dir + "/guest/rust"
-  assert_true(@fs.path_exists(rust_dir + "/Cargo.toml"))
-  assert_true(@fs.path_exists(rust_dir + "/src/main.rs"))
+  (rust_dir + "/Cargo.toml") |> @fs.path_exists |> assert_true
+  (rust_dir + "/src/main.rs") |> @fs.path_exists |> assert_true
   let raw = js_run_command_in_dir(
     "cargo", "component\tbuild\t--quiet", rust_dir,
   )
@@ -806,26 +889,29 @@ async test "build command composes local fixture deps and keeps implicit output 
   ])
   let original_cwd = js_get_process_cwd()
   let cd_error = js_set_process_cwd(parsed.temp_dir)
-  if not(cd_error.is_empty()) {
+  if !cd_error.is_empty() {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("failed to chdir to fixture workspace: " + cd_error)
   }
   run_build(["wite", "build", "--no-config"])
   let restore_error = js_set_process_cwd(original_cwd)
-  if not(restore_error.is_empty()) {
+  if !restore_error.is_empty() {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("failed to restore cwd after implicit build: " + restore_error)
   }
-  if not(parsed.composed_path.has_suffix("/composed.wasm")) {
+  if !parsed.composed_path.has_suffix("/composed.wasm") {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("implicit build output path should end with composed.wasm")
   }
-  if not(parsed.explicit_path.has_suffix("/explicit.wasm")) {
+  if !parsed.explicit_path.has_suffix("/explicit.wasm") {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("explicit build output path should end with explicit.wasm")
   }
   let composed = @fs.read_file_to_bytes(parsed.composed_path) catch {
     e => {
+      if @async.is_being_cancelled() {
+        raise e
+      }
       js_remove_dir_recursive(parsed.temp_dir)
       fail("failed to read composed output: " + e.to_string())
       b""
@@ -833,12 +919,15 @@ async test "build command composes local fixture deps and keeps implicit output 
   }
   let explicit = @fs.read_file_to_bytes(parsed.explicit_path) catch {
     e => {
+      if @async.is_being_cancelled() {
+        raise e
+      }
       js_remove_dir_recursive(parsed.temp_dir)
       fail("failed to read explicit output: " + e.to_string())
       b""
     }
   }
-  if not(bytes_equal(composed, explicit)) {
+  if !bytes_equal(composed, explicit) {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("implicit and explicit build outputs diverged")
   }
@@ -861,7 +950,7 @@ async test "build command composes local fixture deps and keeps implicit output 
       break
     }
   }
-  if not(has_greet_export) {
+  if !has_greet_export {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("composed component does not expose expected greet export")
   }
@@ -877,6 +966,9 @@ async test "new --moonbit workspace can bundle sample app fixture" {
   }
   let sample_main_wac = @fs.read_file_to_string(parsed.main_wac_path) catch {
     e => {
+      if @async.is_being_cancelled() {
+        raise e
+      }
       js_remove_dir_recursive(parsed.temp_dir)
       fail("failed to read sample main.wac: " + e.to_string())
       ""
@@ -884,13 +976,16 @@ async test "new --moonbit workspace can bundle sample app fixture" {
   }
   let original_cwd = js_get_process_cwd()
   let cd_error = js_set_process_cwd(parsed.temp_dir)
-  if not(cd_error.is_empty()) {
+  if !cd_error.is_empty() {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("failed to chdir to sample app workspace: " + cd_error)
   }
   run_new_command(["wite", "new", "--moonbit", "--force"])
   @fs.write_string_to_file(parsed.main_wac_path, sample_main_wac) catch {
     e => {
+      if @async.is_being_cancelled() {
+        raise e
+      }
       let _ = js_set_process_cwd(original_cwd)
       js_remove_dir_recursive(parsed.temp_dir)
       fail("failed to restore sample main.wac after wite new: " + e.to_string())
@@ -900,12 +995,15 @@ async test "new --moonbit workspace can bundle sample app fixture" {
     "wite", "build", "main.wac", "--no-config", "-o", "sample.composed.wasm",
   ])
   let restore_error = js_set_process_cwd(original_cwd)
-  if not(restore_error.is_empty()) {
+  if !restore_error.is_empty() {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("failed to restore cwd after sample app build: " + restore_error)
   }
   let output = @fs.read_file_to_bytes(parsed.output_path) catch {
     e => {
+      if @async.is_being_cancelled() {
+        raise e
+      }
       js_remove_dir_recursive(parsed.temp_dir)
       fail("failed to read sample app output: " + e.to_string())
       b""
@@ -930,7 +1028,7 @@ async test "new --moonbit workspace can bundle sample app fixture" {
       break
     }
   }
-  if not(has_hello_export) {
+  if !has_hello_export {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("sample app output does not expose expected hello export")
   }
@@ -977,7 +1075,7 @@ test "build fixture fails when main wac source is invalid" {
     fail("expected compose failure for invalid main.wac")
   }
   js_remove_dir_recursive(parsed.temp_dir)
-  assert_true(not(msg.is_empty()))
+  assert_true(!msg.is_empty())
 }
 
 ///|
@@ -1066,7 +1164,7 @@ test "parse config selection strips config flags and preserves command flags" {
   ])
   assert_eq(parsed.config_path, "./custom.jsonc")
   assert_true(parsed.explicit_config_path)
-  assert_true(not(parsed.use_config))
+  assert_true(!parsed.use_config)
   assert_eq(parsed.remaining_flags, ["-Oz", "--closed-world"])
 }
 
@@ -1074,7 +1172,7 @@ test "parse config selection strips config flags and preserves command flags" {
 test "parse config selection uses default path when unspecified" {
   let parsed = @wite_config.parse_config_selection_flags(["--view=summary"])
   assert_eq(parsed.config_path, "wite.config.jsonc")
-  assert_true(not(parsed.explicit_config_path))
+  assert_true(!parsed.explicit_config_path)
   assert_true(parsed.use_config)
   assert_eq(parsed.remaining_flags, ["--view=summary"])
 }

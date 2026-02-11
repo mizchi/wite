@@ -9,7 +9,9 @@ fn print_usage() -> Unit {
   println(
     "  add <dep-spec> [--protocol=wkg|warg|oci] [--registry=<host>] [--name=<id>] [--config=<path>] [--verify]",
   )
-  println("  build [entry.(wac|wasm)] [options]")
+  println(
+    "  build [entry.(wac|wasm)] [--interface=<wit-dir>|--interface <wit-dir>] [--world=<world>|--world <world>] [options]",
+  )
   println("  diff <left.wasm> [right.wasm] [options]")
   println("  optimize <input.wasm> <output.wasm> [options]")
   println("  deps verify|sync [options]")
@@ -54,6 +56,9 @@ fn print_analyze_usage() -> Unit {
     "  wite analyze component-dce-kpi <file.wasm> [wit-dir] [--exclude=<name>] [--closed-world-root=<export-name>] [--safe-mode] [--verbose]",
   )
   println("  wite analyze contract <file.wasm> <wit-dir>")
+  println(
+    "  wite analyze interface <file.wasm> [wit-dir] [--world=<world>] [--strict]",
+  )
   println("  wite analyze root-policy <file.wasm> [wit-dir] [--exclude=<name>]")
 }
 
@@ -144,13 +149,10 @@ fn extract_binary_kind_flags(
       i += 2
       continue
     }
-    match flag.strip_prefix("--kind=") {
-      Some(value) => {
-        kind = parse_binary_kind_or_exit(value.to_string(), label)
-        i += 1
-        continue
-      }
-      None => ()
+    if flag.strip_prefix("--kind=") is Some(value) {
+      kind = parse_binary_kind_or_exit(value.to_string(), label)
+      i += 1
+      continue
     }
     out.push(flag)
     i += 1
@@ -163,12 +165,9 @@ fn analyze_view_supports_kind(view : AnalyzeView, kind : BinaryKind) -> Bool {
   match kind {
     BinaryKind::Auto | BinaryKind::Core => true
     BinaryKind::Component =>
-      match view {
-        AnalyzeView::Summary
-        | AnalyzeView::Functions
-        | AnalyzeView::Callgraph => true
-        _ => false
-      }
+      view is AnalyzeView::Summary ||
+      view is AnalyzeView::Functions ||
+      view is AnalyzeView::Callgraph
   }
 }
 

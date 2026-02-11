@@ -16,28 +16,12 @@ fn analyze_view_name(view : AnalyzeView) -> String {
 
 ///|
 fn is_analyze_subcommand(name : String) -> Bool {
-  match name {
-    "host"
-    | "opt"
-    | "deep"
-    | "profile"
-    | "top-functions"
-    | "function-gap"
-    | "block-sizes"
-    | "callgraph"
-    | "keep-reasons"
-    | "retain-path"
-    | "dce-report"
-    | "runtime-profile"
-    | "hot-size"
-    | "component"
-    | "component-top-functions"
-    | "component-callgraph"
-    | "component-dce-kpi"
-    | "contract"
-    | "root-policy" => true
-    _ => false
-  }
+  [
+    "host", "opt", "deep", "profile", "top-functions", "function-gap", "block-sizes",
+    "callgraph", "keep-reasons", "retain-path", "dce-report", "runtime-profile",
+    "hot-size", "component", "component-top-functions", "component-callgraph", "component-dce-kpi",
+    "contract", "root-policy", "interface",
+  ].contains(name)
 }
 
 ///|
@@ -197,7 +181,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
         } else if arg.has_prefix("--") {
           println("unknown runtime-profile option: " + arg)
           @sys.exit(1)
-        } else if not(has_iterations) {
+        } else if !has_iterations {
           iterations = parse_uint_or_exit(arg, "iterations")
           has_iterations = true
         } else {
@@ -224,10 +208,10 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
         } else if arg.has_prefix("--") {
           println("unknown hot-size option: " + arg)
           @sys.exit(1)
-        } else if not(has_iterations) {
+        } else if !has_iterations {
           iterations = parse_uint_or_exit(arg, "iterations")
           has_iterations = true
-        } else if not(has_limit) {
+        } else if !has_limit {
           limit = parse_uint_or_exit(arg, "limit")
           has_limit = true
         } else {
@@ -277,6 +261,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
       }
       run_contract(shifted[2], shifted[3])
     }
+    "interface" => run_interface(shifted)
     "root-policy" => run_root_policy(shifted)
     _ => {
       print_analyze_usage()
@@ -322,58 +307,54 @@ async fn run_analyze_view_command(args : Array[String]) -> Unit {
       i += 2
       continue
     }
-    match arg.strip_prefix("--kind=") {
-      Some(value) => {
-        kind = parse_binary_kind_or_exit(value.to_string(), "analyze kind")
-        i += 1
-        continue
-      }
-      None => ()
+    if arg.strip_prefix("--kind=") is Some(value) {
+      kind = parse_binary_kind_or_exit(value.to_string(), "analyze kind")
+      i += 1
+      continue
     }
-    match arg.strip_prefix("--view=") {
-      Some(name) =>
-        match parse_analyze_view(name.to_string()) {
-          Some(v) => view = v
-          None => {
-            println("unknown analyze view: " + name.to_string())
-            @sys.exit(1)
+    if arg.strip_prefix("--view=") is Some(name) {
+      match parse_analyze_view(name.to_string()) {
+        Some(v) => view = v
+        None => {
+          println("unknown analyze view: " + name.to_string())
+          @sys.exit(1)
+        }
+      }
+    } else {
+      match arg.strip_prefix("--limit=") {
+        Some(v) => limit = parse_uint_or_exit(v.to_string(), "limit")
+        None =>
+          match arg.strip_prefix("--diff-limit=") {
+            Some(v) =>
+              diff_limit = parse_uint_or_exit(v.to_string(), "diff-limit")
+            None =>
+              match arg.strip_prefix("--opt-level=") {
+                Some(v) => config = parse_opt_level_or_exit(v.to_string())
+                None =>
+                  match arg.strip_prefix("--closed-world-root=") {
+                    Some(root_name) =>
+                      if !root_name.is_empty() {
+                        closed_world_root_exports.push(root_name.to_string())
+                      }
+                    None =>
+                      if arg == "--closed-world" {
+                        closed_world = true
+                      } else if arg == "--safe-mode" {
+                        safe_mode = true
+                      } else if arg.has_prefix("--") {
+                        println("unknown analyze option: " + arg)
+                        @sys.exit(1)
+                      } else {
+                        positional.push(arg)
+                      }
+                  }
+              }
           }
-        }
-      None =>
-        match arg.strip_prefix("--limit=") {
-          Some(v) => limit = parse_uint_or_exit(v.to_string(), "limit")
-          None =>
-            match arg.strip_prefix("--diff-limit=") {
-              Some(v) =>
-                diff_limit = parse_uint_or_exit(v.to_string(), "diff-limit")
-              None =>
-                match arg.strip_prefix("--opt-level=") {
-                  Some(v) => config = parse_opt_level_or_exit(v.to_string())
-                  None =>
-                    match arg.strip_prefix("--closed-world-root=") {
-                      Some(root_name) =>
-                        if not(root_name.is_empty()) {
-                          closed_world_root_exports.push(root_name.to_string())
-                        }
-                      None =>
-                        if arg == "--closed-world" {
-                          closed_world = true
-                        } else if arg == "--safe-mode" {
-                          safe_mode = true
-                        } else if arg.has_prefix("--") {
-                          println("unknown analyze option: " + arg)
-                          @sys.exit(1)
-                        } else {
-                          positional.push(arg)
-                        }
-                    }
-                }
-            }
-        }
+      }
     }
     i += 1
   }
-  if not(analyze_view_supports_kind(view, kind)) {
+  if !analyze_view_supports_kind(view, kind) {
     println(
       "analyze view '" +
       analyze_view_name(view) +
@@ -412,9 +393,9 @@ async fn run_analyze_view_command(args : Array[String]) -> Unit {
       }
       if positional.length() >= 1 {
         match
-          @wite.optimize_config_from_opt_level(
-            normalize_opt_level_token(positional[0]),
-          ) {
+          (positional[0]
+          |> normalize_opt_level_token
+          |> @wite.optimize_config_from_opt_level) {
           Some(v) => {
             config = v
             if positional.length() == 2 {

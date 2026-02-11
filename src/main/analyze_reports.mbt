@@ -40,25 +40,27 @@ pub fn run_runtime_profile(
       if scenarios.length() > 0 {
         println("  scenarios: " + scenarios.length().to_string())
       }
-      if profile.functions.length() == 0 {
-        if scenarios.length() > 0 {
-          println("  functions: (no runnable scenarios)")
-        } else {
-          println("  functions: (no zero-arg exports)")
-        }
-      } else {
-        println("  functions:")
-        for fn_profile in profile.functions {
-          println(
-            "    " +
-            fn_profile.name +
-            " calls=" +
-            fn_profile.calls.to_string() +
-            " total_ns=" +
-            fn_profile.total_ns.to_string() +
-            " avg_ns=" +
-            fn_profile.average_ns.to_string(),
-          )
+      match profile.functions {
+        [] =>
+          if scenarios.length() > 0 {
+            println("  functions: (no runnable scenarios)")
+          } else {
+            println("  functions: (no zero-arg exports)")
+          }
+        [_, ..] => {
+          println("  functions:")
+          for fn_profile in profile.functions {
+            println(
+              "    " +
+              fn_profile.name +
+              " calls=" +
+              fn_profile.calls.to_string() +
+              " total_ns=" +
+              fn_profile.total_ns.to_string() +
+              " avg_ns=" +
+              fn_profile.average_ns.to_string(),
+            )
+          }
         }
       }
       if profile.skipped_exports.length() > 0 {
@@ -108,10 +110,7 @@ fn print_hotness_size_entries(
       Some(v) => v.to_string()
       None => "-"
     }
-    let function_name = match entry.function_name {
-      Some(v) => v
-      None => "-"
-    }
+    let function_name = entry.function_name.unwrap_or("-")
     let unresolved_reason = match entry.unresolved_reason {
       Some(v) => " reason=" + v
       None => ""
@@ -224,10 +223,9 @@ fn print_function_sizes(
       Some(name) => name
       None => "#\{fn_size.function_index.to_string()}"
     }
-    let exports = if fn_size.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + fn_size.export_names.join(",")
+    let exports = match fn_size.export_names {
+      [] => ""
+      [_, ..] => " exports=" + fn_size.export_names.join(",")
     }
     println(
       "    " +
@@ -260,21 +258,22 @@ fn format_opt_name(value : String?) -> String {
 
 ///|
 fn print_function_gap_entries(entries : Array[@wite.FunctionGapEntry]) -> Unit {
-  if entries.length() == 0 {
-    println("  entries: (none)")
-    return
+  match entries {
+    [] => {
+      println("  entries: (none)")
+      return
+    }
+    [_, ..] => ()
   }
   println("  entries:")
   for entry in entries {
-    let left_exports = if entry.left_export_names.length() == 0 {
-      "-"
-    } else {
-      entry.left_export_names.join(",")
+    let left_exports = match entry.left_export_names {
+      [] => "-"
+      [_, ..] => entry.left_export_names.join(",")
     }
-    let right_exports = if entry.right_export_names.length() == 0 {
-      "-"
-    } else {
-      entry.right_export_names.join(",")
+    let right_exports = match entry.right_export_names {
+      [] => "-"
+      [_, ..] => entry.right_export_names.join(",")
     }
     println(
       "    kind=" +
@@ -341,10 +340,9 @@ fn print_code_block_sizes(
       Some(name) => name
       None => "#\{block.function_index.to_string()}"
     }
-    let exports = if block.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + block.export_names.join(",")
+    let exports = match block.export_names {
+      [] => ""
+      [_, ..] => " exports=" + block.export_names.join(",")
     }
     println(
       "    " +
@@ -523,14 +521,8 @@ fn collect_section_gap_entries(
       return
     }
     seen.set(key, true)
-    let left_bytes = match left_map.get(key) {
-      Some(v) => v
-      None => 0U
-    }
-    let right_bytes = match right_map.get(key) {
-      Some(v) => v
-      None => 0U
-    }
+    let left_bytes = left_map.get(key).unwrap_or(0U)
+    let right_bytes = right_map.get(key).unwrap_or(0U)
     let delta_bytes = diff_uint(left_bytes, right_bytes)
     entries.push({
       key,
@@ -796,15 +788,14 @@ fn print_call_graph_nodes(
       None => "#\{node.function_index.to_string()}"
     }
     let status = if node.reachable_from_roots { "reachable" } else { "dead" }
-    let export_part = if node.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + node.export_names.join(",")
+    let export_part = match node.export_names {
+      [] => ""
+      [_, ..] => " exports=" + node.export_names.join(",")
     }
-    let callee_part = if node.direct_callees.length() == 0 {
-      ""
-    } else {
-      " callees=" + node.direct_callees.map(i => i.to_string()).join(",")
+    let callee_part = match node.direct_callees {
+      [] => ""
+      [_, ..] =>
+        " callees=" + node.direct_callees.map(i => i.to_string()).join(",")
     }
     println(
       "    " +
@@ -868,29 +859,29 @@ fn run_keep_reasons_with_options(
     Ok(report) => {
       println("keep reasons:")
       println("  partial: " + report.partial.to_string())
-      if report.entries.length() == 0 {
-        println("  entries: (none)")
-      } else {
-        println("  entries:")
-        for entry in report.entries {
-          let label = match entry.name {
-            Some(v) => v
-            None => "#\{entry.function_index.to_string()}"
+      match report.entries {
+        [] => println("  entries: (none)")
+        [_, ..] => {
+          println("  entries:")
+          for entry in report.entries {
+            let label = match entry.name {
+              Some(v) => v
+              None => "#\{entry.function_index.to_string()}"
+            }
+            let exports = match entry.export_names {
+              [] => ""
+              [_, ..] => " exports=" + entry.export_names.join(",")
+            }
+            println(
+              "    " +
+              label +
+              " idx=" +
+              entry.function_index.to_string() +
+              exports +
+              " reasons=" +
+              entry.reasons.join(","),
+            )
           }
-          let exports = if entry.export_names.length() == 0 {
-            ""
-          } else {
-            " exports=" + entry.export_names.join(",")
-          }
-          println(
-            "    " +
-            label +
-            " idx=" +
-            entry.function_index.to_string() +
-            exports +
-            " reasons=" +
-            entry.reasons.join(","),
-          )
         }
       }
     }
@@ -943,20 +934,17 @@ fn print_retain_path_entries(
       Some(v) => v
       None => "#\{entry.function_index.to_string()}"
     }
-    let exports = if entry.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + entry.export_names.join(",")
+    let exports = match entry.export_names {
+      [] => ""
+      [_, ..] => " exports=" + entry.export_names.join(",")
     }
-    let root_reasons = if entry.root_reasons.length() == 0 {
-      "reachable"
-    } else {
-      entry.root_reasons.join(",")
+    let root_reasons = match entry.root_reasons {
+      [] => "reachable"
+      [_, ..] => entry.root_reasons.join(",")
     }
-    let path = if entry.path.length() == 0 {
-      "(none)"
-    } else {
-      entry.path.map(i => i.to_string()).join(" -> ")
+    let path = match entry.path {
+      [] => "(none)"
+      [_, ..] => entry.path.map(i => i.to_string()).join(" -> ")
     }
     println(
       "    " +
@@ -993,10 +981,10 @@ fn run_retain_path_with_options(
     Ok(report) => {
       println("retain-path analysis:")
       println("  partial: " + report.partial.to_string())
-      if report.roots.length() == 0 {
-        println("  roots: (none)")
-      } else {
-        println("  roots: " + report.roots.map(i => i.to_string()).join(", "))
+      match report.roots {
+        [] => println("  roots: (none)")
+        [_, ..] =>
+          println("  roots: " + report.roots.map(i => i.to_string()).join(", "))
       }
       print_retain_path_entries(report.entries, limit)
     }
@@ -1069,7 +1057,7 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
       safe_mode = true
     } else if args[i] == "--verbose" {
       verbose = true
-    } else if not(args[i].has_prefix("--")) && wit_path is None {
+    } else if !args[i].has_prefix("--") && wit_path is None {
       wit_path = Some(args[i])
     }
   }
@@ -1089,6 +1077,84 @@ fn run_contract(component_path : String, wit_path : String) -> Unit {
 }
 
 ///|
+priv struct InterfaceCommandOptions {
+  component_path : String
+  wit_path : String?
+  world : String?
+  strict : Bool
+}
+
+///|
+fn parse_interface_command_options(
+  args : Array[String],
+) -> Result[InterfaceCommandOptions, String] {
+  if args.length() < 3 {
+    return Err("interface requires <file.wasm>")
+  }
+  let component_path = args[2]
+  let mut wit_path : String? = None
+  let mut world : String? = None
+  let mut strict = false
+  let mut i = 3
+  while i < args.length() {
+    let arg = args[i]
+    if arg == "--strict" {
+      strict = true
+      i += 1
+      continue
+    }
+    if arg == "--world" {
+      if i + 1 >= args.length() {
+        return Err("missing value after --world")
+      }
+      world = Some(args[i + 1])
+      i += 2
+      continue
+    }
+    if arg.strip_prefix("--world=") is Some(value) {
+      world = Some(value.to_string())
+      i += 1
+      continue
+    }
+    if !arg.has_prefix("--") && wit_path is None {
+      wit_path = Some(arg)
+      i += 1
+      continue
+    }
+    if arg.has_prefix("--") {
+      return Err("unknown interface option: " + arg)
+    }
+    return Err("unexpected interface argument: " + arg)
+  }
+  if world is Some(_) && wit_path is None {
+    return Err("--world requires [wit-dir]")
+  }
+  if strict && wit_path is None {
+    return Err("--strict requires [wit-dir]")
+  }
+  Ok({ component_path, wit_path, world, strict })
+}
+
+///|
+fn run_interface(args : Array[String]) -> Unit {
+  let options = match parse_interface_command_options(args) {
+    Ok(v) => v
+    Err(msg) => {
+      println(msg)
+      print_analyze_usage()
+      @sys.exit(1)
+      return
+    }
+  }
+  @wite_component.run_interface_with_options(
+    options.component_path,
+    options.wit_path,
+    options.world,
+    options.strict,
+  )
+}
+
+///|
 fn run_root_policy(args : Array[String]) -> Unit {
   if args.length() < 3 {
     print_analyze_usage()
@@ -1098,7 +1164,7 @@ fn run_root_policy(args : Array[String]) -> Unit {
   let excludes = parse_excluded_roots(args, 3)
   let mut wit_path : String? = None
   for i in 3..<args.length() {
-    if not(args[i].has_prefix("--")) && wit_path is None {
+    if !args[i].has_prefix("--") && wit_path is None {
       wit_path = Some(args[i])
     }
   }

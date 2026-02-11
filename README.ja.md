@@ -49,6 +49,8 @@ wite analyze module.wasm --view=pipeline --opt-level=Oz --diff-limit=20
 wite analyze module.wasm --view=keep --closed-world --closed-world-root=run
 wite analyze module.wasm --view=retain --limit=20
 wite analyze component.wasm --kind=component --view=summary
+wite analyze interface component.wasm
+wite analyze interface component.wasm ./wit --world hello --strict
 ```
 
 ビュー: `summary`, `deep`, `pipeline`, `keep`, `retain`（core 用）; `summary`, `functions`, `callgraph`（component 用）。

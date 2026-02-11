@@ -36,9 +36,12 @@ wite build path/to/entry.wac --out output.component.wasm -Oz
 wite build path/to/module.wasm --out module.min.wasm -O2
 wite build                   # implicit entry: main.wac | main.wasm
 wite build -Oz               # flags only (implicit entry)
+wite build hello.component.wasm --interface ./wit --world hello -o hello.checked.wasm
 ```
 
 Auto-detects core/component from the input header. For components, applies fixed-point optimization with `--converge`.
+When `--interface` is provided, `build` verifies the final component against the given WIT directory.
+Use `--world` to choose a specific world name in that WIT package.
 
 ### analyze
 
@@ -49,6 +52,8 @@ wite analyze module.wasm --view=pipeline --opt-level=Oz --diff-limit=20
 wite analyze module.wasm --view=keep --closed-world --closed-world-root=run
 wite analyze module.wasm --view=retain --limit=20
 wite analyze component.wasm --kind=component --view=summary
+wite analyze interface component.wasm
+wite analyze interface component.wasm ./wit --world hello --strict
 ```
 
 Views: `summary`, `deep`, `pipeline`, `keep`, `retain` (core); `summary`, `functions`, `callgraph` (component).
