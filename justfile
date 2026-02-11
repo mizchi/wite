@@ -116,7 +116,7 @@ example-moonbit-mixed: example-moonbit-mixed-deps
 
 # Build moonbit-wasi guest, fetch WASI deps, optimize, and run (requires: moon, wasmtime)
 example-moonbit-wasi:
-    cd examples/moonbit-wasi && moon build --target wasm
+    cd examples/moonbit-wasi && moon build --target wasm --release
     moon run src/main --target {{target}} -- deps sync --config=./examples/moonbit-wasi/wite.config.jsonc --dir=./examples/moonbit-wasi/deps --fail-fast
     moon run src/main --target {{target}} -- build --config=./examples/moonbit-wasi/wite.config.jsonc
     wasmtime run examples/moonbit-wasi/dist/app.min.wasm
