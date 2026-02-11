@@ -1,0 +1,3 @@
+{
+  "build": { "kind": "component", "flags": ["-Oz"] }
+}

@@ -9,3 +9,4 @@ deps/
 !src/deps/
 !bench/corpus/**/deps/
 wite.config.jsonc
+!examples/**/wite.config.jsonc

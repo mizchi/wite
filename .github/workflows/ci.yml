@@ -44,6 +44,12 @@ jobs:
           install "${tmp_dir}/wasm-tools-${wasm_tools_ver}-x86_64-linux/wasm-tools" /usr/local/bin/wasm-tools
           rm -rf "${tmp_dir}"
           wasm-tools --version
+      - name: Install wasmtime
+        run: |
+          set -euo pipefail
+          curl -fsSL https://wasmtime.dev/install.sh | bash
+          echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
+          "$HOME/.wasmtime/bin/wasmtime" --version
       - name: Install cargo-component
         run: cargo install cargo-component --locked
       - name: Install wkg

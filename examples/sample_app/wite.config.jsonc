@@ -1,0 +1,6 @@
+{
+  "build": { "kind": "component", "flags": ["-Oz"] },
+  "analyze": { "kind": "component", "flags": ["--view=summary"] },
+  "profile": { "kind": "component", "flags": [] },
+  "deps": {}
+}

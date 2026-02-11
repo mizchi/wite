@@ -1,0 +1,7 @@
+{
+  "input": "_build/wasm/release/build/app.wasm",
+  "output": "dist",
+  "deps": {
+    "wasi:cli": "https://wa.dev/wasi:cli@0.2.0"
+  }
+}
