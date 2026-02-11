@@ -35,7 +35,15 @@ jobs:
           restore-keys: ${{ runner.os }}-cargo-
       - name: Install wasm-tools
         run: |
-          curl -fsSL https://github.com/bytecodealliance/wasm-tools/releases/latest/download/wasm-tools-x86_64-linux.tar.gz | tar xz --strip-components=1 -C /usr/local/bin/ --wildcards '*/wasm-tools'
+          set -euo pipefail
+          wasm_tools_tag="$(curl -fsSL https://api.github.com/repos/bytecodealliance/wasm-tools/releases/latest | python3 -c 'import json,sys; print(json.load(sys.stdin)["tag_name"])')"
+          wasm_tools_ver="${wasm_tools_tag#v}"
+          wasm_tools_asset="wasm-tools-${wasm_tools_ver}-x86_64-linux.tar.gz"
+          tmp_dir="$(mktemp -d)"
+          curl -fsSL "https://github.com/bytecodealliance/wasm-tools/releases/download/${wasm_tools_tag}/${wasm_tools_asset}" | tar xz -C "${tmp_dir}"
+          install "${tmp_dir}/wasm-tools-${wasm_tools_ver}-x86_64-linux/wasm-tools" /usr/local/bin/wasm-tools
+          rm -rf "${tmp_dir}"
+          wasm-tools --version
       - name: Install cargo-component
         run: cargo install cargo-component --locked
       - name: Install wkg
