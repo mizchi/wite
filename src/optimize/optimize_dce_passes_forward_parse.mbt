@@ -145,12 +145,13 @@ fn parse_forward_call_target_with_prefix_param_count(
     if spans[forwarded_param_count].opcode != 0x20U {
       break
     }
-    match decode_span_u32_immediate(instr_bytes, spans[forwarded_param_count]) {
-      Some(local_index) =>
-        if local_index != forwarded_param_count.reinterpret_as_uint() {
-          return None
-        }
-      None => return None
+    if decode_span_u32_immediate(instr_bytes, spans[forwarded_param_count])
+      is Some(local_index) {
+      if local_index != forwarded_param_count.reinterpret_as_uint() {
+        return None
+      }
+    } else {
+      return None
     }
     forwarded_param_count += 1
   }
@@ -166,18 +167,14 @@ fn parse_forward_call_target_with_prefix_param_count(
   if forwarded_param_count == 0 && appended_i32_const_instrs.length() == 0 {
     return None
   }
-  match decode_span_u32_immediate(instr_bytes, spans[call_pos]) {
-    Some(target) =>
-      Some(
-        (
-          target,
-          forwarded_param_count.reinterpret_as_uint(),
-          dropped_result_count,
-          appended_i32_const_instrs,
-        ),
-      )
-    None => None
-  }
+  decode_span_u32_immediate(instr_bytes, spans[call_pos]).map(target => {
+    (
+      target,
+      forwarded_param_count.reinterpret_as_uint(),
+      dropped_result_count,
+      appended_i32_const_instrs,
+    )
+  })
 }
 
 ///|
@@ -239,10 +236,9 @@ fn parse_forward_call_target_with_appended_i32_consts(
   if appended_i32_const_instrs.length() == 0 {
     return None
   }
-  match decode_span_u32_immediate(instr_bytes, spans[call_pos]) {
-    Some(target) => Some((target, appended_i32_const_instrs))
-    None => None
-  }
+  decode_span_u32_immediate(instr_bytes, spans[call_pos]).map(target => {
+    (target, appended_i32_const_instrs)
+  })
 }
 
 ///|
@@ -255,12 +251,10 @@ fn function_type_results_equal_with_gc_canonical_map(
     return false
   }
   for i in 0..<a.results.length() {
-    if not(
-        type_bytes_equal_with_gc_canonical_map(
-          a.results[i],
-          b.results[i],
-          gc_type_canonical_map,
-        ),
+    if !type_bytes_equal_with_gc_canonical_map(
+        a.results[i],
+        b.results[i],
+        gc_type_canonical_map,
       ) {
       return false
     }
@@ -320,20 +314,16 @@ fn can_const_forward_with_appended_i32_to_target(
   if target_param_count != wrapper_param_count + appended_const_count {
     return false
   }
-  if not(
-      function_type_results_equal_with_gc_canonical_map(
-        wrapper_type, target_type, gc_type_canonical_map,
-      ),
+  if !function_type_results_equal_with_gc_canonical_map(
+      wrapper_type, target_type, gc_type_canonical_map,
     ) {
     return false
   }
   for i in 0..<wrapper_type.params.length() {
-    if not(
-        type_bytes_equal_with_gc_canonical_map(
-          wrapper_type.params[i],
-          target_type.params[i],
-          gc_type_canonical_map,
-        ),
+    if !type_bytes_equal_with_gc_canonical_map(
+        wrapper_type.params[i],
+        target_type.params[i],
+        gc_type_canonical_map,
       ) {
       return false
     }
@@ -345,12 +335,10 @@ fn can_const_forward_with_appended_i32_to_target(
       None => return false
     }
     let param_index = wrapper_type.params.length() + i
-    if not(
-        type_bytes_equal_with_gc_canonical_map(
-          const_type,
-          target_type.params[param_index],
-          gc_type_canonical_map,
-        ),
+    if !type_bytes_equal_with_gc_canonical_map(
+        const_type,
+        target_type.params[param_index],
+        gc_type_canonical_map,
       ) {
       return false
     }
@@ -364,10 +352,10 @@ fn appended_i32_const_instr_type(instr : Bytes) -> Bytes? {
     return None
   }
   match instr[0].to_uint() {
-    0x41U => Some(Bytes::from_array([0x7fU.to_byte()]))
-    0x42U => Some(Bytes::from_array([0x7eU.to_byte()]))
-    0x43U => Some(Bytes::from_array([0x7dU.to_byte()]))
-    0x44U => Some(Bytes::from_array([0x7cU.to_byte()]))
+    0x41U => [0x7fU.to_byte()] |> Bytes::from_array |> Some
+    0x42U => [0x7eU.to_byte()] |> Bytes::from_array |> Some
+    0x43U => [0x7dU.to_byte()] |> Bytes::from_array |> Some
+    0x44U => [0x7cU.to_byte()] |> Bytes::from_array |> Some
     _ => None
   }
 }
@@ -383,23 +371,19 @@ fn function_type_entries_equal_with_gc_canonical_map(
     return false
   }
   for i in 0..<a.params.length() {
-    if not(
-        type_bytes_equal_with_gc_canonical_map(
-          a.params[i],
-          b.params[i],
-          gc_type_canonical_map,
-        ),
+    if !type_bytes_equal_with_gc_canonical_map(
+        a.params[i],
+        b.params[i],
+        gc_type_canonical_map,
       ) {
       return false
     }
   }
   for i in 0..<a.results.length() {
-    if not(
-        type_bytes_equal_with_gc_canonical_map(
-          a.results[i],
-          b.results[i],
-          gc_type_canonical_map,
-        ),
+    if !type_bytes_equal_with_gc_canonical_map(
+        a.results[i],
+        b.results[i],
+        gc_type_canonical_map,
       ) {
       return false
     }
@@ -438,31 +422,27 @@ fn can_signature_refine_forward_to_target(
   }
   let wrapper_result_count_i = UInt::reinterpret_as_int(wrapper_result_count)
   for i in 0..<wrapper_result_count_i {
-    if not(
-        type_bytes_equal_with_gc_canonical_map(
-          wrapper_type.results[i],
-          target_type.results[i],
-          gc_type_canonical_map,
-        ),
+    if !type_bytes_equal_with_gc_canonical_map(
+        wrapper_type.results[i],
+        target_type.results[i],
+        gc_type_canonical_map,
       ) {
       return None
     }
   }
   let forwarded_param_count_i = UInt::reinterpret_as_int(forwarded_param_count)
   for i in 0..<forwarded_param_count_i {
-    if not(
-        type_bytes_equal_with_gc_canonical_map(
-          wrapper_type.params[i],
-          target_type.params[i],
-          gc_type_canonical_map,
-        ),
+    if !type_bytes_equal_with_gc_canonical_map(
+        wrapper_type.params[i],
+        target_type.params[i],
+        gc_type_canonical_map,
       ) {
       return None
     }
   }
   let target_param_count_i = UInt::reinterpret_as_int(target_param_count)
   for i in forwarded_param_count_i..<target_param_count_i {
-    if not(is_i32_value_type(target_type.params[i])) {
+    if !is_i32_value_type(target_type.params[i]) {
       return None
     }
   }

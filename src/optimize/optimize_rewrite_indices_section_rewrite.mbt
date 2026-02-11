@@ -202,10 +202,16 @@ fn rewrite_global_section_payload_for_keep_local_and_global_index_map_raise(
   let out : Array[Byte] = []
   out.append(encode_u32_leb128(kept_entries.length().reinterpret_as_uint())[:])
   for entry in kept_entries {
-    out.append(entry.val_type[:].to_array())
-    out.push(entry.mutability)
-    out.append(
-      rewrite_const_expr_global_indices_raise(entry.init_expr, global_index_map)[:].to_array(),
+    ignore(
+      out
+      ..append(entry.val_type[:].to_array())
+      ..push(entry.mutability)
+      ..append(
+        rewrite_const_expr_global_indices_raise(
+          entry.init_expr,
+          global_index_map,
+        )[:].to_array(),
+      ),
     )
   }
   Bytes::from_array(out[:])
@@ -236,10 +242,16 @@ fn rewrite_global_section_payload_for_local_order_and_global_index_map_raise(
       )
     }
     let entry = entries[old_local_index]
-    out.append(entry.val_type[:].to_array())
-    out.push(entry.mutability)
-    out.append(
-      rewrite_const_expr_global_indices_raise(entry.init_expr, global_index_map)[:].to_array(),
+    ignore(
+      out
+      ..append(entry.val_type[:].to_array())
+      ..push(entry.mutability)
+      ..append(
+        rewrite_const_expr_global_indices_raise(
+          entry.init_expr,
+          global_index_map,
+        )[:].to_array(),
+      ),
     )
   }
   Bytes::from_array(out[:])
@@ -326,7 +338,7 @@ fn parse_table_section_entries_raise(
   let out : Array[Bytes] = []
   for _ in 0U..<count {
     let start = parser.get_pos()
-    ignore(read_ref_type_bytes_raise(parser))
+    parser |> read_ref_type_bytes_raise |> ignore
     parse_limits(parser)
     let end_ = parser.get_pos()
     out.push(payload[start:end_].to_bytes())

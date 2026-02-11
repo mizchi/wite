@@ -143,7 +143,7 @@ fn parse_sections_from(
   let parser = Cursor::new(bytes)
   parser.set_pos(start)
   let sections : Array[RawSection] = []
-  while not(parser.eof()) {
+  while !parser.eof() {
     let section_start = parser.get_pos()
     let section_id = parser.read_byte().to_uint()
     let payload_size_u = parser.read_u32_leb128()
@@ -158,7 +158,7 @@ fn parse_sections_from(
     }
     let custom_name = if section_id == 0U {
       let payload = bytes[payload_start:section_end].to_bytes()
-      Some(parse_custom_section_name(payload))
+      payload |> parse_custom_section_name |> Some
     } else {
       None
     }
@@ -274,12 +274,14 @@ pub fn summarize_sections(
   }
   let out : Array[SectionSize] = []
   grouped.each((_, value) => out.push(value))
-  out.sort_by((a, b) => if a.total_bytes > b.total_bytes {
-    -1
-  } else if a.total_bytes < b.total_bytes {
-    1
-  } else {
-    a.key.compare(b.key)
+  out.sort_by((a, b) => {
+    if a.total_bytes > b.total_bytes {
+      -1
+    } else if a.total_bytes < b.total_bytes {
+      1
+    } else {
+      a.key.compare(b.key)
+    }
   })
   out
 }
@@ -414,8 +416,8 @@ pub fn parse_import_function_count(payload : Bytes) -> UInt raise WiteError {
   let count = parser.read_u32_leb128()
   let mut function_import_count = 0U
   for _ in 0U..<count {
-    ignore(read_name_string(parser))
-    ignore(read_name_string(parser))
+    parser |> read_name_string |> ignore
+    parser |> read_name_string |> ignore
     let kind = parser.read_byte().to_uint()
     match kind {
       0x00U => {
@@ -465,8 +467,8 @@ fn parse_import_section_entries_raise(
   let mut tag_import_index = 0U
   for _ in 0U..<count {
     let start = parser.get_pos()
-    ignore(read_name_string(parser))
-    ignore(read_name_string(parser))
+    parser |> read_name_string |> ignore
+    parser |> read_name_string |> ignore
     let kind = parser.read_byte().to_uint()
     let kind_index = match kind {
       0x00U => {
@@ -620,8 +622,8 @@ pub fn parse_import_function_type_indices(
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
   for _ in 0U..<count {
-    ignore(read_name_string(parser))
-    ignore(read_name_string(parser))
+    parser |> read_name_string |> ignore
+    parser |> read_name_string |> ignore
     let kind = parser.read_byte().to_uint()
     match kind {
       0x00U => out.push(parser.read_u32_leb128())
@@ -734,8 +736,10 @@ pub fn merge_export_function_names(
   target : Map[UInt, Array[String]],
   source : Map[UInt, Array[String]],
 ) -> Unit {
-  source.each((index, names) => for name in names {
-    map_push_string_array(target, index, name)
+  source.each((index, names) => {
+    for name in names {
+      map_push_string_array(target, index, name)
+    }
   })
 }
 
@@ -760,7 +764,7 @@ pub fn parse_name_section_function_names(
   let parser = Cursor::new(payload)
   parser.set_pos(parse_custom_section_name_prefix_end(payload))
   let out : Map[UInt, String] = {}
-  while not(parser.eof()) {
+  while !parser.eof() {
     let subsection_id = parser.read_byte().to_uint()
     let subsection_size_u = parser.read_u32_leb128()
     let subsection_size = UInt::reinterpret_as_int(subsection_size_u)
@@ -811,7 +815,7 @@ fn encode_nonnegative_i32_leb128(value : UInt) -> Array[Byte] {
     let low = current & 0x7fU
     current = current >> 7
     let sign_set = (low & 0x40U) != 0U
-    if current == 0U && not(sign_set) {
+    if current == 0U && !sign_set {
       out.push(low.to_byte())
       break
     }
@@ -826,9 +830,10 @@ pub fn append_encoded_section(
   section_id : UInt,
   payload : Bytes,
 ) -> Unit {
-  out.push(section_id.to_byte())
-  out.append(encode_u32_leb128(payload.length().reinterpret_as_uint())[:])
-  out.append(payload[:].to_array())
+  out
+  ..push(section_id.to_byte())
+  ..append(encode_u32_leb128(payload.length().reinterpret_as_uint())[:])
+  .append(payload[:].to_array())
 }
 
 ///|
@@ -1026,7 +1031,7 @@ fn parse_instruction_spans_raise(
 ) -> Array[InstrSpan] raise WiteError {
   let parser = Cursor::new(instr_bytes)
   let spans : Array[InstrSpan] = []
-  while not(parser.eof()) {
+  while !parser.eof() {
     let start = parser.get_pos()
     let opcode = parser.read_byte().to_uint()
     skip_instruction_immediate_raise(parser, opcode)

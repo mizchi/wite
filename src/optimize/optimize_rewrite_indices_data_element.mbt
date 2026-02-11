@@ -51,21 +51,27 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
         if table_index_map.get(0U) is None {
           keep_segment = false
         } else {
-          segment_out.append(encode_u32_leb128(0U)[:])
-          segment_out.append(
-            rewrite_const_expr_global_indices_raise(
-              offset_expr, global_index_map,
-            )[:].to_array(),
+          ignore(
+            segment_out
+            ..append(encode_u32_leb128(0U)[:])
+            ..append(
+              rewrite_const_expr_global_indices_raise(
+                offset_expr, global_index_map,
+              )[:].to_array(),
+            )
+            ..append(function_indices[:].to_array()),
           )
-          segment_out.append(function_indices[:].to_array())
         }
       }
       1U => {
         let elem_kind = parser.read_byte()
         let function_indices = read_function_index_vector_bytes_raise(parser)
-        segment_out.append(encode_u32_leb128(1U)[:])
-        segment_out.push(elem_kind)
-        segment_out.append(function_indices[:].to_array())
+        ignore(
+          segment_out
+          ..append(encode_u32_leb128(1U)[:])
+          ..push(elem_kind)
+          ..append(function_indices[:].to_array()),
+        )
       }
       2U => {
         let table_index = parser.read_u32_leb128()
@@ -73,26 +79,31 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
         let elem_kind = parser.read_byte()
         let function_indices = read_function_index_vector_bytes_raise(parser)
         match table_index_map.get(table_index) {
-          Some(remapped) => {
-            segment_out.append(encode_u32_leb128(2U)[:])
-            segment_out.append(encode_u32_leb128(remapped)[:])
-            segment_out.append(
-              rewrite_const_expr_global_indices_raise(
-                offset_expr, global_index_map,
-              )[:].to_array(),
+          Some(remapped) =>
+            ignore(
+              segment_out
+              ..append(encode_u32_leb128(2U)[:])
+              ..append(encode_u32_leb128(remapped)[:])
+              ..append(
+                rewrite_const_expr_global_indices_raise(
+                  offset_expr, global_index_map,
+                )[:].to_array(),
+              )
+              ..push(elem_kind)
+              ..append(function_indices[:].to_array()),
             )
-            segment_out.push(elem_kind)
-            segment_out.append(function_indices[:].to_array())
-          }
           None => keep_segment = false
         }
       }
       3U => {
         let elem_kind = parser.read_byte()
         let function_indices = read_function_index_vector_bytes_raise(parser)
-        segment_out.append(encode_u32_leb128(3U)[:])
-        segment_out.push(elem_kind)
-        segment_out.append(function_indices[:].to_array())
+        ignore(
+          segment_out
+          ..append(encode_u32_leb128(3U)[:])
+          ..push(elem_kind)
+          ..append(function_indices[:].to_array()),
+        )
       }
       4U => {
         let offset_expr = read_const_expr_bytes_raise(parser, payload)
@@ -102,13 +113,16 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
         if table_index_map.get(0U) is None {
           keep_segment = false
         } else {
-          segment_out.append(encode_u32_leb128(4U)[:])
-          segment_out.append(
-            rewrite_const_expr_global_indices_raise(
-              offset_expr, global_index_map,
-            )[:].to_array(),
+          ignore(
+            segment_out
+            ..append(encode_u32_leb128(4U)[:])
+            ..append(
+              rewrite_const_expr_global_indices_raise(
+                offset_expr, global_index_map,
+              )[:].to_array(),
+            )
+            ..append(exprs[:].to_array()),
           )
-          segment_out.append(exprs[:].to_array())
         }
       }
       5U => {
@@ -116,9 +130,12 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
         let exprs = rewrite_const_expr_vector_global_indices_raise(
           parser, payload, global_index_map,
         )
-        segment_out.append(encode_u32_leb128(5U)[:])
-        segment_out.append(ref_type[:].to_array())
-        segment_out.append(exprs[:].to_array())
+        ignore(
+          segment_out
+          ..append(encode_u32_leb128(5U)[:])
+          ..append(ref_type[:].to_array())
+          ..append(exprs[:].to_array()),
+        )
       }
       6U => {
         let table_index = parser.read_u32_leb128()
@@ -128,17 +145,19 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
           parser, payload, global_index_map,
         )
         match table_index_map.get(table_index) {
-          Some(remapped) => {
-            segment_out.append(encode_u32_leb128(6U)[:])
-            segment_out.append(encode_u32_leb128(remapped)[:])
-            segment_out.append(
-              rewrite_const_expr_global_indices_raise(
-                offset_expr, global_index_map,
-              )[:].to_array(),
+          Some(remapped) =>
+            ignore(
+              segment_out
+              ..append(encode_u32_leb128(6U)[:])
+              ..append(encode_u32_leb128(remapped)[:])
+              ..append(
+                rewrite_const_expr_global_indices_raise(
+                  offset_expr, global_index_map,
+                )[:].to_array(),
+              )
+              ..append(ref_type[:].to_array())
+              ..append(exprs[:].to_array()),
             )
-            segment_out.append(ref_type[:].to_array())
-            segment_out.append(exprs[:].to_array())
-          }
           None => keep_segment = false
         }
       }
@@ -147,9 +166,12 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
         let exprs = rewrite_const_expr_vector_global_indices_raise(
           parser, payload, global_index_map,
         )
-        segment_out.append(encode_u32_leb128(7U)[:])
-        segment_out.append(ref_type[:].to_array())
-        segment_out.append(exprs[:].to_array())
+        ignore(
+          segment_out
+          ..append(encode_u32_leb128(7U)[:])
+          ..append(ref_type[:].to_array())
+          ..append(exprs[:].to_array()),
+        )
       }
       _ =>
         raise WiteError::InvalidFormat(
@@ -251,46 +273,57 @@ fn rewrite_data_section_payload_for_memory_global_index_map_raise(
         match memory_index_map.get(0U) {
           Some(remapped_memory_index) =>
             if remapped_memory_index == 0U {
-              segment_out.append(encode_u32_leb128(0U)[:])
-              segment_out.append(
-                rewrite_const_expr_global_indices_raise(
-                  offset_expr, global_index_map,
-                )[:].to_array(),
+              ignore(
+                segment_out
+                ..append(encode_u32_leb128(0U)[:])
+                ..append(
+                  rewrite_const_expr_global_indices_raise(
+                    offset_expr, global_index_map,
+                  )[:].to_array(),
+                )
+                ..append(data_init[:].to_array()),
               )
-              segment_out.append(data_init[:].to_array())
             } else {
-              segment_out.append(encode_u32_leb128(2U)[:])
-              segment_out.append(encode_u32_leb128(remapped_memory_index)[:])
-              segment_out.append(
-                rewrite_const_expr_global_indices_raise(
-                  offset_expr, global_index_map,
-                )[:].to_array(),
+              ignore(
+                segment_out
+                ..append(encode_u32_leb128(2U)[:])
+                ..append(encode_u32_leb128(remapped_memory_index)[:])
+                ..append(
+                  rewrite_const_expr_global_indices_raise(
+                    offset_expr, global_index_map,
+                  )[:].to_array(),
+                )
+                ..append(data_init[:].to_array()),
               )
-              segment_out.append(data_init[:].to_array())
             }
           None => keep_segment = false
         }
       }
       1U => {
         let data_init = read_data_init_bytes_raise(parser, payload)
-        segment_out.append(encode_u32_leb128(1U)[:])
-        segment_out.append(data_init[:].to_array())
+        ignore(
+          segment_out
+          ..append(encode_u32_leb128(1U)[:])
+          ..append(data_init[:].to_array()),
+        )
       }
       2U => {
         let memory_index = parser.read_u32_leb128()
         let offset_expr = read_const_expr_bytes_raise(parser, payload)
         let data_init = read_data_init_bytes_raise(parser, payload)
         match memory_index_map.get(memory_index) {
-          Some(remapped_memory_index) => {
-            segment_out.append(encode_u32_leb128(2U)[:])
-            segment_out.append(encode_u32_leb128(remapped_memory_index)[:])
-            segment_out.append(
-              rewrite_const_expr_global_indices_raise(
-                offset_expr, global_index_map,
-              )[:].to_array(),
+          Some(remapped_memory_index) =>
+            ignore(
+              segment_out
+              ..append(encode_u32_leb128(2U)[:])
+              ..append(encode_u32_leb128(remapped_memory_index)[:])
+              ..append(
+                rewrite_const_expr_global_indices_raise(
+                  offset_expr, global_index_map,
+                )[:].to_array(),
+              )
+              ..append(data_init[:].to_array()),
             )
-            segment_out.append(data_init[:].to_array())
-          }
           None => keep_segment = false
         }
       }

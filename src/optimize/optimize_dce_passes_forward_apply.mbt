@@ -116,18 +116,16 @@ pub fn collect_call_forwarding_alias_map(
           if target_pos >= 0 && target_pos < function_type_by_index.length() {
             let wrapper_type_index = function_type_by_index[old_pos]
             let target_type_index = function_type_by_index[target_pos]
-            match function_type_entry_by_type_index.get(wrapper_type_index) {
-              Some(wrapper_type) =>
-                match function_type_entry_by_type_index.get(target_type_index) {
-                  Some(target_type) =>
-                    if function_type_entries_equal_with_gc_canonical_map(
-                        wrapper_type, target_type, gc_type_canonical_map,
-                      ) {
-                      alias_candidate.set(old_index, target)
-                    }
-                  None => ()
+            if function_type_entry_by_type_index.get(wrapper_type_index)
+              is Some(wrapper_type) {
+              if function_type_entry_by_type_index.get(target_type_index)
+                is Some(target_type) {
+                if function_type_entries_equal_with_gc_canonical_map(
+                    wrapper_type, target_type, gc_type_canonical_map,
+                  ) {
+                  alias_candidate.set(old_index, target)
                 }
-              None => ()
+              }
             }
           }
         }
@@ -351,7 +349,7 @@ fn apply_const_call_forwarding_propagation_raise(
   )
   let mut has_alias = false
   alias_map.each((_, _target) => has_alias = true)
-  if not(has_alias) {
+  if !has_alias {
     return { bytes, rewritten_call_count: 0U }
   }
   let (rewritten_code_payload, rewritten_call_count) = rewrite_code_section_payload_for_const_call_forwarding_raise(
@@ -508,7 +506,7 @@ fn apply_call_forwarding_propagation_raise(
   )
   let mut has_alias = false
   alias_map.each((_, _target) => has_alias = true)
-  if not(has_alias) {
+  if !has_alias {
     return { bytes, rewritten_call_count: 0U }
   }
   let (rewritten_code_payload, rewritten_call_count) = rewrite_code_section_payload_for_call_forwarding_raise(
@@ -562,27 +560,24 @@ pub fn collect_signature_refine_alias_map(
           let target_pos = UInt::reinterpret_as_int(target)
           if target_pos >= 0 && target_pos < function_type_by_index.length() {
             let target_type_index = function_type_by_index[target_pos]
-            match function_type_entry_by_type_index.get(target_type_index) {
-              Some(target_type) =>
-                match
-                  can_signature_refine_forward_to_target(
-                    wrapper_type,
-                    target_type,
-                    forwarded_param_count,
-                    appended_i32_const_instrs.length().reinterpret_as_uint(),
-                    dropped_result_count,
-                    gc_type_canonical_map,
-                  ) {
-                  Some((dropped_param_count, dropped_result_count)) =>
-                    alias_candidate.set(old_index, {
-                      target,
-                      dropped_param_count,
-                      dropped_result_count,
-                      appended_i32_const_instrs,
-                    })
-                  None => ()
-                }
-              None => ()
+            if function_type_entry_by_type_index.get(target_type_index)
+              is Some(target_type) {
+              if can_signature_refine_forward_to_target(
+                  wrapper_type,
+                  target_type,
+                  forwarded_param_count,
+                  appended_i32_const_instrs.length().reinterpret_as_uint(),
+                  dropped_result_count,
+                  gc_type_canonical_map,
+                )
+                is Some((dropped_param_count, dropped_result_count)) {
+                alias_candidate.set(old_index, {
+                  target,
+                  dropped_param_count,
+                  dropped_result_count,
+                  appended_i32_const_instrs,
+                })
+              }
             }
           }
         }
@@ -812,7 +807,7 @@ fn apply_signature_refining_raise(
   )
   let mut has_alias = false
   alias_map.each((_index, _alias) => has_alias = true)
-  if not(has_alias) {
+  if !has_alias {
     return { bytes, rewritten_call_count: 0U }
   }
   let (rewritten_code_payload, rewritten_call_count) = rewrite_code_section_payload_for_signature_refining_raise(

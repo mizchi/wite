@@ -79,19 +79,16 @@ fn apply_merge_similar_functions_raise(
       continue
     }
     let param_count = function_param_count_by_index[old_pos]
-    match
-      parse_forward_call_target_with_param_count(code_bodies[i], param_count) {
-      Some(target) =>
-        if target != old_index {
-          let target_pos = UInt::reinterpret_as_int(target)
-          if target_pos >= 0 &&
-            target_pos < function_type_by_index.length() &&
-            function_type_by_index[old_pos] ==
-            function_type_by_index[target_pos] {
-            alias_candidate.set(old_index, target)
-          }
+    if parse_forward_call_target_with_param_count(code_bodies[i], param_count)
+      is Some(target) {
+      if target != old_index {
+        let target_pos = UInt::reinterpret_as_int(target)
+        if target_pos >= 0 &&
+          target_pos < function_type_by_index.length() &&
+          function_type_by_index[old_pos] == function_type_by_index[target_pos] {
+          alias_candidate.set(old_index, target)
         }
-      None => ()
+      }
     }
     if alias_candidate.get(old_index) is None {
       for j in 0..<i {

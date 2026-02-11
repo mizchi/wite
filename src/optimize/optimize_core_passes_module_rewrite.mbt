@@ -19,8 +19,11 @@ fn read_import_name_bytes_raise(
 
 ///|
 fn append_import_name_key(out : Array[Byte], name : Bytes) -> Unit {
-  out.append(encode_u32_leb128(name.length().reinterpret_as_uint())[:])
-  out.append(name[:].to_array())
+  ignore(
+    out
+    ..append(encode_u32_leb128(name.length().reinterpret_as_uint())[:])
+    ..append(name[:].to_array()),
+  )
 }
 
 ///|
@@ -38,7 +41,7 @@ fn build_function_import_dedupe_key_raise(
     )
   }
   let type_index = parser.read_u32_leb128()
-  if not(parser.eof()) {
+  if !parser.eof() {
     raise WiteError::InvalidFormat("trailing bytes in function import entry")
   }
   let type_raw = match function_type_raw_by_index.get(type_index) {
@@ -131,19 +134,16 @@ fn apply_duplicate_import_elimination_raise(
     }
   }
   let function_type_raw_by_index : Map[UInt, Bytes] = {}
-  match type_section_payload {
-    Some(payload) => {
-      let type_entries = parse_type_section_entries_with_refs_raise(
-        payload, "dup-imports",
+  if type_section_payload is Some(payload) {
+    let type_entries = parse_type_section_entries_with_refs_raise(
+      payload, "dup-imports",
+    )
+    for i in 0..<type_entries.length() {
+      function_type_raw_by_index.set(
+        i.reinterpret_as_uint(),
+        type_entries[i].raw,
       )
-      for i in 0..<type_entries.length() {
-        function_type_raw_by_index.set(
-          i.reinterpret_as_uint(),
-          type_entries[i].raw,
-        )
-      }
     }
-    None => ()
   }
   let mut imported_function_count = 0U
   let mut imported_table_count = 0U
@@ -206,7 +206,7 @@ fn apply_duplicate_import_elimination_raise(
             break
           }
         }
-        if not(found) {
+        if !found {
           unique_function_import_keys.push(entry_key)
           unique_function_import_indices.push(entry.kind_index)
         }
@@ -232,7 +232,7 @@ fn apply_duplicate_import_elimination_raise(
             break
           }
         }
-        if not(found) {
+        if !found {
           unique_table_import_entries.push(entry.bytes)
           unique_table_import_indices.push(entry.kind_index)
         }
@@ -258,7 +258,7 @@ fn apply_duplicate_import_elimination_raise(
             break
           }
         }
-        if not(found) {
+        if !found {
           unique_memory_import_entries.push(entry.bytes)
           unique_memory_import_indices.push(entry.kind_index)
         }
@@ -284,7 +284,7 @@ fn apply_duplicate_import_elimination_raise(
             break
           }
         }
-        if not(found) {
+        if !found {
           unique_global_import_entries.push(entry.bytes)
           unique_global_import_indices.push(entry.kind_index)
         }
@@ -360,7 +360,7 @@ fn apply_duplicate_import_elimination_raise(
         "function import keep index out of range in dedupe map canonical",
       )
     }
-    if not(keep_function_imports[i_pos]) {
+    if !keep_function_imports[i_pos] {
       let canonical = match canonical_function_import_index.get(i) {
         Some(v) => v
         None => i
@@ -396,7 +396,7 @@ fn apply_duplicate_import_elimination_raise(
         "table import keep index out of range in dedupe map canonical",
       )
     }
-    if not(keep_table_imports[i_pos]) {
+    if !keep_table_imports[i_pos] {
       let canonical = match canonical_table_import_index.get(i) {
         Some(v) => v
         None => i
@@ -432,7 +432,7 @@ fn apply_duplicate_import_elimination_raise(
         "memory import keep index out of range in dedupe map canonical",
       )
     }
-    if not(keep_memory_imports[i_pos]) {
+    if !keep_memory_imports[i_pos] {
       let canonical = match canonical_memory_import_index.get(i) {
         Some(v) => v
         None => i
@@ -468,7 +468,7 @@ fn apply_duplicate_import_elimination_raise(
         "global import keep index out of range in dedupe map canonical",
       )
     }
-    if not(keep_global_imports[i_pos]) {
+    if !keep_global_imports[i_pos] {
       let canonical = match canonical_global_import_index.get(i) {
         Some(v) => v
         None => i
@@ -492,11 +492,11 @@ fn apply_duplicate_import_elimination_raise(
     keep_local_globals.push(true)
   }
   let element_index_map = match element_section_payload {
-    Some(payload) => make_identity_index_map(parse_vec_count(payload))
+    Some(payload) => payload |> parse_vec_count |> make_identity_index_map
     None => make_identity_index_map(0U)
   }
   let data_index_map = match data_section_payload {
-    Some(payload) => make_identity_index_map(parse_vec_count(payload))
+    Some(payload) => payload |> parse_vec_count |> make_identity_index_map
     None => make_identity_index_map(0U)
   }
   let (rewritten_import_payload, removed_by_rewrite) = rewrite_import_section_payload_for_keep_kinds_raise(
@@ -861,7 +861,7 @@ pub fn apply_directize_raise(
   }
   let mut has_table_entry = false
   table_map.each((_, _value) => has_table_entry = true)
-  if not(has_table_entry) {
+  if !has_table_entry {
     return { bytes, rewritten_call_count: 0U }
   }
   let function_payload = match function_payload {
@@ -951,17 +951,14 @@ fn rewrite_instruction_global_get_to_i32_const_raise(
     if span.opcode == 0x23U {
       match decode_span_u32_immediate(instr_bytes, span) {
         Some(index) =>
-          match global_i32_const_map.get(index) {
-            Some(value) => {
-              let replacement : Array[Byte] = [0x41U.to_byte()]
-              replacement.append(encode_nonnegative_i32_leb128(value)[:])
-              if replacement.length() <= span.end_ - span.start {
-                out.append(replacement[:])
-                rewritten_global_get_count += 1U
-                continue
-              }
+          if global_i32_const_map.get(index) is Some(value) {
+            let replacement : Array[Byte] = [0x41U.to_byte()]
+            replacement.append(encode_nonnegative_i32_leb128(value)[:])
+            if replacement.length() <= span.end_ - span.start {
+              out.append(replacement[:])
+              rewritten_global_get_count += 1U
+              continue
             }
-            None => ()
           }
         None =>
           raise WiteError::InvalidFormat(
@@ -1148,36 +1145,26 @@ fn apply_reorder_globals_raise(
   for _ in 0U..<total_global_count {
     usage_counts.push(0U)
   }
-  match code_payload {
-    Some(payload) =>
-      collect_global_usage_counts_from_code_section_raise(payload, usage_counts)
-    None => ()
+  if code_payload is Some(payload) {
+    collect_global_usage_counts_from_code_section_raise(payload, usage_counts)
   }
-  match export_payload {
-    Some(payload) =>
-      for index in parse_export_global_indices(payload) {
-        increment_index_count_in_array(usage_counts, index)
-      }
-    None => ()
-  }
-  match element_payload {
-    Some(payload) =>
-      for
-        index in collect_used_global_indices_from_element_section_raise(payload) {
-        increment_index_count_in_array(usage_counts, index)
-      }
-    None => ()
-  }
-  match data_payload {
-    Some(payload) => {
-      let (_, global_indices) = collect_used_memory_and_global_indices_from_data_section_raise(
-        payload,
-      )
-      for index in global_indices {
-        increment_index_count_in_array(usage_counts, index)
-      }
+  if export_payload is Some(payload) {
+    for index in parse_export_global_indices(payload) {
+      increment_index_count_in_array(usage_counts, index)
     }
-    None => ()
+  }
+  if element_payload is Some(payload) {
+    for index in collect_used_global_indices_from_element_section_raise(payload) {
+      increment_index_count_in_array(usage_counts, index)
+    }
+  }
+  if data_payload is Some(payload) {
+    let (_, global_indices) = collect_used_memory_and_global_indices_from_data_section_raise(
+      payload,
+    )
+    for index in global_indices {
+      increment_index_count_in_array(usage_counts, index)
+    }
   }
   for entry in local_global_entries {
     for dep in entry.init_global_refs {
@@ -1235,11 +1222,11 @@ fn apply_reorder_globals_raise(
     imported_memory_count + local_memory_count,
   )
   let element_index_map = match element_payload {
-    Some(payload) => make_identity_index_map(parse_vec_count(payload))
+    Some(payload) => payload |> parse_vec_count |> make_identity_index_map
     None => make_identity_index_map(0U)
   }
   let data_index_map = match data_payload {
-    Some(payload) => make_identity_index_map(parse_vec_count(payload))
+    Some(payload) => payload |> parse_vec_count |> make_identity_index_map
     None => make_identity_index_map(0U)
   }
   let out : Array[Byte] = bytes[0:8].to_array()
@@ -1351,34 +1338,27 @@ fn apply_memory_packing_raise(
     return { bytes, reordered_local_count: 0U }
   }
   let used_memory_indices : Array[UInt] = []
-  match export_payload {
-    Some(payload) =>
-      for index in parse_export_memory_indices(payload) {
-        push_unique_u32(used_memory_indices, index)
-      }
-    None => ()
-  }
-  match code_payload {
-    Some(payload) =>
-      match collect_used_memory_indices_from_code_section(payload) {
-        Some(indices) =>
-          for index in indices {
-            push_unique_u32(used_memory_indices, index)
-          }
-        None => return { bytes, reordered_local_count: 0U }
-      }
-    None => ()
-  }
-  match data_payload {
-    Some(payload) => {
-      let (memory_indices, _) = collect_used_memory_and_global_indices_from_data_section_raise(
-        payload,
-      )
-      for index in memory_indices {
-        push_unique_u32(used_memory_indices, index)
-      }
+  if export_payload is Some(payload) {
+    for index in parse_export_memory_indices(payload) {
+      push_unique_u32(used_memory_indices, index)
     }
-    None => ()
+  }
+  if code_payload is Some(payload) {
+    match collect_used_memory_indices_from_code_section(payload) {
+      Some(indices) =>
+        for index in indices {
+          push_unique_u32(used_memory_indices, index)
+        }
+      None => return { bytes, reordered_local_count: 0U }
+    }
+  }
+  if data_payload is Some(payload) {
+    let (memory_indices, _) = collect_used_memory_and_global_indices_from_data_section_raise(
+      payload,
+    )
+    for index in memory_indices {
+      push_unique_u32(used_memory_indices, index)
+    }
   }
   let total_memory_count = imported_memory_count +
     local_memory_entries.length().reinterpret_as_uint()
@@ -1411,9 +1391,9 @@ fn apply_memory_packing_raise(
       used_flags,
       imported_memory_count + b,
     )
-    if a_used && not(b_used) {
+    if a_used && !b_used {
       -1
-    } else if not(a_used) && b_used {
+    } else if !a_used && b_used {
       1
     } else if a < b {
       -1
@@ -1462,7 +1442,7 @@ fn apply_memory_packing_raise(
   )
   let element_index_map = make_identity_index_map(0U)
   let data_index_map = match data_payload {
-    Some(payload) => make_identity_index_map(parse_vec_count(payload))
+    Some(payload) => payload |> parse_vec_count |> make_identity_index_map
     None => make_identity_index_map(0U)
   }
   let out : Array[Byte] = bytes[0:8].to_array()

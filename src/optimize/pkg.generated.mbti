@@ -16,6 +16,8 @@ pub fn clone_optimize_config(@types.OptimizeConfig, pass_rounds? : UInt, closed_
 
 pub fn collect_call_forwarding_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, FunctionTypeEntry], Array[UInt], Map[UInt, UInt]) -> Map[UInt, UInt]
 
+pub fn collect_call_indirect_table_indices_from_code_section(Bytes) -> Array[UInt]?
+
 pub fn collect_const_call_forwarding_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, FunctionTypeEntry], Map[UInt, UInt]) -> Map[UInt, CfpConstAlias]
 
 pub fn collect_direct_callees(Bytes, Array[InstrSpan]) -> (Array[UInt], Bool)
@@ -81,6 +83,8 @@ pub fn parse_core_sections_raise(Bytes) -> Array[RawSection] raise @types.WiteEr
 pub fn parse_custom_section_name_prefix_end(Bytes) -> Int raise @types.WiteError
 
 pub fn parse_element_section_function_refs_raise(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_element_section_table_function_refs_raise(Bytes) -> Map[UInt, Array[UInt]] raise @types.WiteError
 
 pub fn parse_export_function_names(Bytes) -> Map[UInt, Array[String]] raise @types.WiteError
 

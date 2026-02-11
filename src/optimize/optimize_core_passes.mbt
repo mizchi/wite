@@ -15,10 +15,7 @@ fn keep_custom_section(section : RawSection, config : OptimizeConfig) -> Bool {
   if section.section_id != 0U {
     return true
   }
-  let name = match section.custom_name {
-    Some(v) => v
-    None => ""
-  }
+  let name = section.custom_name.unwrap_or("")
   if config.keep_custom_sections.contains(name) {
     return true
   }
@@ -124,7 +121,7 @@ fn any_optimization_pass_requested(config : OptimizeConfig) -> Bool {
 
 ///|
 fn push_reason(reasons : Array[String], reason : String) -> Unit {
-  if not(reasons.contains(reason)) {
+  if !reasons.contains(reason) {
     reasons.push(reason)
   }
 }
@@ -139,11 +136,11 @@ fn collect_optimize_no_change_reasons(
   if before.length() != after.length() {
     return reasons
   }
-  if not(bytes_equal(before, after)) {
+  if !bytes_equal(before, after) {
     reasons.push("size-neutral rewrite only (bytes changed but size unchanged)")
     return reasons
   }
-  if not(any_optimization_pass_requested(config)) {
+  if !any_optimization_pass_requested(config) {
     reasons.push("no optimization pass is enabled in config")
     return reasons
   }
@@ -156,21 +153,21 @@ fn collect_optimize_no_change_reasons(
         for section in sections {
           if section.section_id == 0U {
             has_custom_section = true
-            if not(keep_custom_section(section, config)) {
+            if !keep_custom_section(section, config) {
               has_removable_custom_section = true
             }
           }
         }
-        if not(has_custom_section) {
+        if !has_custom_section {
           push_reason(reasons, "no custom section exists for strip passes")
-        } else if not(has_removable_custom_section) {
+        } else if !has_removable_custom_section {
           push_reason(
             reasons, "configured custom-section strip targets were not present",
           )
         }
       }
       if should_optimize_code_section(config) {
-        if not(sections.any(s => s.section_id == 10U)) {
+        if !sections.any(s => s.section_id == 10U) {
           push_reason(reasons, "no code section exists for code-level passes")
         } else {
           push_reason(
@@ -194,7 +191,7 @@ fn collect_optimize_no_change_reasons(
         } else {
           let mut removable_function_count = 0U
           for node in report.nodes {
-            if not(node.reachable_from_roots) {
+            if !node.reachable_from_roots {
               removable_function_count += 1U
             }
           }
@@ -226,7 +223,7 @@ fn optimize_for_size_round_raise(
   let stage1_out : Array[Byte] = bytes[0:8].to_array()
   let removed_sections : Array[String] = []
   for section in sections {
-    if section.section_id == 0U && not(keep_custom_section(section, config)) {
+    if section.section_id == 0U && !keep_custom_section(section, config) {
       removed_sections.push(section_key(section, false))
     } else if section.section_id == 10U && should_optimize_code_section(config) {
       let payload = bytes[section.payload_start:section.section_end].to_bytes()

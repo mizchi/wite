@@ -271,17 +271,14 @@ fn decode_i32_leb128_bytes(bytes : Bytes) -> Int? {
   if (last & 0x80U) != 0U {
     return None
   }
-  match decode_u32_leb128_bytes(bytes) {
-    Some(raw) => {
-      let bit_width = if bytes.length() == 5 { 32 } else { bytes.length() * 7 }
-      if (last & 0x40U) != 0U && bit_width < 32 {
-        Some(raw.reinterpret_as_int() - (1 << bit_width))
-      } else {
-        Some(raw.reinterpret_as_int())
-      }
+  decode_u32_leb128_bytes(bytes).map(raw => {
+    let bit_width = if bytes.length() == 5 { 32 } else { bytes.length() * 7 }
+    if (last & 0x40U) != 0U && bit_width < 32 {
+      raw.reinterpret_as_int() - (1 << bit_width)
+    } else {
+      raw.reinterpret_as_int()
     }
-    None => None
-  }
+  })
 }
 
 ///|
@@ -292,7 +289,7 @@ fn encode_signed_i32_leb128(value : Int) -> Array[Byte] {
     let byte = (current & 0x7f).reinterpret_as_uint()
     let sign_set = (byte & 0x40U) != 0U
     current = current >> 7
-    let done = (current == 0 && not(sign_set)) || (current == -1 && sign_set)
+    let done = (current == 0 && !sign_set) || (current == -1 && sign_set)
     out.push((if done { byte } else { byte + 0x80U }).to_byte())
     if done {
       break
@@ -333,10 +330,13 @@ fn decode_i32_const_small_nonnegative_from_span(
   if span.end_ != span.start + 2 {
     return None
   }
-  match decode_i32_const_nonnegative_from_span(instr_bytes, span) {
-    Some(value) => if value <= 63U { Some(value) } else { None }
-    None => None
-  }
+  decode_i32_const_nonnegative_from_span(instr_bytes, span).bind(value => {
+    if value <= 63U {
+      Some(value)
+    } else {
+      None
+    }
+  })
 }
 
 ///|
@@ -380,14 +380,12 @@ fn instr_spans_to_bytes(instr_bytes : Bytes, spans : Array[InstrSpan]) -> Bytes 
 
 ///|
 fn append_i32_const_small(out : Array[Byte], value : UInt) -> Unit {
-  out.push(0x41U.to_byte())
-  out.push(value.to_byte())
+  ignore(out..push(0x41U.to_byte())..push(value.to_byte()))
 }
 
 ///|
 fn append_i32_const_signed(out : Array[Byte], value : Int) -> Unit {
-  out.push(0x41U.to_byte())
-  out.append(encode_signed_i32_leb128(value)[:])
+  ignore(out..push(0x41U.to_byte())..append(encode_signed_i32_leb128(value)[:]))
 }
 
 ///|
@@ -617,39 +615,34 @@ fn apply_optimize_instructions_same_local_get_pair(
     if i + 2 < spans.length() &&
       spans[i].opcode == 0x20U &&
       spans[i + 1].opcode == 0x20U {
-      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
-        Some(first_local) =>
-          match
-            decode_local_index_immediate_from_span(instr_bytes, spans[i + 1]) {
-            Some(second_local) =>
-              if first_local == second_local {
-                match spans[i + 2].opcode {
-                  0x71U | 0x72U => {
-                    // local.get x; local.get x; i32.and/or => local.get x
-                    out.append(
-                      instr_bytes[spans[i].start:spans[i].end_].to_array(),
-                    )
-                    i += 3
-                    continue
-                  }
-                  0x46U | 0x4cU | 0x4dU | 0x4eU | 0x4fU => {
-                    // x==x / x<=x / x>=x => 1
-                    append_i32_const_small(out, 1U)
-                    i += 3
-                    continue
-                  }
-                  0x47U | 0x48U | 0x49U | 0x4aU | 0x4bU | 0x6bU | 0x73U => {
-                    // x!=x / x<x / x>x / x-x / x^x => 0
-                    append_i32_const_small(out, 0U)
-                    i += 3
-                    continue
-                  }
-                  _ => ()
-                }
+      if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+        is Some(first_local) {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
+          is Some(second_local) {
+          if first_local == second_local {
+            match spans[i + 2].opcode {
+              0x71U | 0x72U => {
+                // local.get x; local.get x; i32.and/or => local.get x
+                out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+                i += 3
+                continue
               }
-            None => ()
+              0x46U | 0x4cU | 0x4dU | 0x4eU | 0x4fU => {
+                // x==x / x<=x / x>=x => 1
+                append_i32_const_small(out, 1U)
+                i += 3
+                continue
+              }
+              0x47U | 0x48U | 0x49U | 0x4aU | 0x4bU | 0x6bU | 0x73U => {
+                // x!=x / x<x / x>x / x-x / x^x => 0
+                append_i32_const_small(out, 0U)
+                i += 3
+                continue
+              }
+              _ => ()
+            }
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -671,26 +664,22 @@ fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
       spans[i].opcode == 0x41U &&
       spans[i + 1].opcode == 0x41U &&
       spans[i + 2].opcode == 0x6aU {
-      match decode_i32_const_signed_from_span(instr_bytes, spans[i]) {
-        Some(lhs) =>
-          match decode_i32_const_signed_from_span(instr_bytes, spans[i + 1]) {
-            Some(rhs) => {
-              let sum = (lhs.reinterpret_as_uint() + rhs.reinterpret_as_uint()).reinterpret_as_int()
-              let original_len = spans[i].end_ -
-                spans[i].start +
-                (spans[i + 1].end_ - spans[i + 1].start) +
-                1
-              let folded_imm = encode_signed_i32_leb128(sum)
-              let folded_len = 1 + folded_imm.length()
-              if folded_len < original_len {
-                append_i32_const_signed(out, sum)
-                i += 3
-                continue
-              }
-            }
-            None => ()
+      if decode_i32_const_signed_from_span(instr_bytes, spans[i]) is Some(lhs) {
+        if decode_i32_const_signed_from_span(instr_bytes, spans[i + 1])
+          is Some(rhs) {
+          let sum = (lhs.reinterpret_as_uint() + rhs.reinterpret_as_uint()).reinterpret_as_int()
+          let original_len = spans[i].end_ -
+            spans[i].start +
+            (spans[i + 1].end_ - spans[i + 1].start) +
+            1
+          let folded_imm = encode_signed_i32_leb128(sum)
+          let folded_len = 1 + folded_imm.length()
+          if folded_len < original_len {
+            append_i32_const_signed(out, sum)
+            i += 3
+            continue
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -734,29 +723,23 @@ fn apply_precompute_i32_binary_ops(instr_bytes : Bytes) -> Bytes {
     if i + 2 < spans.length() &&
       spans[i].opcode == 0x41U &&
       spans[i + 1].opcode == 0x41U {
-      match decode_i32_const_signed_from_span(instr_bytes, spans[i]) {
-        Some(lhs) =>
-          match decode_i32_const_signed_from_span(instr_bytes, spans[i + 1]) {
-            Some(rhs) =>
-              match eval_i32_const_binary(lhs, rhs, spans[i + 2].opcode) {
-                Some(value) => {
-                  let original_len = spans[i].end_ -
-                    spans[i].start +
-                    (spans[i + 1].end_ - spans[i + 1].start) +
-                    1
-                  let folded_imm = encode_signed_i32_leb128(value)
-                  let folded_len = 1 + folded_imm.length()
-                  if folded_len < original_len {
-                    append_i32_const_signed(out, value)
-                    i += 3
-                    continue
-                  }
-                }
-                None => ()
-              }
-            None => ()
+      if decode_i32_const_signed_from_span(instr_bytes, spans[i]) is Some(lhs) {
+        if decode_i32_const_signed_from_span(instr_bytes, spans[i + 1])
+          is Some(rhs) {
+          if eval_i32_const_binary(lhs, rhs, spans[i + 2].opcode) is Some(value) {
+            let original_len = spans[i].end_ -
+              spans[i].start +
+              (spans[i + 1].end_ - spans[i + 1].start) +
+              1
+            let folded_imm = encode_signed_i32_leb128(value)
+            let folded_len = 1 + folded_imm.length()
+            if folded_len < original_len {
+              append_i32_const_signed(out, value)
+              i += 3
+              continue
+            }
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -800,27 +783,21 @@ fn apply_precompute_i32_const_cmp(instr_bytes : Bytes) -> Bytes {
     if i + 2 < spans.length() &&
       spans[i].opcode == 0x41U &&
       spans[i + 1].opcode == 0x41U {
-      match decode_i32_const_signed_from_span(instr_bytes, spans[i]) {
-        Some(lhs) =>
-          match decode_i32_const_signed_from_span(instr_bytes, spans[i + 1]) {
-            Some(rhs) =>
-              match eval_i32_const_cmp(lhs, rhs, spans[i + 2].opcode) {
-                Some(value) => {
-                  let original_len = spans[i].end_ -
-                    spans[i].start +
-                    (spans[i + 1].end_ - spans[i + 1].start) +
-                    1
-                  if 2 < original_len {
-                    append_i32_const_small(out, value)
-                    i += 3
-                    continue
-                  }
-                }
-                None => ()
-              }
-            None => ()
+      if decode_i32_const_signed_from_span(instr_bytes, spans[i]) is Some(lhs) {
+        if decode_i32_const_signed_from_span(instr_bytes, spans[i + 1])
+          is Some(rhs) {
+          if eval_i32_const_cmp(lhs, rhs, spans[i + 2].opcode) is Some(value) {
+            let original_len = spans[i].end_ -
+              spans[i].start +
+              (spans[i + 1].end_ - spans[i + 1].start) +
+              1
+            if 2 < original_len {
+              append_i32_const_small(out, value)
+              i += 3
+              continue
+            }
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -870,7 +847,7 @@ fn decode_memory_memarg_from_span(
   instr_bytes : Bytes,
   span : InstrSpan,
 ) -> (UInt, UInt)? {
-  if not(is_memory_memarg_opcode(span.opcode)) || span.end_ <= span.start + 1 {
+  if !is_memory_memarg_opcode(span.opcode) || span.end_ <= span.start + 1 {
     return None
   }
   let parser = Cursor::new(instr_bytes)
@@ -898,9 +875,12 @@ fn append_memory_memarg(
   align : UInt,
   offset : UInt,
 ) -> Unit {
-  out.push(opcode.to_byte())
-  out.append(encode_u32_leb128(align)[:])
-  out.append(encode_u32_leb128(offset)[:])
+  ignore(
+    out
+    ..push(opcode.to_byte())
+    ..append(encode_u32_leb128(align)[:])
+    ..append(encode_u32_leb128(offset)[:]),
+  )
 }
 
 ///|
@@ -927,45 +907,36 @@ fn apply_precompute_i32_add_into_load_offset(
       spans[i + 2].opcode == 0x6aU &&
       is_drop_elidable_producer_span(instr_bytes, spans[i + 3]) &&
       is_memory_store_opcode(spans[i + 4].opcode) {
-      match decode_i32_const_nonnegative_from_span(instr_bytes, spans[i + 1]) {
-        Some(addend) =>
-          match decode_memory_memarg_from_span(instr_bytes, spans[i + 4]) {
-            Some((align, offset)) =>
-              if addend <= max_u32 - offset {
-                let new_offset = offset + addend
-                let rewritten_store_len = 1 +
-                  encode_u32_leb128(align).length() +
-                  encode_u32_leb128(new_offset).length()
-                let original_len = spans[i].end_ -
-                  spans[i].start +
-                  (spans[i + 1].end_ - spans[i + 1].start) +
-                  1 +
-                  (spans[i + 3].end_ - spans[i + 3].start) +
-                  (spans[i + 4].end_ - spans[i + 4].start)
-                let rewritten_len = spans[i].end_ -
-                  spans[i].start +
-                  (spans[i + 3].end_ - spans[i + 3].start) +
-                  rewritten_store_len
-                if rewritten_len < original_len {
-                  out.append(
-                    instr_bytes[spans[i].start:spans[i].end_].to_array(),
-                  )
-                  out.append(
-                    instr_bytes[spans[i + 3].start:spans[i + 3].end_].to_array(),
-                  )
-                  append_memory_memarg(
-                    out,
-                    spans[i + 4].opcode,
-                    align,
-                    new_offset,
-                  )
-                  i += 5
-                  continue
-                }
-              }
-            None => ()
+      if decode_i32_const_nonnegative_from_span(instr_bytes, spans[i + 1])
+        is Some(addend) {
+        if decode_memory_memarg_from_span(instr_bytes, spans[i + 4])
+          is Some((align, offset)) {
+          if addend <= max_u32 - offset {
+            let new_offset = offset + addend
+            let rewritten_store_len = 1 +
+              encode_u32_leb128(align).length() +
+              encode_u32_leb128(new_offset).length()
+            let original_len = spans[i].end_ -
+              spans[i].start +
+              (spans[i + 1].end_ - spans[i + 1].start) +
+              1 +
+              (spans[i + 3].end_ - spans[i + 3].start) +
+              (spans[i + 4].end_ - spans[i + 4].start)
+            let rewritten_len = spans[i].end_ -
+              spans[i].start +
+              (spans[i + 3].end_ - spans[i + 3].start) +
+              rewritten_store_len
+            if rewritten_len < original_len {
+              out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+              out.append(
+                instr_bytes[spans[i + 3].start:spans[i + 3].end_].to_array(),
+              )
+              append_memory_memarg(out, spans[i + 4].opcode, align, new_offset)
+              i += 5
+              continue
+            }
           }
-        None => ()
+        }
       }
     }
     if i + 3 < spans.length() &&
@@ -973,40 +944,31 @@ fn apply_precompute_i32_add_into_load_offset(
       spans[i + 1].opcode == 0x41U &&
       spans[i + 2].opcode == 0x6aU &&
       is_memory_memarg_opcode(spans[i + 3].opcode) {
-      match decode_i32_const_nonnegative_from_span(instr_bytes, spans[i + 1]) {
-        Some(addend) =>
-          match decode_memory_memarg_from_span(instr_bytes, spans[i + 3]) {
-            Some((align, offset)) =>
-              if addend <= max_u32 - offset {
-                let new_offset = offset + addend
-                let rewritten_memarg_len = 1 +
-                  encode_u32_leb128(align).length() +
-                  encode_u32_leb128(new_offset).length()
-                let original_len = spans[i].end_ -
-                  spans[i].start +
-                  (spans[i + 1].end_ - spans[i + 1].start) +
-                  1 +
-                  (spans[i + 3].end_ - spans[i + 3].start)
-                let rewritten_len = spans[i].end_ -
-                  spans[i].start +
-                  rewritten_memarg_len
-                if rewritten_len < original_len {
-                  out.append(
-                    instr_bytes[spans[i].start:spans[i].end_].to_array(),
-                  )
-                  append_memory_memarg(
-                    out,
-                    spans[i + 3].opcode,
-                    align,
-                    new_offset,
-                  )
-                  i += 4
-                  continue
-                }
-              }
-            None => ()
+      if decode_i32_const_nonnegative_from_span(instr_bytes, spans[i + 1])
+        is Some(addend) {
+        if decode_memory_memarg_from_span(instr_bytes, spans[i + 3])
+          is Some((align, offset)) {
+          if addend <= max_u32 - offset {
+            let new_offset = offset + addend
+            let rewritten_memarg_len = 1 +
+              encode_u32_leb128(align).length() +
+              encode_u32_leb128(new_offset).length()
+            let original_len = spans[i].end_ -
+              spans[i].start +
+              (spans[i + 1].end_ - spans[i + 1].start) +
+              1 +
+              (spans[i + 3].end_ - spans[i + 3].start)
+            let rewritten_len = spans[i].end_ -
+              spans[i].start +
+              rewritten_memarg_len
+            if rewritten_len < original_len {
+              out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+              append_memory_memarg(out, spans[i + 3].opcode, align, new_offset)
+              i += 4
+              continue
+            }
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -1166,10 +1128,9 @@ fn apply_precompute_i32_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
 
 ///|
 fn is_i32_const_bool_from_span(instr_bytes : Bytes, span : InstrSpan) -> Bool {
-  match decode_i32_const_signed_from_span(instr_bytes, span) {
-    Some(0) | Some(1) => true
-    _ => false
-  }
+  decode_i32_const_signed_from_span(instr_bytes, span)
+  .map(value => value == 0 || value == 1)
+  .unwrap_or(false)
 }
 
 ///|
@@ -1186,17 +1147,13 @@ fn apply_precompute_local_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
       spans[i].opcode == 0x20U &&
       spans[i + 1].opcode == 0x45U &&
       spans[i + 2].opcode == 0x45U {
-      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
-        Some(local_index) =>
-          match known_local_bool.get(local_index) {
-            Some(true) => {
-              out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
-              i += 3
-              continue
-            }
-            _ => ()
-          }
-        None => ()
+      if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+        is Some(local_index) {
+        if known_local_bool.get(local_index) is Some(true) {
+          out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+          i += 3
+          continue
+        }
       }
     }
 
@@ -1213,13 +1170,11 @@ fn apply_precompute_local_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
               is_i32_const_bool_from_span(instr_bytes, prev) {
               assigned_bool = true
             } else if prev.opcode == 0x20U {
-              match decode_local_index_immediate_from_span(instr_bytes, prev) {
-                Some(prev_local_index) =>
-                  match known_local_bool.get(prev_local_index) {
-                    Some(true) => assigned_bool = true
-                    _ => ()
-                  }
-                None => ()
+              if decode_local_index_immediate_from_span(instr_bytes, prev)
+                is Some(prev_local_index) {
+                if known_local_bool.get(prev_local_index) is Some(true) {
+                  assigned_bool = true
+                }
               }
             }
           }
@@ -1311,7 +1266,7 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
               None => ()
             }
           }
-          if not(adjacent_set_same_local) {
+          if !adjacent_set_same_local {
             match
               known_local_const_get(
                 known_local_consts, known_local_unknown, local_index,
@@ -1379,13 +1334,10 @@ fn apply_precompute_local_dead_set_overwrite(instr_bytes : Bytes) -> Bytes {
     if span.opcode == 0x21U {
       match decode_local_index_immediate_from_span(instr_bytes, span) {
         Some(local_index) => {
-          match pending_local_set_active.get(local_index) {
-            Some(true) =>
-              match pending_local_set_span.get(local_index) {
-                Some(prev_span_index) => replacements.set(prev_span_index, true)
-                None => ()
-              }
-            _ => ()
+          if pending_local_set_active.get(local_index) is Some(true) {
+            if pending_local_set_span.get(local_index) is Some(prev_span_index) {
+              replacements.set(prev_span_index, true)
+            }
           }
           pending_local_set_span.set(local_index, i)
           pending_local_set_active.set(local_index, true)
@@ -1400,13 +1352,10 @@ fn apply_precompute_local_dead_set_overwrite(instr_bytes : Bytes) -> Bytes {
     } else if span.opcode == 0x22U {
       match decode_local_index_immediate_from_span(instr_bytes, span) {
         Some(local_index) => {
-          match pending_local_set_active.get(local_index) {
-            Some(true) =>
-              match pending_local_set_span.get(local_index) {
-                Some(prev_span_index) => replacements.set(prev_span_index, true)
-                None => ()
-              }
-            _ => ()
+          if pending_local_set_active.get(local_index) is Some(true) {
+            if pending_local_set_span.get(local_index) is Some(prev_span_index) {
+              replacements.set(prev_span_index, true)
+            }
           }
           pending_local_set_active.set(local_index, false)
         }
@@ -1488,7 +1437,7 @@ fn apply_precompute_br_if_zero_before_end_to_drop(instr_bytes : Bytes) -> Bytes 
         rewritten = true
       }
     }
-    if not(rewritten) {
+    if !rewritten {
       out.append(instr_bytes[span.start:span.end_].to_array())
     }
     match span.opcode {
@@ -1514,22 +1463,17 @@ fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
     if i + 1 < spans.length() &&
       spans[i].opcode == 0x21U &&
       spans[i + 1].opcode == 0x20U {
-      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
-        Some(set_index) =>
-          match
-            decode_local_index_immediate_from_span(instr_bytes, spans[i + 1]) {
-            Some(get_index) =>
-              if set_index == get_index && spans[i].end_ > spans[i].start + 1 {
-                out.push(0x22U.to_byte())
-                out.append(
-                  instr_bytes[spans[i].start + 1:spans[i].end_].to_array(),
-                )
-                i += 2
-                continue
-              }
-            None => ()
+      if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+        is Some(set_index) {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
+          is Some(get_index) {
+          if set_index == get_index && spans[i].end_ > spans[i].start + 1 {
+            out.push(0x22U.to_byte())
+            out.append(instr_bytes[spans[i].start + 1:spans[i].end_].to_array())
+            i += 2
+            continue
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -1550,18 +1494,15 @@ fn apply_simplify_local_get_set_noop(instr_bytes : Bytes) -> Bytes {
     if i + 1 < spans.length() &&
       spans[i].opcode == 0x20U &&
       spans[i + 1].opcode == 0x21U {
-      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
-        Some(get_index) =>
-          match
-            decode_local_index_immediate_from_span(instr_bytes, spans[i + 1]) {
-            Some(set_index) =>
-              if get_index == set_index {
-                i += 2
-                continue
-              }
-            None => ()
+      if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+        is Some(get_index) {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
+          is Some(set_index) {
+          if get_index == set_index {
+            i += 2
+            continue
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -1582,19 +1523,16 @@ fn apply_simplify_local_get_tee_to_get(instr_bytes : Bytes) -> Bytes {
     if i + 1 < spans.length() &&
       spans[i].opcode == 0x20U &&
       spans[i + 1].opcode == 0x22U {
-      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
-        Some(get_index) =>
-          match
-            decode_local_index_immediate_from_span(instr_bytes, spans[i + 1]) {
-            Some(tee_index) =>
-              if get_index == tee_index {
-                out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
-                i += 2
-                continue
-              }
-            None => ()
+      if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+        is Some(get_index) {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
+          is Some(tee_index) {
+          if get_index == tee_index {
+            out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+            i += 2
+            continue
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -1616,24 +1554,21 @@ fn apply_local_cse_get_set_get(instr_bytes : Bytes) -> Bytes {
       spans[i].opcode == 0x20U &&
       spans[i + 1].opcode == 0x21U &&
       spans[i + 2].opcode == 0x20U {
-      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
-        Some(first_get_index) =>
-          match
-            decode_local_index_immediate_from_span(instr_bytes, spans[i + 2]) {
-            Some(second_get_index) =>
-              if first_get_index == second_get_index &&
-                spans[i + 1].end_ > spans[i + 1].start + 1 {
-                out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
-                out.push(0x22U.to_byte())
-                out.append(
-                  instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_array(),
-                )
-                i += 3
-                continue
-              }
-            None => ()
+      if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+        is Some(first_get_index) {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i + 2])
+          is Some(second_get_index) {
+          if first_get_index == second_get_index &&
+            spans[i + 1].end_ > spans[i + 1].start + 1 {
+            out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+            out.push(0x22U.to_byte())
+            out.append(
+              instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_array(),
+            )
+            i += 3
+            continue
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -1678,22 +1613,17 @@ fn apply_rse_local_tee_set_same(instr_bytes : Bytes) -> Bytes {
     if i + 1 < spans.length() &&
       spans[i].opcode == 0x22U &&
       spans[i + 1].opcode == 0x21U {
-      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
-        Some(tee_index) =>
-          match
-            decode_local_index_immediate_from_span(instr_bytes, spans[i + 1]) {
-            Some(set_index) =>
-              if tee_index == set_index && spans[i].end_ > spans[i].start + 1 {
-                out.push(0x21U.to_byte())
-                out.append(
-                  instr_bytes[spans[i].start + 1:spans[i].end_].to_array(),
-                )
-                i += 2
-                continue
-              }
-            None => ()
+      if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+        is Some(tee_index) {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
+          is Some(set_index) {
+          if tee_index == set_index && spans[i].end_ > spans[i].start + 1 {
+            out.push(0x21U.to_byte())
+            out.append(instr_bytes[spans[i].start + 1:spans[i].end_].to_array())
+            i += 2
+            continue
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -1806,7 +1736,7 @@ fn apply_merge_blocks_to_spans(spans : Array[InstrSpan]) -> Array[InstrSpan] {
     if opcode == 0x02U || opcode == 0x03U {
       match matching_end.get(i) {
         Some(end_index) =>
-          if not(has_branch_between(spans, i + 1, end_index)) {
+          if !has_branch_between(spans, i + 1, end_index) {
             remove[i] = true
             remove[end_index] = true
           }
@@ -1816,7 +1746,7 @@ fn apply_merge_blocks_to_spans(spans : Array[InstrSpan]) -> Array[InstrSpan] {
   }
   let out : Array[InstrSpan] = []
   for i in 0..<spans.length() {
-    if not(remove[i]) {
+    if !remove[i] {
       out.push(spans[i])
     }
   }
@@ -1846,7 +1776,7 @@ fn apply_remove_unused_brs_to_spans(
         remove_current = true
       }
     }
-    if not(remove_current) {
+    if !remove_current {
       out.push(span)
     }
     match span.opcode {
@@ -1910,37 +1840,29 @@ fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
   let mut i = 0
   while i < spans.length() {
     if is_empty_block_type_span(instr_bytes, spans[i]) {
-      match matching_end.get(i) {
-        Some(end_index) =>
-          match
-            find_top_level_br_if0_in_block(instr_bytes, spans, i, end_index) {
-            Some(br_if_index) =>
-              if br_if_index < end_index {
-                // block(prefix ... br_if 0 body end) => prefix ... eqz if body end
-                let mut k = i + 1
-                while k < br_if_index {
-                  out.append(
-                    instr_bytes[spans[k].start:spans[k].end_].to_array(),
-                  )
-                  k += 1
-                }
-                out.push(0x45U.to_byte())
-                out.push(0x04U.to_byte())
-                out.push(0x40U.to_byte())
-                k = br_if_index + 1
-                while k < end_index {
-                  out.append(
-                    instr_bytes[spans[k].start:spans[k].end_].to_array(),
-                  )
-                  k += 1
-                }
-                out.push(0x0bU.to_byte())
-                i = end_index + 1
-                continue
-              }
-            None => ()
+      if matching_end.get(i) is Some(end_index) {
+        if find_top_level_br_if0_in_block(instr_bytes, spans, i, end_index)
+          is Some(br_if_index) {
+          if br_if_index < end_index {
+            // block(prefix ... br_if 0 body end) => prefix ... eqz if body end
+            let mut k = i + 1
+            while k < br_if_index {
+              out.append(instr_bytes[spans[k].start:spans[k].end_].to_array())
+              k += 1
+            }
+            out.push(0x45U.to_byte())
+            out.push(0x04U.to_byte())
+            out.push(0x40U.to_byte())
+            k = br_if_index + 1
+            while k < end_index {
+              out.append(instr_bytes[spans[k].start:spans[k].end_].to_array())
+              k += 1
+            }
+            out.push(0x0bU.to_byte())
+            i = end_index + 1
+            continue
           }
-        None => ()
+        }
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -2094,8 +2016,7 @@ fn encode_local_decl_prefix_from_local_types(
   values.push(current)
   out.append(encode_u32_leb128(counts.length().reinterpret_as_uint())[:])
   for i in 0..<counts.length() {
-    out.append(encode_u32_leb128(counts[i])[:])
-    out.push(values[i])
+    ignore(out..append(encode_u32_leb128(counts[i])[:])..push(values[i]))
   }
   Bytes::from_array(out[:])
 }
@@ -2216,8 +2137,11 @@ fn rewrite_instruction_local_indices_for_coalesce_raise(
             )
         }
       }
-      out.push(span.opcode.to_byte())
-      out.append(encode_u32_leb128(new_index)[:])
+      ignore(
+        out
+        ..push(span.opcode.to_byte())
+        ..append(encode_u32_leb128(new_index)[:]),
+      )
     } else {
       out.append(instr_bytes[span.start:span.end_].to_array())
     }

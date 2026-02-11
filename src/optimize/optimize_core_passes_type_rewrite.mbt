@@ -74,7 +74,7 @@ fn rewrite_start_section_payload_for_dce_raise(
   let parser = Cursor::new(payload)
   let start_index = parser.read_u32_leb128()
   let remapped = remap_function_index_raise(start_index, index_map)
-  Bytes::from_array(encode_u32_leb128(remapped))
+  remapped |> encode_u32_leb128 |> Bytes::from_array
 }
 
 ///|
@@ -110,7 +110,7 @@ fn maybe_collect_heap_type_ref_index(
   if (last & 0x40U) != 0U {
     return
   }
-  match decode_u32_leb128_bytes(Bytes::from_array(heap_type_bytes[:])) {
+  match (heap_type_bytes[:] |> Bytes::from_array |> decode_u32_leb128_bytes) {
     Some(type_index) => push_unique_u32(referenced_type_indices, type_index)
     None => ()
   }
@@ -326,7 +326,7 @@ pub fn parse_function_type_entry_from_raw_raise(
   for _ in 0U..<result_count {
     results.push(read_val_type_bytes_raise(parser))
   }
-  if not(parser.eof()) {
+  if !parser.eof() {
     raise WiteError::InvalidFormat(
       "trailing bytes in function type raw entry in " + context,
     )
@@ -348,13 +348,13 @@ pub fn parse_function_type_param_count_from_raw_raise(
   }
   let param_count = parser.read_u32_leb128()
   for _ in 0U..<param_count {
-    ignore(read_val_type_bytes_raise(parser))
+    parser |> read_val_type_bytes_raise |> ignore
   }
   let result_count = parser.read_u32_leb128()
   for _ in 0U..<result_count {
-    ignore(read_val_type_bytes_raise(parser))
+    parser |> read_val_type_bytes_raise |> ignore
   }
-  if not(parser.eof()) {
+  if !parser.eof() {
     raise WiteError::InvalidFormat(
       "trailing bytes in function type raw entry in " + context,
     )
@@ -416,8 +416,11 @@ fn encode_code_section_payload_from_bodies(bodies : Array[Bytes]) -> Bytes {
   let out : Array[Byte] = []
   out.append(encode_u32_leb128(bodies.length().reinterpret_as_uint())[:])
   for body in bodies {
-    out.append(encode_u32_leb128(body.length().reinterpret_as_uint())[:])
-    out.append(body[:].to_array())
+    ignore(
+      out
+      ..append(encode_u32_leb128(body.length().reinterpret_as_uint())[:])
+      ..append(body[:].to_array()),
+    )
   }
   Bytes::from_array(out[:])
 }
@@ -504,8 +507,8 @@ fn collect_used_type_indices_from_import_section_raise(
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
   for _ in 0U..<count {
-    ignore(read_name_bytes(parser))
-    ignore(read_name_bytes(parser))
+    parser |> read_name_bytes |> ignore
+    parser |> read_name_bytes |> ignore
     let kind = parser.read_byte().to_uint()
     match kind {
       0U => push_unique_u32(out, parser.read_u32_leb128())
@@ -515,7 +518,7 @@ fn collect_used_type_indices_from_import_section_raise(
       }
       2U => parse_limits(parser)
       3U => {
-        ignore(read_val_type_bytes_raise(parser))
+        parser |> read_val_type_bytes_raise |> ignore
         ignore(parser.read_byte())
       }
       4U =>
@@ -568,10 +571,12 @@ fn rewrite_import_section_payload_for_type_index_map_raise(
         let end_ = parser.get_pos()
         out.append(payload[start:end_].to_array())
       }
-      3U => {
-        out.append(read_val_type_bytes_raise(parser)[:].to_array())
-        out.push(parser.read_byte())
-      }
+      3U =>
+        ignore(
+          out
+          ..append(read_val_type_bytes_raise(parser)[:].to_array())
+          ..push(parser.read_byte()),
+        )
       4U =>
         raise WiteError::InvalidFormat(
           "tag import is not supported in remove-unused-types",
@@ -607,8 +612,11 @@ fn rewrite_instruction_function_indices_raise(
           )
       }
       let new_index = remap_function_index_raise(old_index, index_map)
-      out.push(span.opcode.to_byte())
-      out.append(encode_u32_leb128(new_index)[:])
+      ignore(
+        out
+        ..push(span.opcode.to_byte())
+        ..append(encode_u32_leb128(new_index)[:]),
+      )
     } else {
       out.append(instr_bytes[span.start:span.end_].to_array())
     }
@@ -659,8 +667,11 @@ fn rewrite_code_section_payload_for_dce_raise(
   let out : Array[Byte] = []
   out.append(encode_u32_leb128(kept_bodies.length().reinterpret_as_uint())[:])
   for body in kept_bodies {
-    out.append(encode_u32_leb128(body.length().reinterpret_as_uint())[:])
-    out.append(body[:].to_array())
+    ignore(
+      out
+      ..append(encode_u32_leb128(body.length().reinterpret_as_uint())[:])
+      ..append(body[:].to_array()),
+    )
   }
   Bytes::from_array(out[:])
 }
@@ -671,7 +682,7 @@ fn decode_call_indirect_immediate(imm : Bytes) -> (UInt, UInt)? {
   let result = try? ({
     let type_index = parser.read_u32_leb128()
     let table_index = parser.read_u32_leb128()
-    if not(parser.eof()) {
+    if !parser.eof() {
       raise WiteError::InvalidFormat(
         "call_indirect immediate has trailing bytes",
       )
@@ -749,13 +760,16 @@ fn rewrite_instruction_type_indices_raise(
             "failed to decode call_indirect immediate",
           )
       }
-      out.push(0x11U.to_byte())
-      out.append(
-        encode_u32_leb128(
-          remap_type_index_raise(old_type_index, type_index_map),
-        )[:],
+      ignore(
+        out
+        ..push(0x11U.to_byte())
+        ..append(
+          encode_u32_leb128(
+            remap_type_index_raise(old_type_index, type_index_map),
+          )[:],
+        )
+        ..append(encode_u32_leb128(table_index)[:]),
       )
-      out.append(encode_u32_leb128(table_index)[:])
     } else {
       out.append(instr_bytes[span.start:span.end_].to_array())
     }
@@ -791,8 +805,11 @@ fn rewrite_code_section_payload_for_type_index_map_raise(
     let rewritten = rewrite_code_body_for_type_index_map_raise(
       body, type_index_map,
     )
-    out.append(encode_u32_leb128(rewritten.length().reinterpret_as_uint())[:])
-    out.append(rewritten[:].to_array())
+    ignore(
+      out
+      ..append(encode_u32_leb128(rewritten.length().reinterpret_as_uint())[:])
+      ..append(rewritten[:].to_array()),
+    )
   }
   Bytes::from_array(out[:])
 }
@@ -893,8 +910,9 @@ fn rewrite_instruction_local_indices_for_signature_pruning_raise(
       let remapped = remap_local_index_for_signature_pruning_raise(
         local_index, old_param_count, removed_param_count,
       )
-      out.push(span.opcode.to_byte())
-      out.append(encode_u32_leb128(remapped)[:])
+      ignore(
+        out..push(span.opcode.to_byte())..append(encode_u32_leb128(remapped)[:]),
+      )
     } else {
       out.append(instr_bytes[span.start:span.end_].to_array())
     }
@@ -940,11 +958,9 @@ fn rewrite_instruction_calls_for_signature_pruning_raise(
         None =>
           raise WiteError::InvalidFormat("failed to decode call immediate")
       }
-      let removed_param_count = match
-        removed_param_count_by_function.get(target) {
-        Some(v) => v
-        None => 0U
-      }
+      let removed_param_count = removed_param_count_by_function
+        .get(target)
+        .unwrap_or(0U)
       for _ in 0U..<removed_param_count {
         out.push(0x1aU.to_byte())
       }
@@ -1093,13 +1109,13 @@ fn extract_inlining_replacement_instr_raise(
   }
   let result_count = type_entry.results.length()
   if result_count == 0 && spans.length() == 1 && spans[0].opcode == 0x0bU {
-    return Some(make_drop_replacement_instr(param_count))
+    return param_count |> make_drop_replacement_instr |> Some
   }
   if result_count == 0 &&
     spans.length() == 2 &&
     spans[0].opcode == 0x0fU &&
     spans[1].opcode == 0x0bU {
-    return Some(make_drop_replacement_instr(param_count))
+    return param_count |> make_drop_replacement_instr |> Some
   }
   if (spans.length() == 2 && spans[1].opcode == 0x0bU) ||
     (
@@ -1112,7 +1128,7 @@ fn extract_inlining_replacement_instr_raise(
       bytes_equal(type_entry.params[0], type_entry.results[0]) &&
       spans[0].opcode == 0x20U &&
       decode_local_index_immediate_from_span(instr_bytes, spans[0]) == Some(0U) {
-      return Some(Bytes::from_array([]))
+      return [] |> Bytes::from_array |> Some
     }
     if result_count == 1 &&
       is_const_opcode_compatible_with_result(
@@ -1121,15 +1137,14 @@ fn extract_inlining_replacement_instr_raise(
       ) {
       let out = make_drop_replacement_instr(param_count).to_array()
       out.append(instr_bytes[spans[0].start:spans[0].end_].to_array())
-      return Some(Bytes::from_array(out[:]))
+      return out[:] |> Bytes::from_array |> Some
     }
   }
-  match
-    extract_inlining_prefix_param_expression_instr_raise(
+  if extract_inlining_prefix_param_expression_instr_raise(
       instr_bytes, spans, param_count,
-    ) {
-    Some(replacement) => return Some(replacement)
-    None => ()
+    )
+    is Some(replacement) {
+    return Some(replacement)
   }
   None
 }
@@ -1160,10 +1175,7 @@ fn rewrite_instruction_calls_for_inlining_raise(
         Some(replacement) => {
           let call_span_len = (span.end_ - span.start).reinterpret_as_uint()
           let replacement_len = replacement.length().reinterpret_as_uint()
-          let call_site_count = match call_count_by_target.get(target) {
-            Some(v) => v
-            None => 0U
-          }
+          let call_site_count = call_count_by_target.get(target).unwrap_or(0U)
           if replacement_len <= call_span_len ||
             (call_site_count == 1U && replacement_len <= call_span_len + 2U) {
             out.append(replacement[:].to_array())
@@ -1309,7 +1321,7 @@ fn apply_inlining_optimizing_raise(
   }
   let mut has_candidate = false
   replacement_by_function_index.each((_, _) => has_candidate = true)
-  if not(has_candidate) {
+  if !has_candidate {
     return { bytes, inlined_call_count: 0U }
   }
   let call_count_by_target = collect_call_count_by_target_raise(

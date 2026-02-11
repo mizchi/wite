@@ -52,7 +52,7 @@ fn apply_remove_unused_module_elements_raise(
       7U => {
         let mut effective_export_payload = payload
         if config.closed_world &&
-          not(config.safe_mode) &&
+          !config.safe_mode &&
           config.closed_world_root_exports.length() > 0 {
           let (filtered, removed) = rewrite_export_section_payload_for_keep_names_raise(
             payload,
@@ -86,19 +86,21 @@ fn apply_remove_unused_module_elements_raise(
         }
       }
       10U => {
-        match collect_used_table_indices_from_code_section(payload) {
-          Some(indices) =>
-            for index in indices {
-              push_unique_u32(used_table_indices, index)
-            }
-          None => analysis_complete = false
+        if collect_used_table_indices_from_code_section(payload)
+          is Some(indices) {
+          for index in indices {
+            push_unique_u32(used_table_indices, index)
+          }
+        } else {
+          analysis_complete = false
         }
-        match collect_used_memory_indices_from_code_section(payload) {
-          Some(indices) =>
-            for index in indices {
-              push_unique_u32(used_memory_indices, index)
-            }
-          None => analysis_complete = false
+        if collect_used_memory_indices_from_code_section(payload)
+          is Some(indices) {
+          for index in indices {
+            push_unique_u32(used_memory_indices, index)
+          }
+        } else {
+          analysis_complete = false
         }
         match collect_used_global_indices_from_code_section(payload) {
           Some(indices) =>
@@ -128,7 +130,7 @@ fn apply_remove_unused_module_elements_raise(
       _ => ()
     }
   }
-  if not(analysis_complete) {
+  if !analysis_complete {
     return {
       bytes,
       removed_import_count: 0U,
@@ -188,7 +190,7 @@ fn apply_remove_unused_module_elements_raise(
     let local_index = UInt::reinterpret_as_int(local_index_u)
     if local_index >= 0 && local_index < local_global_entries.length() {
       for dep in local_global_entries[local_index].init_global_refs {
-        if not(used_global_indices.contains(dep)) {
+        if !used_global_indices.contains(dep) {
           push_unique_u32(used_global_indices, dep)
           queue.push(dep)
         }
@@ -288,55 +290,43 @@ fn apply_remove_unused_module_elements_raise(
   }
   let mut removed_import_count = 0U
   let mut rewritten_import_payload : Bytes? = None
-  match import_section_payload {
-    Some(payload) => {
-      let (rewritten, removed) = rewrite_import_section_payload_for_keep_raise(
-        payload, keep_import_tables, keep_import_memories, keep_import_globals,
-      )
-      rewritten_import_payload = Some(rewritten)
-      removed_import_count = removed
-    }
-    None => ()
+  if import_section_payload is Some(payload) {
+    let (rewritten, removed) = rewrite_import_section_payload_for_keep_raise(
+      payload, keep_import_tables, keep_import_memories, keep_import_globals,
+    )
+    rewritten_import_payload = Some(rewritten)
+    removed_import_count = removed
   }
   let mut removed_element_count = 0U
   let mut rewritten_element_payload : Bytes? = None
   let element_index_map : Map[UInt, UInt] = {}
-  match element_section_payload {
-    Some(payload) => {
-      let (rewritten, removed_segments, segment_index_map) = rewrite_element_section_payload_for_table_index_map_raise(
-        payload, table_index_map, global_index_map,
-      )
-      rewritten_element_payload = Some(rewritten)
-      removed_element_count = removed_segments
-      segment_index_map.each((key, value) => element_index_map.set(key, value))
-    }
-    None => ()
+  if element_section_payload is Some(payload) {
+    let (rewritten, removed_segments, segment_index_map) = rewrite_element_section_payload_for_table_index_map_raise(
+      payload, table_index_map, global_index_map,
+    )
+    rewritten_element_payload = Some(rewritten)
+    removed_element_count = removed_segments
+    segment_index_map.each((key, value) => element_index_map.set(key, value))
   }
   let mut removed_data_count = 0U
   let mut rewritten_data_payload : Bytes? = None
   let data_index_map : Map[UInt, UInt] = {}
-  match data_section_payload {
-    Some(payload) => {
-      let (rewritten, removed_segments, segment_index_map) = rewrite_data_section_payload_for_memory_global_index_map_raise(
-        payload, memory_index_map, global_index_map,
-      )
-      rewritten_data_payload = Some(rewritten)
-      removed_data_count = removed_segments
-      segment_index_map.each((key, value) => data_index_map.set(key, value))
-    }
-    None => ()
+  if data_section_payload is Some(payload) {
+    let (rewritten, removed_segments, segment_index_map) = rewrite_data_section_payload_for_memory_global_index_map_raise(
+      payload, memory_index_map, global_index_map,
+    )
+    rewritten_data_payload = Some(rewritten)
+    removed_data_count = removed_segments
+    segment_index_map.each((key, value) => data_index_map.set(key, value))
   }
   let mut removed_export_count = removed_export_by_name_count
   let mut rewritten_export_payload : Bytes? = None
-  match export_section_payload {
-    Some(payload) => {
-      let (rewritten, removed) = rewrite_export_section_payload_for_module_index_maps_raise(
-        payload, table_index_map, memory_index_map, global_index_map,
-      )
-      rewritten_export_payload = Some(rewritten)
-      removed_export_count += removed
-    }
-    None => ()
+  if export_section_payload is Some(payload) {
+    let (rewritten, removed) = rewrite_export_section_payload_for_module_index_maps_raise(
+      payload, table_index_map, memory_index_map, global_index_map,
+    )
+    rewritten_export_payload = Some(rewritten)
+    removed_export_count += removed
   }
   if removed_import_count == 0U &&
     removed_table_count == 0U &&
@@ -660,9 +650,9 @@ fn apply_signature_pruning_raise(
         }
       7U => {
         let exports = parse_export_function_names(payload)
-        exports.each((index, _names) => push_unique_u32(
-          protected_function_indices, index,
-        ))
+        exports.each((index, _names) => {
+          push_unique_u32(protected_function_indices, index)
+        })
       }
       8U =>
         push_unique_u32(
@@ -919,30 +909,21 @@ fn apply_remove_unused_types_raise(
     return { bytes, removed_type_count: 0U }
   }
   let used_type_indices : Array[UInt] = []
-  match import_section_payload {
-    Some(payload) =>
-      for
-        type_index in collect_used_type_indices_from_import_section_raise(
-          payload,
-        ) {
-        push_unique_u32(used_type_indices, type_index)
-      }
-    None => ()
+  if import_section_payload is Some(payload) {
+    for
+      type_index in collect_used_type_indices_from_import_section_raise(payload) {
+      push_unique_u32(used_type_indices, type_index)
+    }
   }
-  match function_section_payload {
-    Some(payload) =>
-      for type_index in parse_function_type_indices(payload) {
-        push_unique_u32(used_type_indices, type_index)
-      }
-    None => ()
+  if function_section_payload is Some(payload) {
+    for type_index in parse_function_type_indices(payload) {
+      push_unique_u32(used_type_indices, type_index)
+    }
   }
-  match code_section_payload {
-    Some(payload) =>
-      for
-        type_index in collect_used_type_indices_from_code_section_raise(payload) {
-        push_unique_u32(used_type_indices, type_index)
-      }
-    None => ()
+  if code_section_payload is Some(payload) {
+    for type_index in collect_used_type_indices_from_code_section_raise(payload) {
+      push_unique_u32(used_type_indices, type_index)
+    }
   }
   let type_count_u = type_entries.length().reinterpret_as_uint()
   for type_index in used_type_indices {
@@ -972,7 +953,7 @@ fn apply_remove_unused_types_raise(
           dep.to_string(),
         )
       }
-      if not(used_type_indices.contains(dep)) {
+      if !used_type_indices.contains(dep) {
         push_unique_u32(used_type_indices, dep)
         queue.push(dep)
       }

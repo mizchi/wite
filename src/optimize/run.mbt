@@ -116,11 +116,11 @@ pub fn optimize_for_size(
       let changed = if after_round_size != before_round_size {
         true
       } else {
-        not(bytes_equal(round.bytes, current))
+        !bytes_equal(round.bytes, current)
       }
       current = round.bytes
       removed_sections.append(round.removed_sections[:])
-      if not(changed) {
+      if !changed {
         break
       }
       // Stop fixed-point rounds once a round regresses size.
@@ -158,7 +158,7 @@ pub fn optimize_core_for_size(
 ) -> Result[OptimizeResult, String] {
   match optimize_for_size(bytes, config~) {
     Ok(result) => Ok(result)
-    Err(e) => Err(error_to_string(e))
+    Err(e) => e |> error_to_string |> Err
   }
 }
 
@@ -190,7 +190,7 @@ pub fn optimize_component_for_size(
     let changed = if after_size != before_size {
       true
     } else {
-      not(bytes_equal(round_result.bytes, current))
+      !bytes_equal(round_result.bytes, current)
     }
     if after_size < before_size || (after_size == before_size && changed) {
       current = round_result.bytes
@@ -211,7 +211,7 @@ pub fn optimize_component_for_size(
     }
     break
   }
-  if not(converged) {
+  if !converged {
     removed_sections.push("component-converge:round-cap:" + rounds.to_string())
   }
   if current.length() == bytes.length() && no_change_reasons.length() == 0 {

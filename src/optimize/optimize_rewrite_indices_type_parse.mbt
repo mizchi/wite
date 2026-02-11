@@ -60,7 +60,7 @@ pub fn collect_direct_callees_from_body_raise(
   parser.set_pos(prefix_end)
   let callees : Array[UInt] = []
   let mut has_indirect = false
-  while not(parser.eof()) {
+  while !parser.eof() {
     let opcode = parser.read_byte().to_uint()
     match opcode {
       0x10U => push_unique_u32(callees, parser.read_u32_leb128())
@@ -93,8 +93,11 @@ fn read_name_bytes(parser : Cursor) -> Bytes raise WiteError {
 
 ///|
 fn append_name_bytes(out : Array[Byte], name : Bytes) -> Unit {
-  out.append(encode_u32_leb128(name.length().reinterpret_as_uint())[:])
-  out.append(name[:].to_array())
+  ignore(
+    out
+    ..append(encode_u32_leb128(name.length().reinterpret_as_uint())[:])
+    ..append(name[:].to_array()),
+  )
 }
 
 ///|
@@ -297,7 +300,7 @@ fn parse_gc_non_function_type_entry_from_raw_raise(
         "unsupported gc type form in " + context + ": " + form.to_string(),
       )
   }
-  if not(parser.eof()) {
+  if !parser.eof() {
     raise WiteError::InvalidFormat(
       "trailing bytes in gc type entry in " + context,
     )
@@ -327,12 +330,10 @@ fn gc_type_entries_equal_with_canonical_map_raise(
     if left.fields[i].mutability != right.fields[i].mutability {
       return false
     }
-    if not(
-        type_bytes_equal_with_gc_canonical_map(
-          left.fields[i].storage_type,
-          right.fields[i].storage_type,
-          gc_type_canonical_map,
-        ),
+    if !type_bytes_equal_with_gc_canonical_map(
+        left.fields[i].storage_type,
+        right.fields[i].storage_type,
+        gc_type_canonical_map,
       ) {
       return false
     }
@@ -368,7 +369,7 @@ fn rewrite_const_expr_function_indices_raise(
 
 ///|
 fn push_unique_u32(out : Array[UInt], value : UInt) -> Unit {
-  if not(out.contains(value)) {
+  if !out.contains(value) {
     out.push(value)
   }
 }

@@ -146,12 +146,16 @@ fn rewrite_const_expr_global_indices_raise(
   for span in spans {
     if span.opcode == 0x23U {
       match decode_span_u32_immediate(expr_bytes, span) {
-        Some(index) => {
-          out.push(0x23U.to_byte())
-          out.append(
-            encode_u32_leb128(remap_global_index_raise(index, global_index_map))[:],
+        Some(index) =>
+          ignore(
+            out
+            ..push(0x23U.to_byte())
+            ..append(
+              encode_u32_leb128(
+                remap_global_index_raise(index, global_index_map),
+              )[:],
+            ),
           )
-        }
         None =>
           raise WiteError::InvalidFormat(
             "failed to decode global.get immediate",
@@ -172,7 +176,7 @@ pub fn parse_global_section_function_refs_raise(
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
   for _ in 0U..<count {
-    ignore(read_val_type_bytes_raise(parser))
+    parser |> read_val_type_bytes_raise |> ignore
     ignore(parser.read_byte())
     let expr = read_const_expr_bytes_raise(parser, payload)
     for index in collect_ref_func_indices_from_expr_raise(expr) {
@@ -190,7 +194,7 @@ fn map_push_unique_u32_array(
 ) -> Unit {
   match grouped.get(key) {
     Some(prev) =>
-      if not(prev.contains(value)) {
+      if !prev.contains(value) {
         let next = prev.copy()
         next.push(value)
         grouped.set(key, next)
@@ -263,7 +267,7 @@ pub fn parse_element_section_table_function_refs_raise(
         }
       }
       5U => {
-        ignore(read_ref_type_bytes_raise(parser))
+        parser |> read_ref_type_bytes_raise |> ignore
         let expr_count = parser.read_u32_leb128()
         for _ in 0U..<expr_count {
           ignore(read_const_expr_bytes_raise(parser, payload))
@@ -275,7 +279,7 @@ pub fn parse_element_section_table_function_refs_raise(
         for index in collect_ref_func_indices_from_expr_raise(offset_expr) {
           map_push_unique_u32_array(grouped, table_index, index)
         }
-        ignore(read_ref_type_bytes_raise(parser))
+        parser |> read_ref_type_bytes_raise |> ignore
         let expr_count = parser.read_u32_leb128()
         for _ in 0U..<expr_count {
           let expr = read_const_expr_bytes_raise(parser, payload)
@@ -285,7 +289,7 @@ pub fn parse_element_section_table_function_refs_raise(
         }
       }
       7U => {
-        ignore(read_ref_type_bytes_raise(parser))
+        parser |> read_ref_type_bytes_raise |> ignore
         let expr_count = parser.read_u32_leb128()
         for _ in 0U..<expr_count {
           ignore(read_const_expr_bytes_raise(parser, payload))
@@ -361,7 +365,7 @@ pub fn parse_element_section_function_refs_raise(
         }
       }
       5U => {
-        ignore(read_ref_type_bytes_raise(parser))
+        parser |> read_ref_type_bytes_raise |> ignore
         let expr_count = parser.read_u32_leb128()
         for _ in 0U..<expr_count {
           let expr = read_const_expr_bytes_raise(parser, payload)
@@ -376,7 +380,7 @@ pub fn parse_element_section_function_refs_raise(
         for index in collect_ref_func_indices_from_expr_raise(offset_expr) {
           push_unique_u32(out, index)
         }
-        ignore(read_ref_type_bytes_raise(parser))
+        parser |> read_ref_type_bytes_raise |> ignore
         let expr_count = parser.read_u32_leb128()
         for _ in 0U..<expr_count {
           let expr = read_const_expr_bytes_raise(parser, payload)
@@ -386,7 +390,7 @@ pub fn parse_element_section_function_refs_raise(
         }
       }
       7U => {
-        ignore(read_ref_type_bytes_raise(parser))
+        parser |> read_ref_type_bytes_raise |> ignore
         let expr_count = parser.read_u32_leb128()
         for _ in 0U..<expr_count {
           let expr = read_const_expr_bytes_raise(parser, payload)
@@ -464,7 +468,7 @@ fn collect_used_global_indices_from_element_section_raise(
         }
       }
       5U => {
-        ignore(read_ref_type_bytes_raise(parser))
+        parser |> read_ref_type_bytes_raise |> ignore
         let expr_count = parser.read_u32_leb128()
         for _ in 0U..<expr_count {
           let expr = read_const_expr_bytes_raise(parser, payload)
@@ -479,7 +483,7 @@ fn collect_used_global_indices_from_element_section_raise(
         for index in collect_global_get_indices_from_expr_raise(offset_expr) {
           push_unique_u32(out, index)
         }
-        ignore(read_ref_type_bytes_raise(parser))
+        parser |> read_ref_type_bytes_raise |> ignore
         let expr_count = parser.read_u32_leb128()
         for _ in 0U..<expr_count {
           let expr = read_const_expr_bytes_raise(parser, payload)
@@ -489,7 +493,7 @@ fn collect_used_global_indices_from_element_section_raise(
         }
       }
       7U => {
-        ignore(read_ref_type_bytes_raise(parser))
+        parser |> read_ref_type_bytes_raise |> ignore
         let expr_count = parser.read_u32_leb128()
         for _ in 0U..<expr_count {
           let expr = read_const_expr_bytes_raise(parser, payload)

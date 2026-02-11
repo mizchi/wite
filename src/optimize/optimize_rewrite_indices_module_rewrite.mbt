@@ -13,7 +13,7 @@ fn collect_call_indirect_table_indices_from_instruction_raise(
       let parser = Cursor::new(imm)
       ignore(parser.read_u32_leb128())
       let table_index = parser.read_u32_leb128()
-      if not(parser.eof()) {
+      if !parser.eof() {
         raise WiteError::InvalidFormat(
           "call_indirect immediate has trailing bytes",
         )
@@ -281,24 +281,29 @@ fn rewrite_instruction_module_indices_raise(
         let parser = Cursor::new(imm)
         let type_index = parser.read_u32_leb128()
         let table_index = parser.read_u32_leb128()
-        out.push(0x11U.to_byte())
-        out.append(encode_u32_leb128(type_index)[:])
-        out.append(
-          encode_u32_leb128(
-            remap_table_index_raise(table_index, table_index_map),
-          )[:],
+        ignore(
+          out
+          ..push(0x11U.to_byte())
+          ..append(encode_u32_leb128(type_index)[:])
+          ..append(
+            encode_u32_leb128(
+              remap_table_index_raise(table_index, table_index_map),
+            )[:],
+          ),
         )
       }
       0x23U | 0x24U =>
         match decode_span_u32_immediate(instr_bytes, span) {
-          Some(index) => {
-            out.push(span.opcode.to_byte())
-            out.append(
-              encode_u32_leb128(
-                remap_global_index_raise(index, global_index_map),
-              )[:],
+          Some(index) =>
+            ignore(
+              out
+              ..push(span.opcode.to_byte())
+              ..append(
+                encode_u32_leb128(
+                  remap_global_index_raise(index, global_index_map),
+                )[:],
+              ),
             )
-          }
           None =>
             raise WiteError::InvalidFormat(
               "failed to decode global index immediate",
@@ -306,12 +311,16 @@ fn rewrite_instruction_module_indices_raise(
         }
       0x25U | 0x26U =>
         match decode_span_u32_immediate(instr_bytes, span) {
-          Some(index) => {
-            out.push(span.opcode.to_byte())
-            out.append(
-              encode_u32_leb128(remap_table_index_raise(index, table_index_map))[:],
+          Some(index) =>
+            ignore(
+              out
+              ..push(span.opcode.to_byte())
+              ..append(
+                encode_u32_leb128(
+                  remap_table_index_raise(index, table_index_map),
+                )[:],
+              ),
             )
-          }
           None =>
             raise WiteError::InvalidFormat(
               "failed to decode table index immediate",
@@ -327,14 +336,16 @@ fn rewrite_instruction_module_indices_raise(
       }
       0x3fU | 0x40U =>
         match decode_span_u32_immediate(instr_bytes, span) {
-          Some(index) => {
-            out.push(span.opcode.to_byte())
-            out.append(
-              encode_u32_leb128(
-                remap_memory_index_raise(index, memory_index_map),
-              )[:],
+          Some(index) =>
+            ignore(
+              out
+              ..push(span.opcode.to_byte())
+              ..append(
+                encode_u32_leb128(
+                  remap_memory_index_raise(index, memory_index_map),
+                )[:],
+              ),
             )
-          }
           None =>
             raise WiteError::InvalidFormat(
               "failed to decode memory.size/memory.grow immediate",
@@ -348,21 +359,25 @@ fn rewrite_instruction_module_indices_raise(
         let parser = Cursor::new(imm)
         let subopcode = parser.read_u32_leb128()
         let rest_start = parser.get_pos()
-        out.push(0xfcU.to_byte())
-        out.append(encode_u32_leb128(subopcode)[:])
+        ignore(
+          out..push(0xfcU.to_byte())..append(encode_u32_leb128(subopcode)[:]),
+        )
         match subopcode {
           8U => {
             let data_index = parser.read_u32_leb128()
             let memory_index = parser.read_u32_leb128()
-            out.append(
-              encode_u32_leb128(
-                remap_data_segment_index_raise(data_index, data_index_map),
-              )[:],
-            )
-            out.append(
-              encode_u32_leb128(
-                remap_memory_index_raise(memory_index, memory_index_map),
-              )[:],
+            ignore(
+              out
+              ..append(
+                encode_u32_leb128(
+                  remap_data_segment_index_raise(data_index, data_index_map),
+                )[:],
+              )
+              ..append(
+                encode_u32_leb128(
+                  remap_memory_index_raise(memory_index, memory_index_map),
+                )[:],
+              ),
             )
           }
           9U => {
@@ -376,15 +391,18 @@ fn rewrite_instruction_module_indices_raise(
           10U => {
             let dst_memory = parser.read_u32_leb128()
             let src_memory = parser.read_u32_leb128()
-            out.append(
-              encode_u32_leb128(
-                remap_memory_index_raise(dst_memory, memory_index_map),
-              )[:],
-            )
-            out.append(
-              encode_u32_leb128(
-                remap_memory_index_raise(src_memory, memory_index_map),
-              )[:],
+            ignore(
+              out
+              ..append(
+                encode_u32_leb128(
+                  remap_memory_index_raise(dst_memory, memory_index_map),
+                )[:],
+              )
+              ..append(
+                encode_u32_leb128(
+                  remap_memory_index_raise(src_memory, memory_index_map),
+                )[:],
+              ),
             )
           }
           11U => {
@@ -398,15 +416,20 @@ fn rewrite_instruction_module_indices_raise(
           12U => {
             let elem_index = parser.read_u32_leb128()
             let table_index = parser.read_u32_leb128()
-            out.append(
-              encode_u32_leb128(
-                remap_element_segment_index_raise(elem_index, element_index_map),
-              )[:],
-            )
-            out.append(
-              encode_u32_leb128(
-                remap_table_index_raise(table_index, table_index_map),
-              )[:],
+            ignore(
+              out
+              ..append(
+                encode_u32_leb128(
+                  remap_element_segment_index_raise(
+                    elem_index, element_index_map,
+                  ),
+                )[:],
+              )
+              ..append(
+                encode_u32_leb128(
+                  remap_table_index_raise(table_index, table_index_map),
+                )[:],
+              ),
             )
           }
           13U => {
@@ -420,15 +443,18 @@ fn rewrite_instruction_module_indices_raise(
           14U => {
             let dst_table = parser.read_u32_leb128()
             let src_table = parser.read_u32_leb128()
-            out.append(
-              encode_u32_leb128(
-                remap_table_index_raise(dst_table, table_index_map),
-              )[:],
-            )
-            out.append(
-              encode_u32_leb128(
-                remap_table_index_raise(src_table, table_index_map),
-              )[:],
+            ignore(
+              out
+              ..append(
+                encode_u32_leb128(
+                  remap_table_index_raise(dst_table, table_index_map),
+                )[:],
+              )
+              ..append(
+                encode_u32_leb128(
+                  remap_table_index_raise(src_table, table_index_map),
+                )[:],
+              ),
             )
           }
           15U | 16U | 17U => {
@@ -486,8 +512,11 @@ fn rewrite_code_section_payload_for_module_index_map_raise(
       body, table_index_map, memory_index_map, global_index_map, element_index_map,
       data_index_map,
     )
-    out.append(encode_u32_leb128(rewritten.length().reinterpret_as_uint())[:])
-    out.append(rewritten[:].to_array())
+    ignore(
+      out
+      ..append(encode_u32_leb128(rewritten.length().reinterpret_as_uint())[:])
+      ..append(rewritten[:].to_array()),
+    )
   }
   Bytes::from_array(out[:])
 }
@@ -509,21 +538,9 @@ fn rewrite_export_section_payload_for_module_index_maps_raise(
     let kind = parser.read_byte().to_uint()
     let index = parser.read_u32_leb128()
     let mapped = match kind {
-      1U =>
-        match table_index_map.get(index) {
-          Some(v) => Some(v)
-          None => None
-        }
-      2U =>
-        match memory_index_map.get(index) {
-          Some(v) => Some(v)
-          None => None
-        }
-      3U =>
-        match global_index_map.get(index) {
-          Some(v) => Some(v)
-          None => None
-        }
+      1U => table_index_map.get(index).map(v => v)
+      2U => memory_index_map.get(index).map(v => v)
+      3U => global_index_map.get(index).map(v => v)
       _ => Some(index)
     }
     match mapped {

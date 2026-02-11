@@ -12,7 +12,7 @@ fn should_include_export_root(
 ///|
 fn export_root_names_from_config(config : OptimizeConfig) -> Array[String]? {
   if config.closed_world &&
-    not(config.safe_mode) &&
+    !config.safe_mode &&
     config.closed_world_root_exports.length() > 0 {
     Some(config.closed_world_root_exports)
   } else {
@@ -30,7 +30,7 @@ fn map_merge_unique_u32_array(
       Some(prev) => {
         let next = prev.copy()
         for value in values {
-          if not(next.contains(value)) {
+          if !next.contains(value) {
             next.push(value)
           }
         }
@@ -187,13 +187,13 @@ fn analyze_call_graph_raise(
   while head < queue.length() {
     let index = queue[head]
     head += 1
-    if not(mark_visited_function_index(visited, index)) {
+    if !mark_visited_function_index(visited, index) {
       continue
     }
     match index_to_pos.get(index) {
       Some(pos) =>
         for callee in nodes[pos].direct_callees {
-          if not(is_visited_function_index(visited, callee)) {
+          if !is_visited_function_index(visited, callee) {
             queue.push(callee)
           }
         }
