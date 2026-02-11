@@ -33,10 +33,7 @@ pub fn collect_const_call_forwarding_alias_map(
             match function_type_entry_by_type_index.get(target_type_index) {
               Some(target_type) =>
                 if can_const_forward_with_appended_i32_to_target(
-                    wrapper_type,
-                    target_type,
-                    appended_i32_const_instrs.length().reinterpret_as_uint(),
-                    gc_type_canonical_map,
+                    wrapper_type, target_type, appended_i32_const_instrs, gc_type_canonical_map,
                   ) {
                   alias_candidate.set(old_index, {
                     target,
@@ -195,9 +192,7 @@ fn rewrite_instruction_calls_for_call_forwarding_raise(
         Some(v) => v
         None => target
       }
-      if rewritten_target != target &&
-        encode_u32_leb128(rewritten_target).length() <=
-        encode_u32_leb128(target).length() {
+      if rewritten_target != target {
         rewritten_call_count += 1U
         out.push(0x10U.to_byte())
         out.append(encode_u32_leb128(rewritten_target)[:])

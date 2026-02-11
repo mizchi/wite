@@ -1017,6 +1017,27 @@ fn is_inlining_expression_unsupported_opcode(opcode : UInt) -> Bool {
 }
 
 ///|
+fn has_non_param_local_access(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  param_count : Int,
+) -> Bool {
+  if param_count < 0 {
+    return true
+  }
+  let param_count_u = param_count.reinterpret_as_uint()
+  for span in spans {
+    if span.opcode == 0x20U || span.opcode == 0x21U || span.opcode == 0x22U {
+      match decode_local_index_immediate_from_span(instr_bytes, span) {
+        Some(local_index) => if local_index >= param_count_u { return true }
+        None => return true
+      }
+    }
+  }
+  false
+}
+
+///|
 fn extract_inlining_prefix_param_expression_instr_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
@@ -1063,12 +1084,13 @@ fn extract_inlining_replacement_instr_raise(
   type_entry : FunctionTypeEntry,
 ) -> Bytes? raise WiteError {
   let prefix = parse_local_decl_prefix_raise(body_bytes)
-  if prefix.local_types.length() > 0 {
-    return None
-  }
   let instr_bytes = body_bytes[prefix.prefix_end:body_bytes.length()].to_bytes()
   let spans = parse_instruction_spans_raise(instr_bytes)
   let param_count = type_entry.params.length()
+  if prefix.local_types.length() > 0 &&
+    has_non_param_local_access(instr_bytes, spans, param_count) {
+    return None
+  }
   let result_count = type_entry.results.length()
   if result_count == 0 && spans.length() == 1 && spans[0].opcode == 0x0bU {
     return Some(make_drop_replacement_instr(param_count))
@@ -1143,7 +1165,7 @@ fn rewrite_instruction_calls_for_inlining_raise(
             None => 0U
           }
           if replacement_len <= call_span_len ||
-            (replacement_len == call_span_len + 1U && call_site_count == 1U) {
+            (call_site_count == 1U && replacement_len <= call_span_len + 2U) {
             out.append(replacement[:].to_array())
             rewritten_call_count += 1U
           } else {

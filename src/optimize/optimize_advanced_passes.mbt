@@ -93,6 +93,23 @@ fn apply_merge_similar_functions_raise(
         }
       None => ()
     }
+    if alias_candidate.get(old_index) is None {
+      for j in 0..<i {
+        let candidate_index = imported_function_count + j.reinterpret_as_uint()
+        let candidate_pos = UInt::reinterpret_as_int(candidate_index)
+        if candidate_pos < 0 || candidate_pos >= function_type_by_index.length() {
+          continue
+        }
+        if function_type_by_index[old_pos] !=
+          function_type_by_index[candidate_pos] {
+          continue
+        }
+        if bytes_equal(code_bodies[i], code_bodies[j]) {
+          alias_candidate.set(old_index, candidate_index)
+          break
+        }
+      }
+    }
   }
   let keep_local : Array[Bool] = []
   let resolved_target_for_local : Array[UInt?] = []

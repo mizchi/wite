@@ -1,4 +1,64 @@
 ///|
+fn read_import_name_bytes_raise(
+  parser : Cursor,
+  context : String,
+) -> Bytes raise WiteError {
+  let name_len_u = parser.read_u32_leb128()
+  let name_len = UInt::reinterpret_as_int(name_len_u)
+  if name_len < 0 {
+    raise WiteError::InvalidFormat("import name length overflow in " + context)
+  }
+  let start = parser.get_pos()
+  let end_ = start + name_len
+  if end_ > parser.bytes.length() {
+    raise WiteError::UnexpectedEof
+  }
+  parser.set_pos(end_)
+  parser.bytes[start:end_].to_bytes()
+}
+
+///|
+fn append_import_name_key(out : Array[Byte], name : Bytes) -> Unit {
+  out.append(encode_u32_leb128(name.length().reinterpret_as_uint())[:])
+  out.append(name[:].to_array())
+}
+
+///|
+fn build_function_import_dedupe_key_raise(
+  entry_bytes : Bytes,
+  function_type_raw_by_index : Map[UInt, Bytes],
+) -> Bytes raise WiteError {
+  let parser = Cursor::new(entry_bytes)
+  let module_name = read_import_name_bytes_raise(parser, "dup-import module")
+  let field_name = read_import_name_bytes_raise(parser, "dup-import field")
+  let kind = parser.read_byte().to_uint()
+  if kind != 0U {
+    raise WiteError::InvalidFormat(
+      "non-function import entry in function dedupe key",
+    )
+  }
+  let type_index = parser.read_u32_leb128()
+  if not(parser.eof()) {
+    raise WiteError::InvalidFormat("trailing bytes in function import entry")
+  }
+  let type_raw = match function_type_raw_by_index.get(type_index) {
+    Some(v) => v
+    None =>
+      raise WiteError::InvalidFormat(
+        "missing type index for function import dedupe: " +
+        type_index.to_string(),
+      )
+  }
+  let out : Array[Byte] = []
+  append_import_name_key(out, module_name)
+  append_import_name_key(out, field_name)
+  out.push(0x00U.to_byte())
+  out.append(encode_u32_leb128(type_raw.length().reinterpret_as_uint())[:])
+  out.append(type_raw[:].to_array())
+  Bytes::from_array(out[:])
+}
+
+///|
 fn apply_duplicate_import_elimination(
   bytes : Bytes,
 ) -> DuplicateImportElimApplyResult {
@@ -23,6 +83,7 @@ fn apply_duplicate_import_elimination_raise(
   bytes : Bytes,
 ) -> DuplicateImportElimApplyResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
+  let mut type_section_payload : Bytes? = None
   let mut import_section_payload : Bytes? = None
   let mut function_section_payload : Bytes? = None
   let mut table_section_payload : Bytes? = None
@@ -33,6 +94,7 @@ fn apply_duplicate_import_elimination_raise(
   for section in sections {
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
     match section.section_id {
+      1U => type_section_payload = Some(payload)
       2U => import_section_payload = Some(payload)
       3U => function_section_payload = Some(payload)
       4U => table_section_payload = Some(payload)
@@ -68,6 +130,21 @@ fn apply_duplicate_import_elimination_raise(
       dropped_name_section: false,
     }
   }
+  let function_type_raw_by_index : Map[UInt, Bytes] = {}
+  match type_section_payload {
+    Some(payload) => {
+      let type_entries = parse_type_section_entries_with_refs_raise(
+        payload, "dup-imports",
+      )
+      for i in 0..<type_entries.length() {
+        function_type_raw_by_index.set(
+          i.reinterpret_as_uint(),
+          type_entries[i].raw,
+        )
+      }
+    }
+    None => ()
+  }
   let mut imported_function_count = 0U
   let mut imported_table_count = 0U
   let mut imported_memory_count = 0U
@@ -97,7 +174,7 @@ fn apply_duplicate_import_elimination_raise(
   for _ in 0U..<imported_global_count {
     keep_global_imports.push(true)
   }
-  let unique_function_import_entries : Array[Bytes] = []
+  let unique_function_import_keys : Array[Bytes] = []
   let unique_function_import_indices : Array[UInt] = []
   let canonical_function_import_index : Map[UInt, UInt] = {}
   let unique_table_import_entries : Array[Bytes] = []
@@ -116,17 +193,21 @@ fn apply_duplicate_import_elimination_raise(
   for entry in import_entries {
     match entry.kind {
       0U => {
+        let entry_key = build_function_import_dedupe_key_raise(
+          entry.bytes,
+          function_type_raw_by_index,
+        )
         let mut canonical = entry.kind_index
         let mut found = false
-        for i in 0..<unique_function_import_entries.length() {
-          if bytes_equal(unique_function_import_entries[i], entry.bytes) {
+        for i in 0..<unique_function_import_keys.length() {
+          if bytes_equal(unique_function_import_keys[i], entry_key) {
             canonical = unique_function_import_indices[i]
             found = true
             break
           }
         }
         if not(found) {
-          unique_function_import_entries.push(entry.bytes)
+          unique_function_import_keys.push(entry_key)
           unique_function_import_indices.push(entry.kind_index)
         }
         canonical_function_import_index.set(entry.kind_index, canonical)

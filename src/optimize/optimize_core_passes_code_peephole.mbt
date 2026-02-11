@@ -385,13 +385,6 @@ fn append_i32_const_small(out : Array[Byte], value : UInt) -> Unit {
 }
 
 ///|
-fn append_i32_const_small_signed(out : Array[Byte], value : Int) -> Unit {
-  out.push(0x41U.to_byte())
-  let encoded = if value < 0 { value + 128 } else { value }
-  out.push(encoded.to_byte())
-}
-
-///|
 fn append_i32_const_signed(out : Array[Byte], value : Int) -> Unit {
   out.push(0x41U.to_byte())
   out.append(encode_signed_i32_leb128(value)[:])
@@ -707,18 +700,90 @@ fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
 }
 
 ///|
-fn eval_i32_const_cmp_nonnegative(
-  lhs : UInt,
-  rhs : UInt,
+fn eval_i32_const_binary(
+  lhs_signed : Int,
+  rhs_signed : Int,
+  opcode : UInt,
+) -> Int? {
+  let lhs_unsigned = lhs_signed.reinterpret_as_uint()
+  let rhs_unsigned = rhs_signed.reinterpret_as_uint()
+  let shift_u = rhs_unsigned % 32U
+  let shift = shift_u.reinterpret_as_int()
+  match opcode {
+    0x6bU => Some((lhs_unsigned - rhs_unsigned).reinterpret_as_int()) // i32.sub
+    0x6cU => Some((lhs_unsigned * rhs_unsigned).reinterpret_as_int()) // i32.mul
+    0x71U => Some((lhs_unsigned & rhs_unsigned).reinterpret_as_int()) // i32.and
+    0x72U => Some((lhs_unsigned | rhs_unsigned).reinterpret_as_int()) // i32.or
+    0x73U => Some((lhs_unsigned ^ rhs_unsigned).reinterpret_as_int()) // i32.xor
+    0x74U => Some((lhs_unsigned << shift).reinterpret_as_int()) // i32.shl
+    0x75U => Some(lhs_signed >> shift) // i32.shr_s
+    0x76U => Some((lhs_unsigned >> shift).reinterpret_as_int()) // i32.shr_u
+    _ => None
+  }
+}
+
+///|
+fn apply_precompute_i32_binary_ops(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 2 < spans.length() &&
+      spans[i].opcode == 0x41U &&
+      spans[i + 1].opcode == 0x41U {
+      match decode_i32_const_signed_from_span(instr_bytes, spans[i]) {
+        Some(lhs) =>
+          match decode_i32_const_signed_from_span(instr_bytes, spans[i + 1]) {
+            Some(rhs) =>
+              match eval_i32_const_binary(lhs, rhs, spans[i + 2].opcode) {
+                Some(value) => {
+                  let original_len = spans[i].end_ -
+                    spans[i].start +
+                    (spans[i + 1].end_ - spans[i + 1].start) +
+                    1
+                  let folded_imm = encode_signed_i32_leb128(value)
+                  let folded_len = 1 + folded_imm.length()
+                  if folded_len < original_len {
+                    append_i32_const_signed(out, value)
+                    i += 3
+                    continue
+                  }
+                }
+                None => ()
+              }
+            None => ()
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn eval_i32_const_cmp(
+  lhs_signed : Int,
+  rhs_signed : Int,
   opcode : UInt,
 ) -> UInt? {
+  let lhs_unsigned = lhs_signed.reinterpret_as_uint()
+  let rhs_unsigned = rhs_signed.reinterpret_as_uint()
   match opcode {
-    0x46U => Some(if lhs == rhs { 1U } else { 0U })
-    0x47U => Some(if lhs != rhs { 1U } else { 0U })
-    0x48U | 0x49U => Some(if lhs < rhs { 1U } else { 0U })
-    0x4aU | 0x4bU => Some(if lhs > rhs { 1U } else { 0U })
-    0x4cU | 0x4dU => Some(if lhs <= rhs { 1U } else { 0U })
-    0x4eU | 0x4fU => Some(if lhs >= rhs { 1U } else { 0U })
+    0x46U => Some(if lhs_signed == rhs_signed { 1U } else { 0U })
+    0x47U => Some(if lhs_signed != rhs_signed { 1U } else { 0U })
+    0x48U => Some(if lhs_signed < rhs_signed { 1U } else { 0U })
+    0x49U => Some(if lhs_unsigned < rhs_unsigned { 1U } else { 0U })
+    0x4aU => Some(if lhs_signed > rhs_signed { 1U } else { 0U })
+    0x4bU => Some(if lhs_unsigned > rhs_unsigned { 1U } else { 0U })
+    0x4cU => Some(if lhs_signed <= rhs_signed { 1U } else { 0U })
+    0x4dU => Some(if lhs_unsigned <= rhs_unsigned { 1U } else { 0U })
+    0x4eU => Some(if lhs_signed >= rhs_signed { 1U } else { 0U })
+    0x4fU => Some(if lhs_unsigned >= rhs_unsigned { 1U } else { 0U })
     _ => None
   }
 }
@@ -735,13 +800,11 @@ fn apply_precompute_i32_const_cmp(instr_bytes : Bytes) -> Bytes {
     if i + 2 < spans.length() &&
       spans[i].opcode == 0x41U &&
       spans[i + 1].opcode == 0x41U {
-      match decode_i32_const_nonnegative_from_span(instr_bytes, spans[i]) {
+      match decode_i32_const_signed_from_span(instr_bytes, spans[i]) {
         Some(lhs) =>
-          match
-            decode_i32_const_nonnegative_from_span(instr_bytes, spans[i + 1]) {
+          match decode_i32_const_signed_from_span(instr_bytes, spans[i + 1]) {
             Some(rhs) =>
-              match
-                eval_i32_const_cmp_nonnegative(lhs, rhs, spans[i + 2].opcode) {
+              match eval_i32_const_cmp(lhs, rhs, spans[i + 2].opcode) {
                 Some(value) => {
                   let original_len = spans[i].end_ -
                     spans[i].start +
@@ -758,6 +821,85 @@ fn apply_precompute_i32_const_cmp(instr_bytes : Bytes) -> Bytes {
             None => ()
           }
         None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn apply_precompute_i32_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() && spans[i].opcode == 0x41U {
+      match decode_i32_const_signed_from_span(instr_bytes, spans[i]) {
+        Some(0) =>
+          match spans[i + 1].opcode {
+            0x46U | 0x4dU => {
+              // x == 0 / x <=_u 0 => x.eqz
+              out.push(0x45U.to_byte())
+              i += 2
+              continue
+            }
+            0x47U | 0x4bU => {
+              // x != 0 / x >_u 0 => x.eqz; x.eqz
+              out.push(0x45U.to_byte())
+              out.push(0x45U.to_byte())
+              i += 2
+              continue
+            }
+            _ => ()
+          }
+        None => ()
+        _ => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn is_i64_const_zero_from_span(instr_bytes : Bytes, span : InstrSpan) -> Bool {
+  span.opcode == 0x42U &&
+  span.end_ == span.start + 2 &&
+  instr_bytes[span.start + 1].to_uint() == 0U
+}
+
+///|
+fn apply_precompute_i64_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if i + 1 < spans.length() &&
+      is_i64_const_zero_from_span(instr_bytes, spans[i]) {
+      match spans[i + 1].opcode {
+        0x51U | 0x58U => {
+          // x == 0 / x <=_u 0 => i64.eqz
+          out.push(0x50U.to_byte())
+          i += 2
+          continue
+        }
+        0x52U | 0x56U => {
+          // x != 0 / x >_u 0 => i64.eqz; i32.eqz
+          out.push(0x50U.to_byte())
+          out.push(0x45U.to_byte())
+          i += 2
+          continue
+        }
+        _ => ()
       }
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
@@ -799,9 +941,18 @@ fn apply_precompute_i32_eqz_const(instr_bytes : Bytes) -> Bytes {
 }
 
 ///|
-fn is_i32_bool_producer_opcode(opcode : UInt) -> Bool {
+fn is_i32_bool_result_opcode(opcode : UInt) -> Bool {
   opcode == 0x45U || // i32.eqz
-  (opcode >= 0x46U && opcode <= 0x4fU) // i32.eq/ne/lt*/gt*/le*/ge*
+  opcode == 0x50U || // i64.eqz
+  (opcode >= 0x46U && opcode <= 0x4fU) || // i32 cmp
+  (opcode >= 0x51U && opcode <= 0x5aU) || // i64 cmp
+  (opcode >= 0x5bU && opcode <= 0x60U) || // f32 cmp
+  (opcode >= 0x61U && opcode <= 0x66U) // f64 cmp
+}
+
+///|
+fn is_i32_bool_producer_opcode(opcode : UInt) -> Bool {
+  is_i32_bool_result_opcode(opcode)
 }
 
 ///|
@@ -822,6 +973,79 @@ fn apply_precompute_i32_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
       continue
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn is_i32_const_bool_from_span(instr_bytes : Bytes, span : InstrSpan) -> Bool {
+  match decode_i32_const_signed_from_span(instr_bytes, span) {
+    Some(0) | Some(1) => true
+    _ => false
+  }
+}
+
+///|
+fn apply_precompute_local_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut known_local_bool : Map[UInt, Bool] = {}
+  let mut i = 0
+  while i < spans.length() {
+    if i + 2 < spans.length() &&
+      spans[i].opcode == 0x20U &&
+      spans[i + 1].opcode == 0x45U &&
+      spans[i + 2].opcode == 0x45U {
+      match decode_local_index_immediate_from_span(instr_bytes, spans[i]) {
+        Some(local_index) =>
+          match known_local_bool.get(local_index) {
+            Some(true) => {
+              out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+              i += 3
+              continue
+            }
+            _ => ()
+          }
+        None => ()
+      }
+    }
+
+    let span = spans[i]
+    out.append(instr_bytes[span.start:span.end_].to_array())
+
+    if span.opcode == 0x21U || span.opcode == 0x22U {
+      match decode_local_index_immediate_from_span(instr_bytes, span) {
+        Some(local_index) => {
+          let mut assigned_bool = false
+          if i > 0 {
+            let prev = spans[i - 1]
+            if is_i32_bool_result_opcode(prev.opcode) ||
+              is_i32_const_bool_from_span(instr_bytes, prev) {
+              assigned_bool = true
+            } else if prev.opcode == 0x20U {
+              match decode_local_index_immediate_from_span(instr_bytes, prev) {
+                Some(prev_local_index) =>
+                  match known_local_bool.get(prev_local_index) {
+                    Some(true) => assigned_bool = true
+                    _ => ()
+                  }
+                None => ()
+              }
+            }
+          }
+          known_local_bool.set(local_index, assigned_bool)
+        }
+        None => ()
+      }
+    }
+
+    if is_local_const_propagation_barrier(span.opcode) {
+      known_local_bool = {}
+    }
     i += 1
   }
   Bytes::from_array(out[:])
@@ -865,20 +1089,14 @@ fn is_local_const_propagation_barrier(opcode : UInt) -> Bool {
 }
 
 ///|
-fn known_local_const_unknown_sentinel() -> Int {
-  2147483647
-}
-
-///|
-fn known_local_const_get(known : Map[UInt, Int], local_index : UInt) -> Int? {
-  match known.get(local_index) {
-    Some(value) =>
-      if value == known_local_const_unknown_sentinel() {
-        None
-      } else {
-        Some(value)
-      }
-    None => None
+fn known_local_const_get(
+  known_values : Map[UInt, Int],
+  known_unknown : Map[UInt, Bool],
+  local_index : UInt,
+) -> Int? {
+  match known_unknown.get(local_index) {
+    Some(true) => None
+    _ => known_values.get(local_index)
   }
 }
 
@@ -890,6 +1108,7 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
   }
   let out : Array[Byte] = []
   let mut known_local_consts : Map[UInt, Int] = {}
+  let mut known_local_unknown : Map[UInt, Bool] = {}
   for i in 0..<spans.length() {
     let span = spans[i]
     if span.opcode == 0x20U {
@@ -907,13 +1126,22 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
             }
           }
           if not(adjacent_set_same_local) {
-            match known_local_const_get(known_local_consts, local_index) {
+            match
+              known_local_const_get(
+                known_local_consts, known_local_unknown, local_index,
+              ) {
               Some(value) => {
-                append_i32_const_small_signed(out, value)
-                if is_local_const_propagation_barrier(span.opcode) {
-                  known_local_consts = {}
+                let encoded_const = encode_signed_i32_leb128(value)
+                let rewritten_len = 1 + encoded_const.length()
+                let original_len = span.end_ - span.start
+                if rewritten_len <= original_len {
+                  out.push(0x41U.to_byte())
+                  out.append(encoded_const[:])
+                  if is_local_const_propagation_barrier(span.opcode) {
+                    known_local_consts = {}
+                  }
+                  continue
                 }
-                continue
               }
               None => ()
             }
@@ -926,18 +1154,17 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
         Some(local_index) => {
           let mut assigned_const : Int? = None
           if i > 0 {
-            assigned_const = decode_i32_const_small_signed_from_span(
+            assigned_const = decode_i32_const_signed_from_span(
               instr_bytes,
               spans[i - 1],
             )
           }
           match assigned_const {
-            Some(value) => known_local_consts.set(local_index, value)
-            None =>
-              known_local_consts.set(
-                local_index,
-                known_local_const_unknown_sentinel(),
-              )
+            Some(value) => {
+              known_local_consts.set(local_index, value)
+              known_local_unknown.set(local_index, false)
+            }
+            None => known_local_unknown.set(local_index, true)
           }
         }
         None => ()
@@ -946,6 +1173,70 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
     out.append(instr_bytes[span.start:span.end_].to_array())
     if is_local_const_propagation_barrier(span.opcode) {
       known_local_consts = {}
+      known_local_unknown = {}
+    }
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn apply_precompute_local_dead_set_overwrite(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let mut pending_local_set_span : Map[UInt, Int] = {}
+  let mut pending_local_set_active : Map[UInt, Bool] = {}
+  let replacements : Map[Int, Bool] = {}
+  for i in 0..<spans.length() {
+    let span = spans[i]
+    if span.opcode == 0x21U {
+      match decode_local_index_immediate_from_span(instr_bytes, span) {
+        Some(local_index) => {
+          match pending_local_set_active.get(local_index) {
+            Some(true) =>
+              match pending_local_set_span.get(local_index) {
+                Some(prev_span_index) => replacements.set(prev_span_index, true)
+                None => ()
+              }
+            _ => ()
+          }
+          pending_local_set_span.set(local_index, i)
+          pending_local_set_active.set(local_index, true)
+        }
+        None => ()
+      }
+    } else if span.opcode == 0x20U {
+      match decode_local_index_immediate_from_span(instr_bytes, span) {
+        Some(local_index) => pending_local_set_active.set(local_index, false)
+        None => ()
+      }
+    } else if span.opcode == 0x22U {
+      match decode_local_index_immediate_from_span(instr_bytes, span) {
+        Some(local_index) => {
+          match pending_local_set_active.get(local_index) {
+            Some(true) =>
+              match pending_local_set_span.get(local_index) {
+                Some(prev_span_index) => replacements.set(prev_span_index, true)
+                None => ()
+              }
+            _ => ()
+          }
+          pending_local_set_active.set(local_index, false)
+        }
+        None => ()
+      }
+    }
+    if is_local_const_propagation_barrier(span.opcode) {
+      pending_local_set_span = {}
+      pending_local_set_active = {}
+    }
+  }
+  let out : Array[Byte] = []
+  for i in 0..<spans.length() {
+    match replacements.get(i) {
+      Some(true) => out.push(0x1aU.to_byte())
+      _ => out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
     }
   }
   Bytes::from_array(out[:])
@@ -982,6 +1273,45 @@ fn apply_precompute_br_if_const(instr_bytes : Bytes) -> Bytes {
     }
     out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
     i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn apply_precompute_br_if_zero_before_end_to_drop(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let label_stack : Array[Int] = [1]
+  for i in 0..<spans.length() {
+    let span = spans[i]
+    let top_label = if label_stack.length() > 0 {
+      label_stack[label_stack.length() - 1]
+    } else {
+      1
+    }
+    let mut rewritten = false
+    if span.opcode == 0x0dU &&
+      i + 1 < spans.length() &&
+      spans[i + 1].opcode == 0x0bU &&
+      top_label != 2 {
+      if decode_span_u32_immediate(instr_bytes, span) is Some(0U) {
+        out.push(0x1aU.to_byte())
+        rewritten = true
+      }
+    }
+    if not(rewritten) {
+      out.append(instr_bytes[span.start:span.end_].to_array())
+    }
+    match span.opcode {
+      0x02U => label_stack.push(1)
+      0x03U => label_stack.push(2)
+      0x04U => label_stack.push(1)
+      0x0bU => if label_stack.length() > 0 { ignore(label_stack.pop()) }
+      _ => ()
+    }
   }
   Bytes::from_array(out[:])
 }
@@ -1345,6 +1675,95 @@ fn apply_remove_unused_brs_to_spans(
 }
 
 ///|
+fn is_empty_block_type_span(instr_bytes : Bytes, span : InstrSpan) -> Bool {
+  span.opcode == 0x02U &&
+  span.end_ == span.start + 2 &&
+  instr_bytes[span.start + 1].to_uint() == 0x40U
+}
+
+///|
+fn find_top_level_br_if0_in_block(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  block_start : Int,
+  block_end : Int,
+) -> Int? {
+  let mut depth = 0
+  let scan_start = block_start + 1
+  for i in scan_start..<block_end {
+    let opcode = spans[i].opcode
+    if depth == 0 && is_block_start_opcode(opcode) {
+      // Moving prefix outside the rewritten if would change branch label depths.
+      return None
+    }
+    if depth == 0 && is_branch_opcode(opcode) {
+      if opcode == 0x0dU {
+        if decode_span_u32_immediate(instr_bytes, spans[i]) is Some(0U) {
+          return Some(i)
+        }
+      }
+      return None
+    }
+    match opcode {
+      0x02U | 0x03U | 0x04U => depth += 1
+      0x0bU => if depth > 0 { depth -= 1 }
+      _ => ()
+    }
+  }
+  None
+}
+
+///|
+fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let matching_end = compute_matching_end_indices(spans)
+  let out : Array[Byte] = []
+  let mut i = 0
+  while i < spans.length() {
+    if is_empty_block_type_span(instr_bytes, spans[i]) {
+      match matching_end.get(i) {
+        Some(end_index) =>
+          match
+            find_top_level_br_if0_in_block(instr_bytes, spans, i, end_index) {
+            Some(br_if_index) =>
+              if br_if_index < end_index {
+                // block(prefix ... br_if 0 body end) => prefix ... eqz if body end
+                let mut k = i + 1
+                while k < br_if_index {
+                  out.append(
+                    instr_bytes[spans[k].start:spans[k].end_].to_array(),
+                  )
+                  k += 1
+                }
+                out.push(0x45U.to_byte())
+                out.push(0x04U.to_byte())
+                out.push(0x40U.to_byte())
+                k = br_if_index + 1
+                while k < end_index {
+                  out.append(
+                    instr_bytes[spans[k].start:spans[k].end_].to_array(),
+                  )
+                  k += 1
+                }
+                out.push(0x0bU.to_byte())
+                i = end_index + 1
+                continue
+              }
+            None => ()
+          }
+        None => ()
+      }
+    }
+    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    i += 1
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn optimize_instruction_bytes(
   instr_bytes : Bytes,
   config : OptimizeConfig,
@@ -1355,17 +1774,30 @@ fn optimize_instruction_bytes(
     while local_simplify_round < 6 {
       let before_local_simplify = current_bytes
       current_bytes = apply_precompute_i32_add(current_bytes)
+      current_bytes = apply_precompute_i32_binary_ops(current_bytes)
       current_bytes = apply_precompute_i32_const_cmp(current_bytes)
+      current_bytes = apply_precompute_i32_const_zero_cmp_suffix(current_bytes)
+      current_bytes = apply_precompute_i64_const_zero_cmp_suffix(current_bytes)
       current_bytes = apply_precompute_i32_identity_ops(current_bytes)
       current_bytes = apply_precompute_i32_eqz_const(current_bytes)
       current_bytes = apply_precompute_i32_bool_double_eqz(current_bytes)
       current_bytes = apply_precompute_i32_double_eqz_br_if(current_bytes)
       current_bytes = apply_precompute_local_const_propagation(current_bytes)
+      current_bytes = apply_precompute_local_bool_double_eqz(current_bytes)
+      current_bytes = apply_precompute_local_dead_set_overwrite(current_bytes)
       current_bytes = apply_precompute_i32_add(current_bytes)
+      current_bytes = apply_precompute_i32_binary_ops(current_bytes)
       current_bytes = apply_precompute_i32_const_cmp(current_bytes)
+      current_bytes = apply_precompute_i32_const_zero_cmp_suffix(current_bytes)
+      current_bytes = apply_precompute_i64_const_zero_cmp_suffix(current_bytes)
+      current_bytes = apply_precompute_local_bool_double_eqz(current_bytes)
       current_bytes = apply_precompute_i32_bool_double_eqz(current_bytes)
       current_bytes = apply_precompute_i32_double_eqz_br_if(current_bytes)
       current_bytes = apply_precompute_br_if_const(current_bytes)
+      current_bytes = apply_precompute_br_if_zero_before_end_to_drop(
+        current_bytes,
+      )
+      current_bytes = apply_rewrite_block_br_if0_to_if(current_bytes)
       current_bytes = apply_optimize_instructions_i32_identity_ops(
         current_bytes,
       )

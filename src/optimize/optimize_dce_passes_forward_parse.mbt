@@ -228,7 +228,10 @@ fn parse_forward_call_target_with_appended_i32_consts(
   let appended_i32_const_instrs : Array[Bytes] = []
   for i in wrapper_param_count_i..<call_pos {
     let span = spans[i]
-    if span.opcode != 0x41U {
+    if span.opcode != 0x41U &&
+      span.opcode != 0x42U &&
+      span.opcode != 0x43U &&
+      span.opcode != 0x44U {
       return None
     }
     appended_i32_const_instrs.push(instr_bytes[span.start:span.end_].to_bytes())
@@ -306,12 +309,15 @@ pub fn collect_gc_type_canonical_map_from_entries_raise(
 fn can_const_forward_with_appended_i32_to_target(
   wrapper_type : FunctionTypeEntry,
   target_type : FunctionTypeEntry,
-  appended_i32_const_count : UInt,
+  appended_i32_const_instrs : Array[Bytes],
   gc_type_canonical_map : Map[UInt, UInt],
 ) -> Bool {
   let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
   let target_param_count = target_type.params.length().reinterpret_as_uint()
-  if target_param_count != wrapper_param_count + appended_i32_const_count {
+  let appended_const_count = appended_i32_const_instrs
+    .length()
+    .reinterpret_as_uint()
+  if target_param_count != wrapper_param_count + appended_const_count {
     return false
   }
   if not(
@@ -332,12 +338,38 @@ fn can_const_forward_with_appended_i32_to_target(
       return false
     }
   }
-  for i in wrapper_type.params.length()..<target_type.params.length() {
-    if not(is_i32_value_type(target_type.params[i])) {
+  for i in 0..<appended_i32_const_instrs.length() {
+    let const_type = match
+      appended_i32_const_instr_type(appended_i32_const_instrs[i]) {
+      Some(v) => v
+      None => return false
+    }
+    let param_index = wrapper_type.params.length() + i
+    if not(
+        type_bytes_equal_with_gc_canonical_map(
+          const_type,
+          target_type.params[param_index],
+          gc_type_canonical_map,
+        ),
+      ) {
       return false
     }
   }
   true
+}
+
+///|
+fn appended_i32_const_instr_type(instr : Bytes) -> Bytes? {
+  if instr.length() == 0 {
+    return None
+  }
+  match instr[0].to_uint() {
+    0x41U => Some(Bytes::from_array([0x7fU.to_byte()]))
+    0x42U => Some(Bytes::from_array([0x7eU.to_byte()]))
+    0x43U => Some(Bytes::from_array([0x7dU.to_byte()]))
+    0x44U => Some(Bytes::from_array([0x7cU.to_byte()]))
+    _ => None
+  }
 }
 
 ///|
