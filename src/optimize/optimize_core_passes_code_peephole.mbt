@@ -2127,7 +2127,8 @@ fn optimize_code_section_payload_raise(
 ) -> Bytes raise WiteError {
   let parser = Cursor::new(payload)
   let body_count = parser.read_u32_leb128()
-  let bodies : Array[Bytes] = []
+  let out : Array[Byte] = []
+  out.append(encode_u32_leb128(body_count)[:])
   for _ in 0U..<body_count {
     let body_size_u = parser.read_u32_leb128()
     let body_size = UInt::reinterpret_as_int(body_size_u)
@@ -2140,14 +2141,12 @@ fn optimize_code_section_payload_raise(
       raise WiteError::UnexpectedEof
     }
     let body_bytes = payload[start:end_].to_bytes()
-    bodies.push(optimize_code_body_bytes(body_bytes, config))
+    let optimized_body = optimize_code_body_bytes(body_bytes, config)
+    out.append(
+      encode_u32_leb128(optimized_body.length().reinterpret_as_uint())[:],
+    )
+    out.append(optimized_body[:].to_array())
     parser.set_pos(end_)
-  }
-  let out : Array[Byte] = []
-  out.append(encode_u32_leb128(body_count)[:])
-  for body in bodies {
-    out.append(encode_u32_leb128(body.length().reinterpret_as_uint())[:])
-    out.append(body[:].to_array())
   }
   Bytes::from_array(out[:])
 }

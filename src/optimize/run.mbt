@@ -105,7 +105,7 @@ pub fn optimize_for_size(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
 ) -> Result[OptimizeResult, WiteError] {
-  try? {
+  try? ({
     let rounds = if config.pass_rounds == 0U { 1U } else { config.pass_rounds }
     let mut current = bytes
     let removed_sections : Array[String] = []
@@ -113,7 +113,11 @@ pub fn optimize_for_size(
       let before_round_size = current.length().reinterpret_as_uint()
       let round = optimize_for_size_round_raise(current, config)
       let after_round_size = round.bytes.length().reinterpret_as_uint()
-      let changed = not(bytes_equal(round.bytes, current))
+      let changed = if after_round_size != before_round_size {
+        true
+      } else {
+        not(bytes_equal(round.bytes, current))
+      }
       current = round.bytes
       removed_sections.append(round.removed_sections[:])
       if not(changed) {
@@ -135,7 +139,7 @@ pub fn optimize_for_size(
       removed_sections,
       no_change_reasons,
     }
-  }
+  })
 }
 
 ///|
@@ -183,7 +187,11 @@ pub fn optimize_component_for_size(
     }
     let before_size = current.length().reinterpret_as_uint()
     let after_size = round_result.bytes.length().reinterpret_as_uint()
-    let changed = not(bytes_equal(round_result.bytes, current))
+    let changed = if after_size != before_size {
+      true
+    } else {
+      not(bytes_equal(round_result.bytes, current))
+    }
     if after_size < before_size || (after_size == before_size && changed) {
       current = round_result.bytes
       removed_sections.append(round_result.removed_sections[:])

@@ -38,6 +38,10 @@ test:
 bench:
     moon bench --target {{target}}
 
+# Run optimize speed benchmark (native binary, fixed iterations)
+bench-optimize-speed iterations="5":
+    node scripts/bench_optimize_speed.js --iterations={{iterations}}
+
 # Sync benchmark corpus from upstream repositories
 bench-sync:
     scripts/sync_bench_corpus.sh
