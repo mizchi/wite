@@ -1,4 +1,56 @@
 ///|
+fn collect_call_indirect_table_indices_from_instruction_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> Array[UInt] raise WiteError {
+  let out : Array[UInt] = []
+  for span in spans {
+    if span.opcode == 0x11U {
+      if span.end_ <= span.start + 1 {
+        raise WiteError::InvalidFormat("invalid call_indirect immediate")
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let parser = Cursor::new(imm)
+      ignore(parser.read_u32_leb128())
+      let table_index = parser.read_u32_leb128()
+      if not(parser.eof()) {
+        raise WiteError::InvalidFormat(
+          "call_indirect immediate has trailing bytes",
+        )
+      }
+      push_unique_u32(out, table_index)
+    }
+  }
+  out
+}
+
+///|
+pub fn collect_call_indirect_table_indices_from_code_section(
+  payload : Bytes,
+) -> Array[UInt]? {
+  let result = try? ({
+    let out : Array[UInt] = []
+    let bodies = parse_code_bodies(payload)
+    for body in bodies {
+      let prefix_end = parse_local_decl_prefix_end(body)
+      let instr_bytes = body[prefix_end:body.length()].to_bytes()
+      let spans = parse_instruction_spans_raise(instr_bytes)
+      for
+        index in collect_call_indirect_table_indices_from_instruction_raise(
+          instr_bytes, spans,
+        ) {
+        push_unique_u32(out, index)
+      }
+    }
+    out
+  })
+  match result {
+    Ok(v) => Some(v)
+    Err(_) => None
+  }
+}
+
+///|
 fn collect_used_table_indices_from_instruction_raise(
   instr_bytes : Bytes,
   spans : Array[InstrSpan],
@@ -53,7 +105,7 @@ fn collect_used_table_indices_from_instruction_raise(
 fn collect_used_table_indices_from_code_section(
   payload : Bytes,
 ) -> Array[UInt]? {
-  let result = try? {
+  let result = try? ({
     let out : Array[UInt] = []
     let bodies = parse_code_bodies(payload)
     for body in bodies {
@@ -68,7 +120,7 @@ fn collect_used_table_indices_from_code_section(
       }
     }
     out
-  }
+  })
   match result {
     Ok(v) => Some(v)
     Err(_) => None
@@ -160,7 +212,7 @@ fn collect_used_memory_indices_from_instruction_raise(
 fn collect_used_global_indices_from_code_section(
   payload : Bytes,
 ) -> Array[UInt]? {
-  let result = try? {
+  let result = try? ({
     let out : Array[UInt] = []
     let bodies = parse_code_bodies(payload)
     for body in bodies {
@@ -175,7 +227,7 @@ fn collect_used_global_indices_from_code_section(
       }
     }
     out
-  }
+  })
   match result {
     Ok(v) => Some(v)
     Err(_) => None
@@ -186,7 +238,7 @@ fn collect_used_global_indices_from_code_section(
 fn collect_used_memory_indices_from_code_section(
   payload : Bytes,
 ) -> Array[UInt]? {
-  let result = try? {
+  let result = try? ({
     let out : Array[UInt] = []
     let bodies = parse_code_bodies(payload)
     for body in bodies {
@@ -201,7 +253,7 @@ fn collect_used_memory_indices_from_code_section(
       }
     }
     out
-  }
+  })
   match result {
     Ok(v) => Some(v)
     Err(_) => None

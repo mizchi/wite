@@ -2,6 +2,7 @@
 pub using @wite_optimize {
   apply_directize_raise,
   bytes_equal,
+  collect_call_indirect_table_indices_from_code_section,
   collect_call_forwarding_alias_map,
   collect_const_call_forwarding_alias_map,
   collect_direct_callees,
@@ -20,6 +21,7 @@ pub using @wite_optimize {
   parse_core_sections_raise,
   parse_custom_section_name_prefix_end,
   parse_element_section_function_refs_raise,
+  parse_element_section_table_function_refs_raise,
   parse_export_function_names,
   parse_export_indices_by_kind,
   parse_function_type_entry_from_raw_raise,

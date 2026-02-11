@@ -183,6 +183,125 @@ pub fn parse_global_section_function_refs_raise(
 }
 
 ///|
+fn map_push_unique_u32_array(
+  grouped : Map[UInt, Array[UInt]],
+  key : UInt,
+  value : UInt,
+) -> Unit {
+  match grouped.get(key) {
+    Some(prev) =>
+      if not(prev.contains(value)) {
+        let next = prev.copy()
+        next.push(value)
+        grouped.set(key, next)
+      }
+    None => grouped.set(key, [value])
+  }
+}
+
+///|
+pub fn parse_element_section_table_function_refs_raise(
+  payload : Bytes,
+) -> Map[UInt, Array[UInt]] raise WiteError {
+  let parser = Cursor::new(payload)
+  let segment_count = parser.read_u32_leb128()
+  let grouped : Map[UInt, Array[UInt]] = {}
+  for _ in 0U..<segment_count {
+    let flags = parser.read_u32_leb128()
+    match flags {
+      0U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_ref_func_indices_from_expr_raise(offset_expr) {
+          map_push_unique_u32_array(grouped, 0U, index)
+        }
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          map_push_unique_u32_array(grouped, 0U, parser.read_u32_leb128())
+        }
+      }
+      1U => {
+        ignore(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          ignore(parser.read_u32_leb128())
+        }
+      }
+      2U => {
+        let table_index = parser.read_u32_leb128()
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_ref_func_indices_from_expr_raise(offset_expr) {
+          map_push_unique_u32_array(grouped, table_index, index)
+        }
+        ignore(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          map_push_unique_u32_array(
+            grouped,
+            table_index,
+            parser.read_u32_leb128(),
+          )
+        }
+      }
+      3U => {
+        ignore(parser.read_byte())
+        let func_count = parser.read_u32_leb128()
+        for _ in 0U..<func_count {
+          ignore(parser.read_u32_leb128())
+        }
+      }
+      4U => {
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_ref_func_indices_from_expr_raise(offset_expr) {
+          map_push_unique_u32_array(grouped, 0U, index)
+        }
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          let expr = read_const_expr_bytes_raise(parser, payload)
+          for index in collect_ref_func_indices_from_expr_raise(expr) {
+            map_push_unique_u32_array(grouped, 0U, index)
+          }
+        }
+      }
+      5U => {
+        ignore(read_ref_type_bytes_raise(parser))
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          ignore(read_const_expr_bytes_raise(parser, payload))
+        }
+      }
+      6U => {
+        let table_index = parser.read_u32_leb128()
+        let offset_expr = read_const_expr_bytes_raise(parser, payload)
+        for index in collect_ref_func_indices_from_expr_raise(offset_expr) {
+          map_push_unique_u32_array(grouped, table_index, index)
+        }
+        ignore(read_ref_type_bytes_raise(parser))
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          let expr = read_const_expr_bytes_raise(parser, payload)
+          for index in collect_ref_func_indices_from_expr_raise(expr) {
+            map_push_unique_u32_array(grouped, table_index, index)
+          }
+        }
+      }
+      7U => {
+        ignore(read_ref_type_bytes_raise(parser))
+        let expr_count = parser.read_u32_leb128()
+        for _ in 0U..<expr_count {
+          ignore(read_const_expr_bytes_raise(parser, payload))
+        }
+      }
+      _ =>
+        raise WiteError::InvalidFormat(
+          "unsupported element segment flags in table parser: " +
+          flags.to_string(),
+        )
+    }
+  }
+  grouped
+}
+
+///|
 pub fn parse_element_section_function_refs_raise(
   payload : Bytes,
 ) -> Array[UInt] raise WiteError {

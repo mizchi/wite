@@ -21,6 +21,27 @@ fn export_root_names_from_config(config : OptimizeConfig) -> Array[String]? {
 }
 
 ///|
+fn map_merge_unique_u32_array(
+  target : Map[UInt, Array[UInt]],
+  source : Map[UInt, Array[UInt]],
+) -> Unit {
+  source.each((key, values) => {
+    match target.get(key) {
+      Some(prev) => {
+        let next = prev.copy()
+        for value in values {
+          if not(next.contains(value)) {
+            next.push(value)
+          }
+        }
+        target.set(key, next)
+      }
+      None => target.set(key, values.copy())
+    }
+  })
+}
+
+///|
 fn analyze_call_graph_raise(
   bytes : Bytes,
   export_root_names : Array[String]?,
@@ -33,6 +54,9 @@ fn analyze_call_graph_raise(
   let function_names : Map[UInt, String] = {}
   let roots : Array[UInt] = []
   let root_seen : Map[UInt, Bool] = {}
+  let element_refs_by_table : Map[UInt, Array[UInt]] = {}
+  let used_table_indices : Array[UInt] = []
+  let used_table_seen : Map[UInt, Bool] = {}
   let mut partial = false
   for section in sections {
     let payload = bytes[section.payload_start:section.section_end].to_bytes()
@@ -42,11 +66,14 @@ fn analyze_call_graph_raise(
       7U => {
         let parsed = parse_export_function_names(payload)
         merge_export_function_names(export_names, parsed)
-        parsed.each((index, names) => if should_include_export_root(
-            names, export_root_names,
-          ) {
-          push_unique_u32_with_seen(roots, root_seen, index)
+        parsed.each((index, names) => {
+          if should_include_export_root(names, export_root_names) {
+            push_unique_u32_with_seen(roots, root_seen, index)
+          }
         })
+        for index in parse_export_indices_by_kind(payload, 1U) {
+          push_unique_u32_with_seen(used_table_indices, used_table_seen, index)
+        }
       }
       8U => {
         let start_index = parse_start_function_index(payload)
@@ -63,18 +90,27 @@ fn analyze_call_graph_raise(
         }
       }
       9U => {
-        let refs_result = try? parse_element_section_function_refs_raise(
+        let refs_result = try? parse_element_section_table_function_refs_raise(
           payload,
         )
         match refs_result {
-          Ok(indices) =>
-            for index in indices {
-              push_unique_u32_with_seen(roots, root_seen, index)
-            }
+          Ok(grouped) =>
+            map_merge_unique_u32_array(element_refs_by_table, grouped)
           Err(_) => partial = true
         }
       }
-      10U => code_bodies = parse_code_bodies(payload)
+      10U => {
+        code_bodies = parse_code_bodies(payload)
+        match collect_call_indirect_table_indices_from_code_section(payload) {
+          Some(indices) =>
+            for index in indices {
+              push_unique_u32_with_seen(
+                used_table_indices, used_table_seen, index,
+              )
+            }
+          None => partial = true
+        }
+      }
       0U =>
         match section.custom_name {
           Some(name) =>
@@ -126,6 +162,17 @@ fn analyze_call_graph_raise(
       direct_callees,
       reachable_from_roots: false,
     })
+  }
+  if has_indirect_calls || used_table_indices.length() > 0 {
+    for table_index in used_table_indices {
+      match element_refs_by_table.get(table_index) {
+        Some(indices) =>
+          for index in indices {
+            push_unique_u32_with_seen(roots, root_seen, index)
+          }
+        None => ()
+      }
+    }
   }
   let total_function_count_u = imported_function_count + local_function_count
   let total_function_count = UInt::reinterpret_as_int(total_function_count_u)
