@@ -80,10 +80,9 @@ fn print_optimize_metadata_stage(stage : @wite.OptimizeStageMetadata) -> Unit {
             None => "#\{diff.function_index.to_string()}"
           }
       }
-      let exports = if diff.export_names.length() == 0 {
-        ""
-      } else {
-        " exports=" + diff.export_names.join(",")
+      let exports = match diff.export_names {
+        [] => ""
+        [_, ..] => " exports=" + diff.export_names.join(",")
       }
       println(
         "        " +
@@ -284,13 +283,10 @@ async fn run_profile_command(args : Array[String]) -> Unit {
       i += 2
       continue
     }
-    match arg.strip_prefix("--kind=") {
-      Some(value) => {
-        kind = parse_binary_kind_or_exit(value.to_string(), "profile kind")
-        i += 1
-        continue
-      }
-      None => ()
+    if arg.strip_prefix("--kind=") is Some(value) {
+      kind = parse_binary_kind_or_exit(value.to_string(), "profile kind")
+      i += 1
+      continue
     }
     println("unknown profile option: " + arg)
     @sys.exit(1)

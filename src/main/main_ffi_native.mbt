@@ -42,10 +42,7 @@ fn shell_quote(s : String) -> String {
   let buf : Array[Char] = ['\'']
   for ch in s {
     if ch == '\'' {
-      buf.push('\'')
-      buf.push('\\')
-      buf.push('\'')
-      buf.push('\'')
+      buf..push('\'')..push('\\')..push('\'')..push('\'')
     } else {
       buf.push(ch)
     }
@@ -82,7 +79,6 @@ fn js_ensure_parent_dir_for_file(path : String) -> Unit {
   let parent = path_dirname_for_ffi(path)
   if parent != "." {
     let _ = run_shell_cmd("mkdir -p " + shell_quote(parent))
-
   }
 }
 
@@ -102,10 +98,7 @@ fn js_make_temp_wasm_path(prefix : String) -> String {
   }
   let safe_base = String::from_array(safe_buf)
   // Use /tmp with a timestamp-based unique name
-  let tmpdir = match @sys.get_env_var("TMPDIR") {
-    Some(d) => d
-    None => "/tmp"
-  }
+  let tmpdir = @sys.get_env_var("TMPDIR").unwrap_or("/tmp")
   let mut hash = 0
   for ch in safe_base {
     hash = hash * 31 + ch.to_int()

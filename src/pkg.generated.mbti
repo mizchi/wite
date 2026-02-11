@@ -21,7 +21,7 @@ pub fn analyze_component_core_optimize(Bytes, config? : @types.OptimizeConfig, e
 
 pub fn analyze_component_function_sizes(Bytes) -> Result[Array[@types.ComponentFunctionSizeReport], String]
 
-pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput?, exclude? : Array[String]) -> Result[@types.ComponentRootPolicyReport, String]
+pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput, exclude? : Array[String]) -> Result[@types.ComponentRootPolicyReport, String]
 
 pub fn analyze_dce_report(Bytes) -> Result[@types.DceReport, @types.WiteError]
 

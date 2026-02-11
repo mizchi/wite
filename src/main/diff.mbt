@@ -54,7 +54,7 @@ fn run_diff_command(args : Array[String]) -> Unit {
                       None =>
                         match arg.strip_prefix("--baseline-arg=") {
                           Some(v) =>
-                            if not(v.is_empty()) {
+                            if !v.is_empty() {
                               wasm_opt_extra_args.push(v.to_string())
                             }
                           None =>

@@ -150,10 +150,8 @@ fn new_template_kind_name(template : NewTemplateKind) -> String {
 fn new_gitignore_template_text(template : NewTemplateKind) -> String {
   let lines : Array[String] = ["deps/", "composed.wasm"]
   match template {
-    NewTemplateKind::Moonbit => {
-      lines.push("target/")
-      lines.push(".mooncakes/")
-    }
+    NewTemplateKind::Moonbit =>
+      ignore(lines..push("target/")..push(".mooncakes/"))
     NewTemplateKind::Rust => lines.push("target/")
   }
   lines.push("")
@@ -170,38 +168,38 @@ fn collect_new_template_files(
     { path: "main.wac", content: init_main_wac_template_text() },
   ]
   match template {
-    NewTemplateKind::Moonbit => {
-      files.push({
+    NewTemplateKind::Moonbit =>
+      files
+      ..push({
         path: "guest/moonbit/moon.mod.json",
         content: new_moonbit_moon_mod_template_text(),
       })
-      files.push({
+      ..push({
         path: "guest/moonbit/moon.pkg",
         content: new_moonbit_moon_pkg_template_text(),
       })
-      files.push({
+      ..push({
         path: "guest/moonbit/guest.mbt",
         content: new_moonbit_guest_mbt_template_text(),
       })
-      files.push({
+      .push({
         path: "guest/moonbit/README.md",
         content: new_moonbit_readme_template_text(),
       })
-    }
-    NewTemplateKind::Rust => {
-      files.push({
+    NewTemplateKind::Rust =>
+      files
+      ..push({
         path: "guest/rust/Cargo.toml",
         content: new_rust_cargo_toml_template_text(),
       })
-      files.push({
+      ..push({
         path: "guest/rust/src/main.rs",
         content: new_rust_main_template_text(),
       })
-      files.push({
+      .push({
         path: "guest/rust/README.md",
         content: new_rust_readme_template_text(),
       })
-    }
   }
   files
 }

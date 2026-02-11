@@ -15,11 +15,7 @@ fn parse_wasm_opt_level_or_exit(token : String) -> String {
 fn resolve_wasm_opt_bin(cli_value : String?) -> String {
   match cli_value {
     Some(path) => path
-    None =>
-      match @sys.get_env_var("WASM_OPT_BIN") {
-        Some(path) => path
-        None => "wasm-opt"
-      }
+    None => @sys.get_env_var("WASM_OPT_BIN").unwrap_or("wasm-opt")
   }
 }
 
@@ -68,7 +64,7 @@ fn parse_closed_world_roots(args : Array[String], start : Int) -> Array[String] 
   let roots : Array[String] = []
   for i in start..<args.length() {
     match args[i].strip_prefix("--closed-world-root=") {
-      Some(name) => if not(name.is_empty()) { roots.push(name.to_string()) }
+      Some(name) => if !name.is_empty() { roots.push(name.to_string()) }
       None => ()
     }
   }
@@ -80,7 +76,7 @@ fn parse_excluded_roots(args : Array[String], start : Int) -> Array[String] {
   let excludes : Array[String] = []
   for i in start..<args.length() {
     match args[i].strip_prefix("--exclude=") {
-      Some(name) => if not(name.is_empty()) { excludes.push(name.to_string()) }
+      Some(name) => if !name.is_empty() { excludes.push(name.to_string()) }
       None => ()
     }
   }
@@ -143,7 +139,7 @@ fn parse_int_or_exit(text : String, name : String) -> Int {
     has_digit = true
     index += 1
   }
-  if not(has_digit) {
+  if !has_digit {
     println("invalid " + name + ": " + text)
     @sys.exit(1)
     return 0
@@ -180,7 +176,7 @@ fn parse_runtime_profile_scenarios(
         }
         let export_name = parts[0]
         let scenario_args : Array[Int] = []
-        if parts.length() == 2 && not(parts[1].is_empty()) {
+        if parts.length() == 2 && !parts[1].is_empty() {
           for raw_arg in split_string(parts[1], ",") {
             if raw_arg.is_empty() {
               continue
@@ -248,16 +244,9 @@ fn derive_preset_from_wasm_opt_levels(
       } else if level == 1U {
         Some(@wite.OptimizeConfig::os())
       } else {
-        match optimize_level {
-          Some(v) => Some(wasm_opt_preset_from_optimize_level(v))
-          None => None
-        }
+        optimize_level.map(v => v |> wasm_opt_preset_from_optimize_level)
       }
-    None =>
-      match optimize_level {
-        Some(v) => Some(wasm_opt_preset_from_optimize_level(v))
-        None => None
-      }
+    None => optimize_level.map(v => v |> wasm_opt_preset_from_optimize_level)
   }
 }
 
@@ -286,9 +275,40 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
   let mut i = 0
   while i < flags.length() {
     let flag = flags[i]
-    match
-      @wite.optimize_config_from_opt_level(normalize_opt_level_token(flag)) {
-      Some(preset) => {
+    if (flag
+      |> normalize_opt_level_token
+      |> @wite.optimize_config_from_opt_level)
+      is Some(preset) {
+      strip_all_custom = preset.strip_all_custom
+      strip_name_section = preset.strip_name_section
+      strip_producers_section = preset.strip_producers_section
+      strip_debug_sections = preset.strip_debug_sections
+      strip_dwarf_sections = preset.strip_dwarf_sections
+      strip_target_features_section = preset.strip_target_features_section
+      pass_rounds = preset.pass_rounds
+      enable_peephole = preset.enable_peephole
+      enable_vacuum = preset.enable_vacuum
+      enable_merge_blocks = preset.enable_merge_blocks
+      enable_remove_unused_brs = preset.enable_remove_unused_brs
+      enable_dce = preset.enable_dce
+      enable_dfe = preset.enable_dfe
+      enable_merge_similar_functions = preset.enable_merge_similar_functions
+      enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
+      closed_world = preset.closed_world
+      safe_mode = preset.safe_mode
+    }
+    if flag == "--optimize-level" || flag == "-ol" {
+      if i + 1 >= flags.length() {
+        println("missing value after " + flag)
+        @sys.exit(1)
+      }
+      wasm_opt_optimize_level = flags[i + 1]
+        |> parse_wasm_opt_optimize_level_or_exit
+        |> Some
+      if derive_preset_from_wasm_opt_levels(
+          wasm_opt_optimize_level, wasm_opt_shrink_level,
+        )
+        is Some(preset) {
         strip_all_custom = preset.strip_all_custom
         strip_name_section = preset.strip_name_section
         strip_producers_section = preset.strip_producers_section
@@ -307,219 +327,157 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
         closed_world = preset.closed_world
         safe_mode = preset.safe_mode
       }
-      None => ()
-    }
-    if flag == "--optimize-level" || flag == "-ol" {
-      if i + 1 >= flags.length() {
-        println("missing value after " + flag)
-        @sys.exit(1)
-      }
-      wasm_opt_optimize_level = Some(
-        parse_wasm_opt_optimize_level_or_exit(flags[i + 1]),
-      )
-      match
-        derive_preset_from_wasm_opt_levels(
-          wasm_opt_optimize_level, wasm_opt_shrink_level,
-        ) {
-        Some(preset) => {
-          strip_all_custom = preset.strip_all_custom
-          strip_name_section = preset.strip_name_section
-          strip_producers_section = preset.strip_producers_section
-          strip_debug_sections = preset.strip_debug_sections
-          strip_dwarf_sections = preset.strip_dwarf_sections
-          strip_target_features_section = preset.strip_target_features_section
-          pass_rounds = preset.pass_rounds
-          enable_peephole = preset.enable_peephole
-          enable_vacuum = preset.enable_vacuum
-          enable_merge_blocks = preset.enable_merge_blocks
-          enable_remove_unused_brs = preset.enable_remove_unused_brs
-          enable_dce = preset.enable_dce
-          enable_dfe = preset.enable_dfe
-          enable_merge_similar_functions = preset.enable_merge_similar_functions
-          enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
-          closed_world = preset.closed_world
-          safe_mode = preset.safe_mode
-        }
-        None => ()
-      }
       i += 2
       continue
     }
-    match flag.strip_prefix("--optimize-level=") {
-      Some(value) => {
-        wasm_opt_optimize_level = Some(
-          parse_wasm_opt_optimize_level_or_exit(value.to_string()),
+    if flag.strip_prefix("--optimize-level=") is Some(value) {
+      wasm_opt_optimize_level = value.to_string()
+        |> parse_wasm_opt_optimize_level_or_exit
+        |> Some
+      if derive_preset_from_wasm_opt_levels(
+          wasm_opt_optimize_level, wasm_opt_shrink_level,
         )
-        match
-          derive_preset_from_wasm_opt_levels(
-            wasm_opt_optimize_level, wasm_opt_shrink_level,
-          ) {
-          Some(preset) => {
-            strip_all_custom = preset.strip_all_custom
-            strip_name_section = preset.strip_name_section
-            strip_producers_section = preset.strip_producers_section
-            strip_debug_sections = preset.strip_debug_sections
-            strip_dwarf_sections = preset.strip_dwarf_sections
-            strip_target_features_section = preset.strip_target_features_section
-            pass_rounds = preset.pass_rounds
-            enable_peephole = preset.enable_peephole
-            enable_vacuum = preset.enable_vacuum
-            enable_merge_blocks = preset.enable_merge_blocks
-            enable_remove_unused_brs = preset.enable_remove_unused_brs
-            enable_dce = preset.enable_dce
-            enable_dfe = preset.enable_dfe
-            enable_merge_similar_functions = preset.enable_merge_similar_functions
-            enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
-            closed_world = preset.closed_world
-            safe_mode = preset.safe_mode
-          }
-          None => ()
-        }
-        i += 1
-        continue
+        is Some(preset) {
+        strip_all_custom = preset.strip_all_custom
+        strip_name_section = preset.strip_name_section
+        strip_producers_section = preset.strip_producers_section
+        strip_debug_sections = preset.strip_debug_sections
+        strip_dwarf_sections = preset.strip_dwarf_sections
+        strip_target_features_section = preset.strip_target_features_section
+        pass_rounds = preset.pass_rounds
+        enable_peephole = preset.enable_peephole
+        enable_vacuum = preset.enable_vacuum
+        enable_merge_blocks = preset.enable_merge_blocks
+        enable_remove_unused_brs = preset.enable_remove_unused_brs
+        enable_dce = preset.enable_dce
+        enable_dfe = preset.enable_dfe
+        enable_merge_similar_functions = preset.enable_merge_similar_functions
+        enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
+        closed_world = preset.closed_world
+        safe_mode = preset.safe_mode
       }
-      None => ()
+      i += 1
+      continue
     }
-    match flag.strip_prefix("-ol=") {
-      Some(value) => {
-        wasm_opt_optimize_level = Some(
-          parse_wasm_opt_optimize_level_or_exit(value.to_string()),
+    if flag.strip_prefix("-ol=") is Some(value) {
+      wasm_opt_optimize_level = value.to_string()
+        |> parse_wasm_opt_optimize_level_or_exit
+        |> Some
+      if derive_preset_from_wasm_opt_levels(
+          wasm_opt_optimize_level, wasm_opt_shrink_level,
         )
-        match
-          derive_preset_from_wasm_opt_levels(
-            wasm_opt_optimize_level, wasm_opt_shrink_level,
-          ) {
-          Some(preset) => {
-            strip_all_custom = preset.strip_all_custom
-            strip_name_section = preset.strip_name_section
-            strip_producers_section = preset.strip_producers_section
-            strip_debug_sections = preset.strip_debug_sections
-            strip_dwarf_sections = preset.strip_dwarf_sections
-            strip_target_features_section = preset.strip_target_features_section
-            pass_rounds = preset.pass_rounds
-            enable_peephole = preset.enable_peephole
-            enable_vacuum = preset.enable_vacuum
-            enable_merge_blocks = preset.enable_merge_blocks
-            enable_remove_unused_brs = preset.enable_remove_unused_brs
-            enable_dce = preset.enable_dce
-            enable_dfe = preset.enable_dfe
-            enable_merge_similar_functions = preset.enable_merge_similar_functions
-            enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
-            closed_world = preset.closed_world
-            safe_mode = preset.safe_mode
-          }
-          None => ()
-        }
-        i += 1
-        continue
+        is Some(preset) {
+        strip_all_custom = preset.strip_all_custom
+        strip_name_section = preset.strip_name_section
+        strip_producers_section = preset.strip_producers_section
+        strip_debug_sections = preset.strip_debug_sections
+        strip_dwarf_sections = preset.strip_dwarf_sections
+        strip_target_features_section = preset.strip_target_features_section
+        pass_rounds = preset.pass_rounds
+        enable_peephole = preset.enable_peephole
+        enable_vacuum = preset.enable_vacuum
+        enable_merge_blocks = preset.enable_merge_blocks
+        enable_remove_unused_brs = preset.enable_remove_unused_brs
+        enable_dce = preset.enable_dce
+        enable_dfe = preset.enable_dfe
+        enable_merge_similar_functions = preset.enable_merge_similar_functions
+        enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
+        closed_world = preset.closed_world
+        safe_mode = preset.safe_mode
       }
-      None => ()
+      i += 1
+      continue
     }
     if flag == "--shrink-level" || flag == "-s" {
       if i + 1 >= flags.length() {
         println("missing value after " + flag)
         @sys.exit(1)
       }
-      wasm_opt_shrink_level = Some(
-        parse_wasm_opt_shrink_level_or_exit(flags[i + 1]),
-      )
-      match
-        derive_preset_from_wasm_opt_levels(
+      wasm_opt_shrink_level = flags[i + 1]
+        |> parse_wasm_opt_shrink_level_or_exit
+        |> Some
+      if derive_preset_from_wasm_opt_levels(
           wasm_opt_optimize_level, wasm_opt_shrink_level,
-        ) {
-        Some(preset) => {
-          strip_all_custom = preset.strip_all_custom
-          strip_name_section = preset.strip_name_section
-          strip_producers_section = preset.strip_producers_section
-          strip_debug_sections = preset.strip_debug_sections
-          strip_dwarf_sections = preset.strip_dwarf_sections
-          strip_target_features_section = preset.strip_target_features_section
-          pass_rounds = preset.pass_rounds
-          enable_peephole = preset.enable_peephole
-          enable_vacuum = preset.enable_vacuum
-          enable_merge_blocks = preset.enable_merge_blocks
-          enable_remove_unused_brs = preset.enable_remove_unused_brs
-          enable_dce = preset.enable_dce
-          enable_dfe = preset.enable_dfe
-          enable_merge_similar_functions = preset.enable_merge_similar_functions
-          enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
-          closed_world = preset.closed_world
-          safe_mode = preset.safe_mode
-        }
-        None => ()
+        )
+        is Some(preset) {
+        strip_all_custom = preset.strip_all_custom
+        strip_name_section = preset.strip_name_section
+        strip_producers_section = preset.strip_producers_section
+        strip_debug_sections = preset.strip_debug_sections
+        strip_dwarf_sections = preset.strip_dwarf_sections
+        strip_target_features_section = preset.strip_target_features_section
+        pass_rounds = preset.pass_rounds
+        enable_peephole = preset.enable_peephole
+        enable_vacuum = preset.enable_vacuum
+        enable_merge_blocks = preset.enable_merge_blocks
+        enable_remove_unused_brs = preset.enable_remove_unused_brs
+        enable_dce = preset.enable_dce
+        enable_dfe = preset.enable_dfe
+        enable_merge_similar_functions = preset.enable_merge_similar_functions
+        enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
+        closed_world = preset.closed_world
+        safe_mode = preset.safe_mode
       }
       i += 2
       continue
     }
-    match flag.strip_prefix("--shrink-level=") {
-      Some(value) => {
-        wasm_opt_shrink_level = Some(
-          parse_wasm_opt_shrink_level_or_exit(value.to_string()),
+    if flag.strip_prefix("--shrink-level=") is Some(value) {
+      wasm_opt_shrink_level = value.to_string()
+        |> parse_wasm_opt_shrink_level_or_exit
+        |> Some
+      if derive_preset_from_wasm_opt_levels(
+          wasm_opt_optimize_level, wasm_opt_shrink_level,
         )
-        match
-          derive_preset_from_wasm_opt_levels(
-            wasm_opt_optimize_level, wasm_opt_shrink_level,
-          ) {
-          Some(preset) => {
-            strip_all_custom = preset.strip_all_custom
-            strip_name_section = preset.strip_name_section
-            strip_producers_section = preset.strip_producers_section
-            strip_debug_sections = preset.strip_debug_sections
-            strip_dwarf_sections = preset.strip_dwarf_sections
-            strip_target_features_section = preset.strip_target_features_section
-            pass_rounds = preset.pass_rounds
-            enable_peephole = preset.enable_peephole
-            enable_vacuum = preset.enable_vacuum
-            enable_merge_blocks = preset.enable_merge_blocks
-            enable_remove_unused_brs = preset.enable_remove_unused_brs
-            enable_dce = preset.enable_dce
-            enable_dfe = preset.enable_dfe
-            enable_merge_similar_functions = preset.enable_merge_similar_functions
-            enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
-            closed_world = preset.closed_world
-            safe_mode = preset.safe_mode
-          }
-          None => ()
-        }
-        i += 1
-        continue
+        is Some(preset) {
+        strip_all_custom = preset.strip_all_custom
+        strip_name_section = preset.strip_name_section
+        strip_producers_section = preset.strip_producers_section
+        strip_debug_sections = preset.strip_debug_sections
+        strip_dwarf_sections = preset.strip_dwarf_sections
+        strip_target_features_section = preset.strip_target_features_section
+        pass_rounds = preset.pass_rounds
+        enable_peephole = preset.enable_peephole
+        enable_vacuum = preset.enable_vacuum
+        enable_merge_blocks = preset.enable_merge_blocks
+        enable_remove_unused_brs = preset.enable_remove_unused_brs
+        enable_dce = preset.enable_dce
+        enable_dfe = preset.enable_dfe
+        enable_merge_similar_functions = preset.enable_merge_similar_functions
+        enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
+        closed_world = preset.closed_world
+        safe_mode = preset.safe_mode
       }
-      None => ()
+      i += 1
+      continue
     }
-    match flag.strip_prefix("-s=") {
-      Some(value) => {
-        wasm_opt_shrink_level = Some(
-          parse_wasm_opt_shrink_level_or_exit(value.to_string()),
+    if flag.strip_prefix("-s=") is Some(value) {
+      wasm_opt_shrink_level = value.to_string()
+        |> parse_wasm_opt_shrink_level_or_exit
+        |> Some
+      if derive_preset_from_wasm_opt_levels(
+          wasm_opt_optimize_level, wasm_opt_shrink_level,
         )
-        match
-          derive_preset_from_wasm_opt_levels(
-            wasm_opt_optimize_level, wasm_opt_shrink_level,
-          ) {
-          Some(preset) => {
-            strip_all_custom = preset.strip_all_custom
-            strip_name_section = preset.strip_name_section
-            strip_producers_section = preset.strip_producers_section
-            strip_debug_sections = preset.strip_debug_sections
-            strip_dwarf_sections = preset.strip_dwarf_sections
-            strip_target_features_section = preset.strip_target_features_section
-            pass_rounds = preset.pass_rounds
-            enable_peephole = preset.enable_peephole
-            enable_vacuum = preset.enable_vacuum
-            enable_merge_blocks = preset.enable_merge_blocks
-            enable_remove_unused_brs = preset.enable_remove_unused_brs
-            enable_dce = preset.enable_dce
-            enable_dfe = preset.enable_dfe
-            enable_merge_similar_functions = preset.enable_merge_similar_functions
-            enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
-            closed_world = preset.closed_world
-            safe_mode = preset.safe_mode
-          }
-          None => ()
-        }
-        i += 1
-        continue
+        is Some(preset) {
+        strip_all_custom = preset.strip_all_custom
+        strip_name_section = preset.strip_name_section
+        strip_producers_section = preset.strip_producers_section
+        strip_debug_sections = preset.strip_debug_sections
+        strip_dwarf_sections = preset.strip_dwarf_sections
+        strip_target_features_section = preset.strip_target_features_section
+        pass_rounds = preset.pass_rounds
+        enable_peephole = preset.enable_peephole
+        enable_vacuum = preset.enable_vacuum
+        enable_merge_blocks = preset.enable_merge_blocks
+        enable_remove_unused_brs = preset.enable_remove_unused_brs
+        enable_dce = preset.enable_dce
+        enable_dfe = preset.enable_dfe
+        enable_merge_similar_functions = preset.enable_merge_similar_functions
+        enable_remove_unused_module_elements = preset.enable_remove_unused_module_elements
+        closed_world = preset.closed_world
+        safe_mode = preset.safe_mode
       }
-      None => ()
+      i += 1
+      continue
     }
     if flag == "--strip" {
       strip_debug_sections = true
@@ -583,10 +541,8 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
       i += 2
       continue
     }
-    match flag.strip_prefix("--rounds=") {
-      Some(value) =>
-        pass_rounds = parse_uint_or_exit(value.to_string(), "rounds")
-      None => ()
+    if flag.strip_prefix("--rounds=") is Some(value) {
+      pass_rounds = parse_uint_or_exit(value.to_string(), "rounds")
     }
     if flag == "--dce" || flag == "--dce-apply" {
       enable_dce = true

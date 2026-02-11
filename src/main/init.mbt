@@ -31,7 +31,7 @@ fn init_main_wac_template_text() -> String {
 
 ///|
 fn write_init_file(path : String, content : String, force : Bool) -> Bool {
-  if @fs.path_exists(path) && not(force) {
+  if @fs.path_exists(path) && !force {
     return false
   }
   js_ensure_parent_dir_for_file(path)

@@ -3,12 +3,10 @@ async fn auto_sync_deps_from_config_if_needed(
   selection : @wite_config.ConfigSelectionFlags,
 ) -> Unit {
   let config_exists = @fs.path_exists(selection.config_path)
-  if not(
-      @wite_config.should_auto_sync_deps(selection.use_config, config_exists),
-    ) {
+  if !@wite_config.should_auto_sync_deps(selection.use_config, config_exists) {
     return
   }
-  if not(@wite_deps.config_has_dep_entries_or_exit(selection.config_path)) {
+  if !@wite_deps.config_has_dep_entries_or_exit(selection.config_path) {
     return
   }
   let sync_args = @wite_config.build_auto_sync_deps_command_args(
@@ -224,10 +222,9 @@ fn print_host_code_hints(
       Some(name) => name
       None => "#\{hint.target_function_index.to_string()}"
     }
-    let export_part = if hint.export_names.length() == 0 {
-      ""
-    } else {
-      " exports=" + hint.export_names.join(",")
+    let export_part = match hint.export_names {
+      [] => ""
+      [_, ..] => " exports=" + hint.export_names.join(",")
     }
     println(
       "    " +
