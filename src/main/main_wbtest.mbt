@@ -700,6 +700,24 @@ extern "js" fn js_prepare_example_sample_app_workspace() -> String =
   #|     if (!fs.existsSync(mainWacPath)) {
   #|       throw new Error('missing main.wac in sample_app directory: ' + sampleDir);
   #|     }
+  #|     const sampleHelloPath = path.join(tmpDir, 'deps', 'example', 'hello.wasm');
+  #|     if (!fs.existsSync(sampleHelloPath)) {
+  #|       const fallbackHelloPath = path.join(
+  #|         repoRoot,
+  #|         'bench',
+  #|         'corpus',
+  #|         'component-dce',
+  #|         'wite-build-fixture',
+  #|         'deps',
+  #|         'example',
+  #|         'hello.wasm',
+  #|       );
+  #|       if (!fs.existsSync(fallbackHelloPath)) {
+  #|         throw new Error('missing hello fixture dependency: ' + fallbackHelloPath);
+  #|       }
+  #|       fs.mkdirSync(path.dirname(sampleHelloPath), { recursive: true });
+  #|       fs.copyFileSync(fallbackHelloPath, sampleHelloPath);
+  #|     }
   #|     const outputPath = path.join(tmpDir, 'sample.composed.wasm');
   #|     return [
   #|       'ok',
