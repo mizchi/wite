@@ -46,10 +46,7 @@ pub fn collect_wac_new_package_names(
 ///|
 pub fn parse_wac_package_name(pkg_name : String) -> (String, String)? {
   let parsed = @oci_types.PackageName::parse(pkg_name)
-  match parsed {
-    Some(pkg) => Some((pkg.ns, pkg.name))
-    None => None
-  }
+  parsed.map(pkg => (pkg.ns, pkg.name))
 }
 
 ///|

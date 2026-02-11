@@ -40,10 +40,7 @@ fn shell_quote(s : String) -> String {
   let buf : Array[Char] = ['\'']
   for ch in s {
     if ch == '\'' {
-      buf.push('\'')
-      buf.push('\\')
-      buf.push('\'')
-      buf.push('\'')
+      buf..push('\'')..push('\\')..push('\'')..push('\'')
     } else {
       buf.push(ch)
     }
@@ -102,7 +99,7 @@ fn js_sanitize_dep_sync_name(raw : String) -> String {
   let mut prev_underscore = false
   for i, seg in segments {
     if i > 0 {
-      if not(prev_underscore) {
+      if !prev_underscore {
         buf.push('_')
       }
       prev_underscore = true
@@ -116,7 +113,7 @@ fn js_sanitize_dep_sync_name(raw : String) -> String {
         ch == '-'
       let c = if safe { ch } else { '_' }
       if c == '_' {
-        if not(prev_underscore) {
+        if !prev_underscore {
           buf.push(c)
         }
         prev_underscore = true
@@ -221,7 +218,6 @@ fn js_sync_wkg_package_to_file_cli(
   if parent != "." {
     let mkdir_cmd = "mkdir -p " + shell_quote(parent)
     let _ = run_shell_cmd(mkdir_cmd)
-
   }
   let cmd = "wkg get " +
     shell_quote(package_spec) +

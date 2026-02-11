@@ -47,7 +47,7 @@ fn bytes_equal(left : Bytes, right : Bytes) -> Bool {
 test "compose wac source matches compose wac file output" {
   let fixture_dir = "bench/corpus/component-dce/wite-build-fixture"
   let main_wac_path = fixture_dir + "/main.wac"
-  assert_true(@fs.path_exists(main_wac_path))
+  main_wac_path |> @fs.path_exists |> assert_true
   let source = @fs.read_file_to_string(main_wac_path)
   guard compose_wac_file(main_wac_path) is Ok(from_file) else {
     fail("expected compose_wac_file to succeed")
@@ -67,5 +67,5 @@ test "compose wac source returns parse error for invalid source" {
   guard compose_wac_source(broken_source, ".") is Err(msg) else {
     fail("expected compose_wac_source parse failure")
   }
-  assert_true(not(msg.is_empty()))
+  assert_true(!msg.is_empty())
 }

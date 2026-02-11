@@ -3,6 +3,7 @@ import {
   "mizchi/oci_wasm/oci" @oci_client,
   "mizchi/oci_wasm/types" @oci_types,
   "mizchi/wite/bundle" @wite_bundle,
+  "moonbitlang/async",
   "moonbitlang/x/fs" @fs,
   "moonbitlang/x/json5" @json5,
   "moonbitlang/x/sys" @sys,

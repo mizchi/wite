@@ -92,7 +92,7 @@ pub fn empty_wite_config_file() -> WiteConfigFile {
 ///|
 pub fn parse_config_input(json_value : Json) -> Result[ConfigInput, String] {
   match json_value {
-    String(s) => Ok(ConfigInput::Single(s))
+    String(s) => s |> ConfigInput::Single |> Ok
     Object(obj) => {
       let map : Map[String, String] = {}
       for entry in obj {
@@ -101,7 +101,7 @@ pub fn parse_config_input(json_value : Json) -> Result[ConfigInput, String] {
           _ => return Err("config input." + entry.0 + " must be string")
         }
       }
-      Ok(ConfigInput::Named(map))
+      map |> ConfigInput::Named |> Ok
     }
     _ => Err("config input must be string or object")
   }
@@ -172,13 +172,11 @@ pub fn parse_wite_config_section(
     Object(object) => {
       let mut flags : Array[String] = []
       let mut kind = BinaryKind::Auto
-      match object.get("flags") {
-        Some(flags_value) =>
-          match parse_json_string_array(flags_value, label + ".flags") {
-            Ok(parsed) => flags = parsed
-            Err(msg) => return Err(msg)
-          }
-        None => ()
+      if object.get("flags") is Some(flags_value) {
+        match parse_json_string_array(flags_value, label + ".flags") {
+          Ok(parsed) => flags = parsed
+          Err(msg) => return Err(msg)
+        }
       }
       match object.get("kind") {
         Some(String(raw_kind)) =>
@@ -207,56 +205,46 @@ pub fn parse_wite_config_json(
       let mut build_kind = BinaryKind::Auto
       let mut analyze_kind = BinaryKind::Auto
       let mut profile_kind = BinaryKind::Auto
-      match object.get("build") {
-        Some(value) =>
-          match parse_wite_config_section(value, "build") {
-            Ok((flags, kind)) => {
-              build_flags = flags
-              build_kind = kind
-            }
-            Err(msg) => return Err(msg)
+      if object.get("build") is Some(value) {
+        match parse_wite_config_section(value, "build") {
+          Ok((flags, kind)) => {
+            build_flags = flags
+            build_kind = kind
           }
-        None => ()
+          Err(msg) => return Err(msg)
+        }
       }
-      match object.get("analyze") {
-        Some(value) =>
-          match parse_wite_config_section(value, "analyze") {
-            Ok((flags, kind)) => {
-              analyze_flags = flags
-              analyze_kind = kind
-            }
-            Err(msg) => return Err(msg)
+      if object.get("analyze") is Some(value) {
+        match parse_wite_config_section(value, "analyze") {
+          Ok((flags, kind)) => {
+            analyze_flags = flags
+            analyze_kind = kind
           }
-        None => ()
+          Err(msg) => return Err(msg)
+        }
       }
-      match object.get("profile") {
-        Some(value) =>
-          match parse_wite_config_section(value, "profile") {
-            Ok((flags, kind)) => {
-              profile_flags = flags
-              profile_kind = kind
-            }
-            Err(msg) => return Err(msg)
+      if object.get("profile") is Some(value) {
+        match parse_wite_config_section(value, "profile") {
+          Ok((flags, kind)) => {
+            profile_flags = flags
+            profile_kind = kind
           }
-        None => ()
+          Err(msg) => return Err(msg)
+        }
       }
       let mut input = ConfigInput::None
-      match object.get("input") {
-        Some(value) =>
-          match parse_config_input(value) {
-            Ok(parsed) => input = parsed
-            Err(msg) => return Err(msg)
-          }
-        None => ()
+      if object.get("input") is Some(value) {
+        match parse_config_input(value) {
+          Ok(parsed) => input = parsed
+          Err(msg) => return Err(msg)
+        }
       }
       let mut output : ConfigOutput = { dir: "dist" }
-      match object.get("output") {
-        Some(value) =>
-          match parse_config_output(value) {
-            Ok(parsed) => output = parsed
-            Err(msg) => return Err(msg)
-          }
-        None => ()
+      if object.get("output") is Some(value) {
+        match parse_config_output(value) {
+          Ok(parsed) => output = parsed
+          Err(msg) => return Err(msg)
+        }
       }
       Ok({
         build_flags,
@@ -321,19 +309,16 @@ pub fn parse_config_selection_flags(
       i += 2
       continue
     }
-    match flag.strip_prefix("--config=") {
-      Some(path) => {
-        if path.is_empty() {
-          println("config path must not be empty")
-          @sys.exit(1)
-        }
-        config_path = path.to_string()
-        explicit_config_path = true
-        use_config = true
-        i += 1
-        continue
+    if flag.strip_prefix("--config=") is Some(path) {
+      if path.is_empty() {
+        println("config path must not be empty")
+        @sys.exit(1)
       }
-      None => ()
+      config_path = path.to_string()
+      explicit_config_path = true
+      use_config = true
+      i += 1
+      continue
     }
     remaining_flags.push(flag)
     i += 1
@@ -386,10 +371,10 @@ pub fn load_wite_config_or_exit(path : String) -> WiteConfigFile {
 pub fn resolve_wite_config_or_default(
   selection : ConfigSelectionFlags,
 ) -> WiteConfigFile {
-  if not(selection.use_config) {
+  if !selection.use_config {
     return empty_wite_config_file()
   }
-  if not(@fs.path_exists(selection.config_path)) {
+  if !@fs.path_exists(selection.config_path) {
     if selection.explicit_config_path {
       println("config file not found: " + selection.config_path)
       @sys.exit(1)

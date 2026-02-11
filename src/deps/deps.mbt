@@ -118,10 +118,7 @@ fn parse_wasm_dependency_spec(raw : String) -> WasmDependencySpec? {
     _ => return None
   }
   let parsed = @oci_types.PackageName::parse(base)
-  match parsed {
-    Some(pkg) => Some({ ns: pkg.ns, name: pkg.name, version })
-    None => None
-  }
+  parsed.map(pkg => { ns: pkg.ns, name: pkg.name, version })
 }
 
 ///|
@@ -159,18 +156,13 @@ fn parse_https_dependency_url(raw : String) -> (String, WasmDependencySpec)? {
     return None
   }
   let mut spec_text = rest[slash + 1:].to_string() catch { _ => "" }
-  match spec_text.find("?") {
-    Some(i) => spec_text = spec_text[:i].to_string() catch { _ => spec_text }
-    None => ()
+  if spec_text.find("?") is Some(i) {
+    spec_text = spec_text[:i].to_string() catch { _ => spec_text }
   }
-  match spec_text.find("#") {
-    Some(i) => spec_text = spec_text[:i].to_string() catch { _ => spec_text }
-    None => ()
+  if spec_text.find("#") is Some(i) {
+    spec_text = spec_text[:i].to_string() catch { _ => spec_text }
   }
-  match parse_wasm_dependency_spec(spec_text) {
-    Some(spec) => Some((host, spec))
-    None => None
-  }
+  parse_wasm_dependency_spec(spec_text).map(spec => (host, spec))
 }
 
 ///|
@@ -178,10 +170,8 @@ fn parse_dependency_input(
   raw : String,
   default_protocol : DependencyProtocol,
 ) -> ParsedDependencyInput? {
-  match parse_https_dependency_url(raw) {
-    Some((host, spec)) =>
-      return Some({ protocol: default_protocol, spec, host: Some(host) })
-    None => ()
+  if parse_https_dependency_url(raw) is Some((host, spec)) {
+    return Some({ protocol: default_protocol, spec, host: Some(host) })
   }
   let text = raw.trim().to_string()
   if text.is_empty() {
@@ -194,23 +184,26 @@ fn parse_dependency_input(
       match parse_dependency_protocol(candidate) {
         Some(protocol) => {
           let body = text[i + 1:].to_string() catch { _ => "" }
-          match parse_wasm_dependency_spec(body) {
-            Some(spec) => Some({ protocol, spec, host: None })
-            None => None
-          }
+          parse_wasm_dependency_spec(body).map(spec => {
+            protocol,
+            spec,
+            host: None,
+          })
         }
         None =>
-          match parse_wasm_dependency_spec(text) {
-            Some(spec) => Some({ protocol: default_protocol, spec, host: None })
-            None => None
-          }
+          parse_wasm_dependency_spec(text).map(spec => {
+            protocol: default_protocol,
+            spec,
+            host: None,
+          })
       }
     }
     _ =>
-      match parse_wasm_dependency_spec(text) {
-        Some(spec) => Some({ protocol: default_protocol, spec, host: None })
-        None => None
-      }
+      parse_wasm_dependency_spec(text).map(spec => {
+        protocol: default_protocol,
+        spec,
+        host: None,
+      })
   }
 }
 
@@ -237,20 +230,20 @@ fn resolve_verify_backend(
   match protocol {
     DependencyProtocol::Oci =>
       match config.oci {
-        Some(oci) => Ok(VerifyBackend::Oci(oci))
+        Some(oci) => oci |> VerifyBackend::Oci |> Ok
         None => Err("registry does not provide oci backend")
       }
     DependencyProtocol::Warg =>
       match config.warg {
-        Some(warg) => Ok(VerifyBackend::Warg(warg))
+        Some(warg) => warg |> VerifyBackend::Warg |> Ok
         None => Err("registry does not provide warg backend")
       }
     DependencyProtocol::Wkg =>
       match config.oci {
-        Some(oci) => Ok(VerifyBackend::Oci(oci))
+        Some(oci) => oci |> VerifyBackend::Oci |> Ok
         None =>
           match config.warg {
-            Some(warg) => Ok(VerifyBackend::Warg(warg))
+            Some(warg) => warg |> VerifyBackend::Warg |> Ok
             None => Err("registry does not provide oci/warg backend")
           }
       }
@@ -375,7 +368,7 @@ fn upsert_wasm_dependency_config_json(
   }
   deps[dependency_name] = Json::string(resolved_url)
   root_object["deps"] = Json::object(deps)
-  Ok(Json::object(root_object))
+  root_object |> Json::object |> Ok
 }
 
 ///|
@@ -437,9 +430,10 @@ fn parse_add_command_options(
       if i + 1 >= args.length() {
         return Err("missing protocol after --protocol")
       }
-      match parse_dependency_protocol(args[i + 1]) {
-        Some(p) => protocol_override = Some(p)
-        None => return Err("unknown protocol: " + args[i + 1])
+      if parse_dependency_protocol(args[i + 1]) is Some(p) {
+        protocol_override = Some(p)
+      } else {
+        return Err("unknown protocol: " + args[i + 1])
       }
       i += 2
       continue
@@ -462,53 +456,37 @@ fn parse_add_command_options(
       i += 1
       continue
     }
-    match arg.strip_prefix("--config=") {
-      Some(value) => {
-        config_path = value.to_string()
+    if arg.strip_prefix("--config=") is Some(value) {
+      config_path = value.to_string()
+      i += 1
+      continue
+    }
+    if arg.strip_prefix("--name=") is Some(value) {
+      dependency_name = Some(value.to_string())
+      i += 1
+      continue
+    }
+    if arg.strip_prefix("--protocol=") is Some(value) {
+      if parse_dependency_protocol(value.to_string()) is Some(p) {
+        protocol_override = Some(p)
         i += 1
         continue
       }
-      None => ()
+      return Err("unknown protocol: " + value.to_string())
     }
-    match arg.strip_prefix("--name=") {
-      Some(value) => {
-        dependency_name = Some(value.to_string())
-        i += 1
-        continue
+    if arg.strip_prefix("--registry=") is Some(value) {
+      registry_host = Some(value.to_string())
+      i += 1
+      continue
+    }
+    if arg.strip_prefix("--verify=") is Some(value) {
+      match value.to_lower() {
+        "true" | "1" | "yes" | "on" => verify = true
+        "false" | "0" | "no" | "off" => verify = false
+        _ => return Err("invalid value for --verify: " + value.to_string())
       }
-      None => ()
-    }
-    match arg.strip_prefix("--protocol=") {
-      Some(value) =>
-        match parse_dependency_protocol(value.to_string()) {
-          Some(p) => {
-            protocol_override = Some(p)
-            i += 1
-            continue
-          }
-          None => return Err("unknown protocol: " + value.to_string())
-        }
-      None => ()
-    }
-    match arg.strip_prefix("--registry=") {
-      Some(value) => {
-        registry_host = Some(value.to_string())
-        i += 1
-        continue
-      }
-      None => ()
-    }
-    match arg.strip_prefix("--verify=") {
-      Some(value) => {
-        match value.to_lower() {
-          "true" | "1" | "yes" | "on" => verify = true
-          "false" | "0" | "no" | "off" => verify = false
-          _ => return Err("invalid value for --verify: " + value.to_string())
-        }
-        i += 1
-        continue
-      }
-      None => ()
+      i += 1
+      continue
     }
     if arg.has_prefix("--") {
       return Err("unknown add option: " + arg)
@@ -540,7 +518,7 @@ fn parse_add_command_options(
         }
     },
   )
-  if host.is_empty() || not(@oci_types.validate_hostname(host)) {
+  if host.is_empty() || !@oci_types.validate_hostname(host) {
     return Err("invalid registry host: " + host)
   }
   let resolved_url = build_dep_url(host, parsed.spec)
@@ -572,22 +550,36 @@ async fn verify_dependency_on_oci_backend(
     Some(pkg) => pkg
     None => return Err("invalid package spec for verification: " + package_text)
   }
-  let client = @oci_client.OciClient::new(
-    backend.registry,
-    backend.namespace_prefix,
-    package_name,
-  ) catch {
-    e =>
+  let client = try
+    @oci_client.OciClient::new(
+      backend.registry,
+      backend.namespace_prefix,
+      package_name,
+    )
+  catch {
+    e => {
+      if @async.is_being_cancelled() {
+        raise e
+      }
       return Err(
         "oci client init failed for " + backend.registry + ": " + e.to_string(),
       )
+    }
+  } noraise {
+    v => v
   }
   if spec.version == "latest" {
-    let tags = client.list_tags(package_name) catch {
-      e =>
+    let tags = try client.list_tags(package_name) catch {
+      e => {
+        if @async.is_being_cancelled() {
+          raise e
+        }
         return Err(
           "oci tag lookup failed for " + package_text + ": " + e.to_string(),
         )
+      }
+    } noraise {
+      v => v
     }
     if tags.length() == 0 {
       return Err("oci package has no tags: " + package_text)
@@ -601,8 +593,11 @@ async fn verify_dependency_on_oci_backend(
       tags.length().to_string(),
     )
   }
-  let _manifest = client.get_manifest(package_name, spec.version) catch {
-    e =>
+  let _manifest = try client.get_manifest(package_name, spec.version) catch {
+    e => {
+      if @async.is_being_cancelled() {
+        raise e
+      }
       return Err(
         "oci manifest lookup failed for " +
         package_text +
@@ -611,6 +606,9 @@ async fn verify_dependency_on_oci_backend(
         ": " +
         e.to_string(),
       )
+    }
+  } noraise {
+    v => v
   }
   Ok(
     "oci registry=" +
@@ -670,9 +668,15 @@ async fn verify_dependency_url(
     Some(value) => value
     None => return Err("invalid resolved dependency url: " + resolved_url)
   }
-  let registry_config = @oci_discovery.fetch_registry_config(host) catch {
-    e =>
+  let registry_config = try @oci_discovery.fetch_registry_config(host) catch {
+    e => {
+      if @async.is_being_cancelled() {
+        raise e
+      }
       return Err("registry discovery failed for " + host + ": " + e.to_string())
+    }
+  } noraise {
+    v => v
   }
   let backend = match resolve_verify_backend(protocol, registry_config) {
     Ok(value) => value
@@ -723,13 +727,10 @@ fn parse_deps_verify_command_options(
       i += 1
       continue
     }
-    match arg.strip_prefix("--config=") {
-      Some(value) => {
-        config_path = value.to_string()
-        i += 1
-        continue
-      }
-      None => ()
+    if arg.strip_prefix("--config=") is Some(value) {
+      config_path = value.to_string()
+      i += 1
+      continue
     }
     if arg.has_prefix("--") {
       return Err("unknown deps verify option: " + arg)
@@ -789,37 +790,25 @@ fn parse_deps_sync_command_options(
       i += 1
       continue
     }
-    match arg.strip_prefix("--config=") {
-      Some(value) => {
-        config_path = value.to_string()
-        i += 1
-        continue
-      }
-      None => ()
+    if arg.strip_prefix("--config=") is Some(value) {
+      config_path = value.to_string()
+      i += 1
+      continue
     }
-    match arg.strip_prefix("--dir=") {
-      Some(value) => {
-        output_dir = value.to_string()
-        i += 1
-        continue
-      }
-      None => ()
+    if arg.strip_prefix("--dir=") is Some(value) {
+      output_dir = value.to_string()
+      i += 1
+      continue
     }
-    match arg.strip_prefix("--output-dir=") {
-      Some(value) => {
-        output_dir = value.to_string()
-        i += 1
-        continue
-      }
-      None => ()
+    if arg.strip_prefix("--output-dir=") is Some(value) {
+      output_dir = value.to_string()
+      i += 1
+      continue
     }
-    match arg.strip_prefix("--out-dir=") {
-      Some(value) => {
-        output_dir = value.to_string()
-        i += 1
-        continue
-      }
-      None => ()
+    if arg.strip_prefix("--out-dir=") is Some(value) {
+      output_dir = value.to_string()
+      i += 1
+      continue
     }
     if arg.has_prefix("--") {
       return Err("unknown deps sync option: " + arg)
@@ -853,9 +842,11 @@ fn collect_dep_entries_from_config_json(
   }
   let out : Array[DepConfigEntry] = []
   let mut invalid_key : String? = None
-  deps.each((name, value) => match value {
-    Json::String(url) => out.push({ name, url })
-    _ => if invalid_key is None { invalid_key = Some(name) }
+  deps.each((name, value) => {
+    match value {
+      Json::String(url) => out.push({ name, url })
+      _ => if invalid_key is None { invalid_key = Some(name) }
+    }
   })
   match invalid_key {
     Some(name) => Err("config deps entry must be string: " + name)
@@ -868,7 +859,7 @@ fn collect_dep_entries_from_config_json(
 
 ///|
 fn load_config_json_for_add(path : String) -> Json {
-  if not(@fs.path_exists(path)) {
+  if !@fs.path_exists(path) {
     return Json::object({})
   }
   let text = @fs.read_file_to_string(path) catch {
