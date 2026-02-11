@@ -7149,7 +7149,7 @@ test "optimize peephole precomputes i32.const+i32.const+i32.cmp with signed imme
 }
 
 ///|
-test "optimize peephole keeps local.get+i32.const+i32.add before i32.load (wrap-safe)" {
+test "optimize peephole folds local.get+i32.const+i32.add into i32.load offset" {
   let bytes = sample_module_with_i32_load_offset_precompute_bytes()
   guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
@@ -7177,7 +7177,49 @@ test "optimize peephole keeps local.get+i32.const+i32.add before i32.load (wrap-
     assert_true(false)
     return
   }
-  assert_eq(after.code_body_bytes, 10U)
+  assert_eq(after.code_body_bytes, 7U)
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x28, 0x02, 0x28]),
+  )
+  assert_true(
+    not(
+      bytes_contains_seq(optimized.bytes, [
+        0x20, 0x00, 0x41, 0x20, 0x6a, 0x28, 0x02, 0x08,
+      ]),
+    ),
+  )
+}
+
+///|
+test "optimize peephole keeps i32.load add pattern when safe_mode=true" {
+  let bytes = sample_module_with_i32_load_offset_precompute_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 10U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+    safe_mode=true,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
   assert_eq(after.code_body_bytes, before.code_body_bytes)
   assert_true(
     bytes_contains_seq(optimized.bytes, [
@@ -7190,7 +7232,7 @@ test "optimize peephole keeps local.get+i32.const+i32.add before i32.load (wrap-
 }
 
 ///|
-test "optimize peephole keeps local.get+i32.const+i32.add before i32.store (wrap-safe)" {
+test "optimize peephole folds local.get+i32.const+i32.add into i32.store offset" {
   let bytes = sample_module_with_i32_store_offset_precompute_bytes()
   guard @wite_analyze.profile_module(bytes) is Ok(before) else {
     assert_true(false)
@@ -7218,7 +7260,50 @@ test "optimize peephole keeps local.get+i32.const+i32.add before i32.store (wrap
     assert_true(false)
     return
   }
-  assert_eq(after.code_body_bytes, 12U)
+  assert_eq(after.code_body_bytes, 9U)
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x20, 0x00, 0x20, 0x01, 0x36, 0x02, 0x28,
+    ]),
+  )
+  assert_true(
+    not(
+      bytes_contains_seq(optimized.bytes, [
+        0x20, 0x00, 0x41, 0x20, 0x6a, 0x20, 0x01, 0x36, 0x02, 0x08,
+      ]),
+    ),
+  )
+}
+
+///|
+test "optimize peephole keeps i32.store add pattern when safe_mode=true" {
+  let bytes = sample_module_with_i32_store_offset_precompute_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+    safe_mode=true,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
   assert_eq(after.code_body_bytes, before.code_body_bytes)
   assert_true(
     bytes_contains_seq(optimized.bytes, [
@@ -7228,7 +7313,7 @@ test "optimize peephole keeps local.get+i32.const+i32.add before i32.store (wrap
 }
 
 ///|
-test "optimize peephole store offset folding preserves runtime semantics" {
+test "optimize peephole store offset folding preserves runtime semantics in normal range" {
   let bytes = sample_module_with_i32_store_offset_runtime_guard_bytes()
   let config = make_optimize_config(
     strip_all_custom=false,
@@ -7242,6 +7327,37 @@ test "optimize peephole store offset folding preserves runtime semantics" {
     enable_dfe=false,
     enable_merge_similar_functions=false,
     enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after.code_body_bytes, 14U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [0, 4, 100]),
+  )
+}
+
+///|
+test "optimize peephole store offset folding is disabled by safe_mode for wrap-sensitive inputs" {
+  let bytes = sample_module_with_i32_store_offset_runtime_guard_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+    safe_mode=true,
   )
   guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
     assert_true(false)

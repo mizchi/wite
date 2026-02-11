@@ -4,13 +4,13 @@
 
 ## KPI Snapshot (2026-02-11)
 
-- core size KPI (`optimize -O1`, 主要 gap 判定 / `gc_target_feature.wasm` 除外): `9033101 -> 8782457 bytes` (`2.7747%`)
+- core size KPI (`optimize -O1`, 主要 gap 判定 / `gc_target_feature.wasm` 除外): `9033101 -> 8764815 bytes` (`2.9700%`)
 - wasm-opt 参考値 (`-Oz --all-features --strip-debug --strip-dwarf --strip-target-features`, 同スコープ): `9033101 -> 8788083 bytes` (`2.7124%`)
-- gap to wasm-opt (主要): `-5626 bytes` (`+0.0623pt`)
-- gap to wasm-opt (参考: 全 core corpus): `-5583 bytes` (`+0.0618pt`)
+- gap to wasm-opt (主要): `-23268 bytes` (`+0.2576pt`)
+- gap to wasm-opt (参考: 全 core corpus): `-23225 bytes` (`+0.2571pt`)
 - component-model DCE KPI: `225479 -> 112549 bytes` (`50.0845%`)
-- directize→DCE→RUME 診断: `success_files=9/9`, `dce_gain=2279 bytes`, `rume_gain=43 bytes`, `directize_calls_total=1`
-- zlib gap 分解: `code=3972 bytes`, `function=44 bytes`, `type=37 bytes`（`wite=70196`, `wasm-opt=66146`, `gap=4050`）
+- directize→DCE→RUME 診断: `success_files=9/9`, `dce_gain=2298 bytes`, `rume_gain=43 bytes`, `directize_calls_total=1`
+- zlib gap 分解: `code=3420 bytes`, `function=44 bytes`, `type=37 bytes`（`wite=69644`, `wasm-opt=66146`, `gap=3498`）
 
 ## Active Backlog
 
@@ -23,11 +23,11 @@
 ## Next Actions (2026-02-11)
 
 1. [ ] Top1 P5 `precompute/optimize-instructions` 拡張
-目的: `zlib` の `code` gap (`3972 bytes`) を優先縮小。完了条件: `bench/kpi/zlib_gap.md` の `code` gap が減少し、`gap_to_wasm_opt_bytes` も改善。
+目的: `zlib` の `code` gap (`3420 bytes`) を優先縮小。完了条件: `bench/kpi/zlib_gap.md` の `code` gap が減少し、`gap_to_wasm_opt_bytes` も改善。
 2. [ ] Top2 P5 `duplicate-import-elimination`
 目的: `zlib` の `function` 残差 (`44 bytes`) を削る。完了条件: `bench/kpi/zlib_gap.md` の `function` gap が減少。
 3. [ ] Top3 P2 `signature-refining/cfp` 拡張
-目的: DCE callgraph 精度を上げる。完了条件: `bench/kpi/directize_chain.tsv` の `dce_gain_bytes` が現状 (`2279`) より増加。
+目的: DCE callgraph 精度を上げる。完了条件: `bench/kpi/directize_chain.tsv` の `dce_gain_bytes` が現状 (`2298`) より増加。
 
 ## Completed Specs
 
