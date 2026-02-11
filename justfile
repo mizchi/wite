@@ -42,6 +42,10 @@ bench:
 bench-optimize-speed iterations="5":
     node scripts/bench_optimize_speed.js --iterations={{iterations}}
 
+# Run analyze speed benchmark (native binary, fixed iterations)
+bench-analyze-speed iterations="5":
+    node scripts/bench_analyze_speed.js --iterations={{iterations}}
+
 # Sync benchmark corpus from upstream repositories
 bench-sync:
     scripts/sync_bench_corpus.sh
