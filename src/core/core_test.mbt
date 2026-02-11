@@ -28,9 +28,10 @@ fn encode_u32_leb128_wide(value : UInt) -> Array[Byte] {
 
 ///|
 fn append_section(out : Array[Byte], id : UInt, payload : Array[Byte]) -> Unit {
-  out.push(id.to_byte())
-  out.append(encode_u32_leb128(payload.length().reinterpret_as_uint())[:])
-  out.append(payload[:])
+  out
+  ..push(id.to_byte())
+  ..append(encode_u32_leb128(payload.length().reinterpret_as_uint())[:])
+  .append(payload[:])
 }
 
 ///|
@@ -39,9 +40,10 @@ fn append_section_wide(
   id : UInt,
   payload : Array[Byte],
 ) -> Unit {
-  out.push(id.to_byte())
-  out.append(encode_u32_leb128_wide(payload.length().reinterpret_as_uint())[:])
-  out.append(payload[:])
+  out
+  ..push(id.to_byte())
+  ..append(encode_u32_leb128_wide(payload.length().reinterpret_as_uint())[:])
+  .append(payload[:])
 }
 
 ///|
@@ -676,9 +678,7 @@ fn sample_module_with_hot_size_runtime_gap_bytes() -> Bytes {
   //   #1 heavy body: locals=0, (i32.const 0; drop) * 20, end
   let heavy_body : Array[Int] = [0x00]
   for _ in 0..<20 {
-    heavy_body.push(0x41)
-    heavy_body.push(0x00)
-    heavy_body.push(0x1a)
+    heavy_body..push(0x41)..push(0x00).push(0x1a)
   }
   heavy_body.push(0x0b)
   let code_payload : Array[Byte] = bytes_of([0x02, 0x02, 0x00, 0x0b])
@@ -3234,12 +3234,13 @@ fn sample_module_with_cfp_target_leb_growth_bytes() -> Bytes {
   for i in 0U..<function_count {
     let name = "f" + i.to_string()
     let name_bytes = ascii_bytes(name)
-    export_payload.append(
+    export_payload
+    ..append(
       encode_u32_leb128_wide(name_bytes.length().reinterpret_as_uint())[:],
     )
-    export_payload.append(name_bytes[:])
-    export_payload.push(0x00)
-    export_payload.append(encode_u32_leb128_wide(i)[:])
+    ..append(name_bytes[:])
+    ..push(0x00)
+    .append(encode_u32_leb128_wide(i)[:])
   }
   append_section_wide(out, 7U, export_payload)
 
@@ -3253,14 +3254,16 @@ fn sample_module_with_cfp_target_leb_growth_bytes() -> Bytes {
     let body : Array[Byte] = [0x00]
     if i == 0U {
       for _ in 0..<24 {
-        body.push(0x10)
-        body.append(encode_u32_leb128_wide(wrapper_index)[:])
+        ignore(
+          body..push(0x10)..append(encode_u32_leb128_wide(wrapper_index)[:]),
+        )
       }
       body.push(0x0b)
     } else if i == wrapper_index {
-      body.push(0x10)
-      body.append(encode_u32_leb128_wide(target_index)[:])
-      body.push(0x0b)
+      body
+      ..push(0x10)
+      ..append(encode_u32_leb128_wide(target_index)[:])
+      .push(0x0b)
     } else {
       body.push(0x0b)
     }
@@ -3918,7 +3921,7 @@ test "optimize for size strips custom sections" {
   assert_eq(find_section_size(sections_after, "function"), Some(4U))
   assert_eq(find_section_size(sections_after, "export"), Some(9U))
   assert_eq(find_section_size(sections_after, "code"), Some(6U))
-  assert_true(not(sections_after.any(s => s.key.contains("custom:"))))
+  assert_true(!sections_after.any(s => s.key.contains("custom:")))
 }
 
 ///|
@@ -3945,9 +3948,9 @@ test "optimize can strip debug/dwarf/target-features sections" {
     assert_true(false)
     return
   }
-  assert_true(not(sections_after.any(s => s.key == "custom:sourceMappingURL")))
-  assert_true(not(sections_after.any(s => s.key == "custom:.debug_info")))
-  assert_true(not(sections_after.any(s => s.key == "custom:target_features")))
+  assert_true(!sections_after.any(s => s.key == "custom:sourceMappingURL"))
+  assert_true(!sections_after.any(s => s.key == "custom:.debug_info"))
+  assert_true(!sections_after.any(s => s.key == "custom:target_features"))
   assert_true(sections_after.any(s => s.key == "custom:keepme"))
 }
 
@@ -3957,12 +3960,12 @@ test "opt level presets map to expected optimizer knobs" {
     assert_true(false)
     return
   }
-  assert_true(not(o0.enable_peephole))
-  assert_true(not(o0.enable_dce))
-  assert_true(not(o0.enable_dfe))
-  assert_true(not(o0.enable_merge_similar_functions))
-  assert_true(not(o0.closed_world))
-  assert_true(not(o0.safe_mode))
+  assert_true(!o0.enable_peephole)
+  assert_true(!o0.enable_dce)
+  assert_true(!o0.enable_dfe)
+  assert_true(!o0.enable_merge_similar_functions)
+  assert_true(!o0.closed_world)
+  assert_true(!o0.safe_mode)
   assert_eq(o0.pass_rounds, 1U)
   guard optimize_config_from_opt_level("-O1") is Some(o1) else {
     assert_true(false)
@@ -3983,9 +3986,9 @@ test "opt level presets map to expected optimizer knobs" {
   }
   assert_true(o2.enable_peephole)
   assert_true(o2.enable_dce)
-  assert_true(not(o2.enable_dfe))
-  assert_true(not(o2.closed_world))
-  assert_true(not(o2.safe_mode))
+  assert_true(!o2.enable_dfe)
+  assert_true(!o2.closed_world)
+  assert_true(!o2.safe_mode)
   assert_eq(o2.pass_rounds, 2U)
   guard optimize_config_from_opt_level("-Oz") is Some(oz) else {
     assert_true(false)
@@ -3994,8 +3997,8 @@ test "opt level presets map to expected optimizer knobs" {
   assert_true(oz.enable_dce)
   assert_true(oz.enable_dfe)
   assert_true(oz.enable_merge_similar_functions)
-  assert_true(not(oz.closed_world))
-  assert_true(not(oz.safe_mode))
+  assert_true(!oz.closed_world)
+  assert_true(!oz.safe_mode)
   assert_eq(oz.pass_rounds, 8U)
   match optimize_config_from_opt_level("-Ox") {
     Some(_) => assert_true(false)
@@ -4006,9 +4009,9 @@ test "opt level presets map to expected optimizer knobs" {
 ///|
 test "make optimize config can enable closed-world mode" {
   let default_config = make_optimize_config()
-  assert_true(not(default_config.closed_world))
+  assert_true(!default_config.closed_world)
   assert_eq(default_config.closed_world_root_exports.length(), 0)
-  assert_true(not(default_config.safe_mode))
+  assert_true(!default_config.safe_mode)
   let closed_world_config = make_optimize_config(closed_world=true)
   assert_true(closed_world_config.closed_world)
   let closed_world_with_roots = make_optimize_config(closed_world=true, closed_world_root_exports=[
@@ -4163,7 +4166,7 @@ test "analyze code block sizes for nested block module" {
     assert_true(false)
     return
   }
-  assert_true(not(report.partial))
+  assert_true(!report.partial)
   assert_eq(report.function_count, 1U)
   assert_eq(report.block_count, 3U)
   assert_eq(report.total_body_bytes, 12U)
@@ -4194,9 +4197,9 @@ test "analyze wasm breakdown reports deep section and opcode details" {
   assert_eq(report.local_function_count, 2U)
   assert_eq(report.instruction_count, 4U)
   assert_eq(report.instruction_bytes, 5U)
-  assert_true(not(report.opcode_partial))
-  assert_true(not(report.callgraph_partial))
-  assert_true(not(report.has_indirect_calls))
+  assert_true(!report.opcode_partial)
+  assert_true(!report.callgraph_partial)
+  assert_true(!report.has_indirect_calls)
   assert_eq(report.reachable_body_bytes, 7U)
   assert_eq(report.dead_body_bytes, 0U)
   assert_eq(report.top_functions.length(), 2)
@@ -4269,7 +4272,7 @@ test "analyze call graph with dead function" {
   assert_eq(main_node.export_names, ["main"])
   let dead_node = report.nodes[2]
   assert_eq(dead_node.function_index, 3U)
-  assert_true(not(dead_node.reachable_from_roots))
+  assert_true(!dead_node.reachable_from_roots)
 }
 
 ///|
@@ -4282,8 +4285,8 @@ test "analyze call graph summary with dead function" {
   assert_eq(summary.imported_function_count, 1U)
   assert_eq(summary.local_function_count, 3U)
   assert_true(summary.roots.contains(1U))
-  assert_true(not(summary.has_indirect_calls))
-  assert_true(not(summary.partial))
+  assert_true(!summary.has_indirect_calls)
+  assert_true(!summary.partial)
   assert_eq(summary.reachable_function_count, 2U)
   assert_eq(summary.dead_function_count, 1U)
   assert_eq(summary.reachable_body_bytes, 6U)
@@ -4345,7 +4348,7 @@ test "analyze call graph summary marks indirect calls" {
   assert_eq(summary.imported_function_count, 0U)
   assert_eq(summary.local_function_count, 1U)
   assert_true(summary.has_indirect_calls)
-  assert_true(not(summary.partial))
+  assert_true(!summary.partial)
   assert_eq(summary.reachable_function_count, 1U)
   assert_eq(summary.dead_function_count, 0U)
 }
@@ -4417,7 +4420,7 @@ test "analyze host-generated code reports directize and dce metadata" {
     assert_true(false)
     return
   }
-  assert_true(not(dead_report.dce_partial))
+  assert_true(!dead_report.dce_partial)
   assert_eq(dead_report.dce_removable_function_count, 1U)
   assert_eq(dead_report.dce_removable_body_bytes, 5U)
 }
@@ -4466,7 +4469,7 @@ test "analyze call graph supports fc opcodes" {
     return
   }
   assert_eq(report.local_function_count, 1U)
-  assert_true(not(report.partial))
+  assert_true(!report.partial)
   assert_eq(report.reachable_body_bytes, 10U)
   assert_eq(report.dead_body_bytes, 0U)
   assert_eq(report.nodes.length(), 1)
@@ -4480,7 +4483,7 @@ test "analyze call graph supports fd memarg opcodes" {
     return
   }
   assert_eq(report.local_function_count, 1U)
-  assert_true(not(report.partial))
+  assert_true(!report.partial)
   assert_eq(report.reachable_body_bytes, 9U)
   assert_eq(report.dead_body_bytes, 0U)
   assert_eq(report.nodes.length(), 1)
@@ -4493,7 +4496,7 @@ test "analyze dce report extracts removable functions" {
     assert_true(false)
     return
   }
-  assert_true(not(report.partial))
+  assert_true(!report.partial)
   assert_eq(report.removable_function_count, 1U)
   assert_eq(report.removable_body_bytes, 5U)
   assert_eq(report.removable_functions.length(), 1)
@@ -4510,7 +4513,7 @@ test "analyze keep reasons reports export and call-based keep causes" {
     assert_true(false)
     return
   }
-  assert_true(not(report.partial))
+  assert_true(!report.partial)
   assert_eq(report.entries.length(), 2)
   guard find_keep_reason_entry(report.entries, 0U) is Some(main_entry) else {
     assert_true(false)
@@ -4563,7 +4566,7 @@ test "analyze retain paths reports root to callee chain" {
     assert_true(false)
     return
   }
-  assert_true(not(report.partial))
+  assert_true(!report.partial)
   assert_true(report.roots.contains(1U))
   assert_eq(report.entries.length(), 2)
   guard find_retain_path_entry(report.entries, 1U) is Some(main_entry) else {
@@ -4705,11 +4708,9 @@ test "optimize with closed-world dce filters export roots by name" {
     ]),
   )
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [
-        0x04, 0x64, 0x72, 0x6f, 0x70, 0x00, 0x01,
-      ]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [
+      0x04, 0x64, 0x72, 0x6f, 0x70, 0x00, 0x01,
+    ]),
   )
 }
 
@@ -4734,7 +4735,7 @@ test "optimize with safe-mode disables closed-world dce filtering" {
     return
   }
   assert_true(
-    not(optimized.removed_sections.any(s => s.contains("dce:functions:"))),
+    !optimized.removed_sections.any(s => s.contains("dce:functions:")),
   )
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
     assert_true(false)
@@ -4793,7 +4794,7 @@ test "optimize rewrites call_indirect type indices after type pruning" {
   assert_true(optimized.removed_sections.any(s => s.contains("types:1")))
   assert_true(bytes_contains_seq(optimized.bytes, [0x03, 0x02, 0x01, 0x00]))
   assert_true(bytes_contains_seq(optimized.bytes, [0x11, 0x00, 0x00]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x11, 0x01, 0x00])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x11, 0x01, 0x00]))
 }
 
 ///|
@@ -4825,7 +4826,7 @@ test "optimize with dce apply rewrites global and element refs" {
   assert_eq(after_graph.nodes.length(), 2)
   assert_true(after_graph.nodes[0].direct_callees.length() <= 1)
   assert_true(bytes_contains_seq(optimized.bytes, [0xd2, 0x01, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0xd2, 0x02, 0x0b])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0xd2, 0x02, 0x0b]))
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0b, 0x01, 0x01]),
   )
@@ -4851,7 +4852,7 @@ test "analyze call graph does not root element refs on unused tables" {
     return
   }
   assert_true(graph.roots.contains(0U))
-  assert_true(not(graph.roots.contains(1U)))
+  assert_true(!graph.roots.contains(1U))
   assert_eq(graph.dead_body_bytes, 2U)
 }
 
@@ -4863,7 +4864,7 @@ test "analyze call graph roots element refs by used table index" {
     return
   }
   assert_true(graph.roots.contains(0U))
-  assert_true(not(graph.roots.contains(1U)))
+  assert_true(!graph.roots.contains(1U))
   assert_true(graph.roots.contains(2U))
   assert_eq(graph.dead_body_bytes, 2U)
 }
@@ -4891,7 +4892,7 @@ test "optimize with dce keeps functions referenced by global/element roots" {
   }
   assert_eq(after_profile.function_count, 2U)
   assert_true(
-    not(optimized.removed_sections.any(s => s.contains("dce:functions:"))),
+    !optimized.removed_sections.any(s => s.contains("dce:functions:")),
   )
 }
 
@@ -4917,7 +4918,7 @@ test "optimize with rume apply removes unused table and element segment" {
     bytes_contains_seq(optimized.bytes, [0x04, 0x04, 0x01, 0x70, 0x00, 0x01]),
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x00]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x01]))
 }
 
 ///|
@@ -4940,9 +4941,7 @@ test "optimize with rume apply rewrites table.init elem index after element remo
   assert_true(optimized.removed_sections.any(s => s.contains("tables:1")))
   assert_true(optimized.removed_sections.any(s => s.contains("elements:1")))
   assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x0c, 0x00, 0x00]))
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0xfc, 0x0c, 0x01, 0x00])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0xfc, 0x0c, 0x01, 0x00]))
   assert_true(runtime_zero_arg_export_behaviors_equal(bytes, optimized.bytes))
 }
 
@@ -4972,11 +4971,9 @@ test "optimize with rume apply honors closed-world export roots" {
     ]),
   )
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [
-        0x04, 0x64, 0x72, 0x6f, 0x70, 0x00, 0x01,
-      ]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [
+      0x04, 0x64, 0x72, 0x6f, 0x70, 0x00, 0x01,
+    ]),
   )
 }
 
@@ -5020,11 +5017,11 @@ test "optimize with rume apply removes unused import/global/memory/table and rem
     ]),
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x01]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x02])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x02]))
   assert_true(bytes_contains_seq(optimized.bytes, [0x3f, 0x01]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x3f, 0x02])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x3f, 0x02]))
   assert_true(bytes_contains_seq(optimized.bytes, [0x23, 0x02]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x23, 0x03])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x23, 0x03]))
   assert_true(
     bytes_contains_seq(optimized.bytes, [
       0x07, 0x74, 0x5f, 0x6c, 0x6f, 0x63, 0x61, 0x6c, 0x01, 0x01,
@@ -5074,13 +5071,13 @@ test "optimize removes duplicate imports and remaps all related indices" {
   }
   assert_eq(after_profile.import_count, 4U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x10, 0x00]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
   assert_true(bytes_contains_seq(optimized.bytes, [0xd2, 0x00, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0xd2, 0x01, 0x0b])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0xd2, 0x01, 0x0b]))
   assert_true(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x00]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x01]))
   assert_true(bytes_contains_seq(optimized.bytes, [0x3f, 0x00]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x3f, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x3f, 0x01]))
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x03, 0x72, 0x75, 0x6e, 0x00, 0x01]),
   )
@@ -5130,7 +5127,7 @@ test "optimize removes duplicate function imports with equivalent type entries" 
   }
   assert_eq(after_profile.import_count, 1U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x10, 0x00]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x03, 0x72, 0x75, 0x6e, 0x00, 0x01]),
   )
@@ -5161,7 +5158,7 @@ test "optimize simplify-globals rewrites immutable global.get to i32.const" {
     optimized.removed_sections.any(s => s.contains("simplify-globals:gets:1")),
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x07, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x23, 0x00, 0x0b])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x23, 0x00, 0x0b]))
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
@@ -5189,7 +5186,7 @@ test "optimize reorder-globals remaps global indices in code and exports" {
     optimized.removed_sections.any(s => s.contains("reorder-globals:locals:")),
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0x23, 0x00, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x23, 0x02, 0x0b])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x23, 0x02, 0x0b]))
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x02, 0x67, 0x32, 0x03, 0x00]),
   )
@@ -5220,7 +5217,7 @@ test "optimize memory-packing reorders local memories and remaps users" {
     optimized.removed_sections.any(s => s.contains("memory-packing:locals:")),
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0x3f, 0x01, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x3f, 0x02, 0x0b])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x3f, 0x02, 0x0b]))
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x02, 0x6d, 0x32, 0x02, 0x01]),
   )
@@ -5230,11 +5227,9 @@ test "optimize memory-packing reorders local memories and remaps users" {
     ]),
   )
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [
-        0x02, 0x02, 0x41, 0x00, 0x0b, 0x01, 0x00,
-      ]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [
+      0x02, 0x02, 0x41, 0x00, 0x0b, 0x01, 0x00,
+    ]),
   )
 }
 
@@ -5323,9 +5318,7 @@ test "optimize -O1 shrinks rume gain fixture by removing table.size drop" {
     return
   }
   assert_true(optimized.after_size <= 34U)
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x00, 0x1a])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0xfc, 0x10, 0x00, 0x1a]))
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
@@ -5570,14 +5563,12 @@ test "optimize signature pruning removes unused trailing params and rewrites cal
   assert_true(optimized.removed_sections.any(s => s.contains("types:1")))
   assert_true(bytes_contains_seq(optimized.bytes, [0x60, 0x01, 0x7f, 0x00]))
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x60, 0x02, 0x7f, 0x7f, 0x00])),
+    !bytes_contains_seq(optimized.bytes, [0x60, 0x02, 0x7f, 0x7f, 0x00]),
   )
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [
-        0x41, 0x01, 0x41, 0x02, 0x1a, 0x10, 0x01, 0x0b,
-      ]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [
+      0x41, 0x01, 0x41, 0x02, 0x1a, 0x10, 0x01, 0x0b,
+    ]),
   )
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "main", []))
 }
@@ -5610,7 +5601,7 @@ test "optimize inlining-optimizing rewrites call to inline const and enables dce
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x2a, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
     assert_true(false)
     return
@@ -5646,7 +5637,7 @@ test "optimize inlining-optimizing removes identity call and enables dce" {
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
     assert_true(false)
     return
@@ -5684,7 +5675,7 @@ test "optimize inlining-optimizing rewrites call to drop-only callee and enables
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
     assert_true(false)
     return
@@ -5720,7 +5711,7 @@ test "optimize inlining-optimizing accepts explicit return in drop-only callee" 
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
     assert_true(false)
     return
@@ -5756,7 +5747,7 @@ test "optimize inlining-optimizing inlines prefix-param expression callee and en
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x41, 0x0c, 0x41, 0x0a, 0x71]),
   )
@@ -5795,7 +5786,7 @@ test "optimize inlining-optimizing inlines prefix-param expression callee with e
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
     assert_true(false)
     return
@@ -5831,7 +5822,7 @@ test "optimize inlining-optimizing accepts unused locals in noop callee" {
   assert_true(
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
     assert_true(false)
     return
@@ -5867,9 +5858,7 @@ test "optimize dae-optimizing removes pure expression for dropped argument" {
   )
   assert_true(optimized.removed_sections.any(s => s.contains("dae:instrs:")))
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [0x41, 0x0a, 0x41, 0x14, 0x6a, 0x1a]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [0x41, 0x0a, 0x41, 0x14, 0x6a, 0x1a]),
   )
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
@@ -5895,9 +5884,7 @@ test "optimize remove-unused-types prunes unused private gc type" {
     return
   }
   assert_true(optimized.removed_sections.any(s => s.contains("types:1")))
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x5f, 0x01, 0x7f, 0x00])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x5f, 0x01, 0x7f, 0x00]))
 }
 
 ///|
@@ -5920,7 +5907,7 @@ test "optimize remove-unused-types keeps referenced private gc type" {
     assert_true(false)
     return
   }
-  assert_true(not(optimized.removed_sections.any(s => s.contains("types:1"))))
+  assert_true(!optimized.removed_sections.any(s => s.contains("types:1")))
   assert_true(bytes_contains_seq(optimized.bytes, [0x5f, 0x01, 0x7f, 0x00]))
 }
 
@@ -6104,7 +6091,7 @@ test "optimize with merge-similar-functions merges identical function bodies" {
   }
   assert_eq(after_profile.function_count, 2U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x10, 0x01, 0x10, 0x01]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x10, 0x02])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x02]))
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "main", []))
 }
 
@@ -6370,9 +6357,7 @@ test "optimize cfp skips rewrites that increase call immediate leb size" {
     return
   }
   assert_true(optimized.after_size <= optimized.before_size)
-  assert_true(
-    not(optimized.removed_sections.any(s => s.contains("cfp:calls:"))),
-  )
+  assert_true(!optimized.removed_sections.any(s => s.contains("cfp:calls:")))
   guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
     assert_true(false)
     return
@@ -6804,7 +6789,7 @@ test "optimize signature-refining phase3 rewrites const-forward+param-drop thunk
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
   assert_true(
-    not(optimized.removed_sections.any(s => s.contains("cfp-const:calls:"))),
+    !optimized.removed_sections.any(s => s.contains("cfp-const:calls:")),
   )
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
@@ -6848,7 +6833,7 @@ test "optimize signature-refining phase3 rewrites const-forward+param-drop call+
     optimized.removed_sections.any(s => s.contains("dce:functions:1")),
   )
   assert_true(
-    not(optimized.removed_sections.any(s => s.contains("cfp-const:calls:"))),
+    !optimized.removed_sections.any(s => s.contains("cfp-const:calls:")),
   )
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
@@ -6886,7 +6871,7 @@ test "optimize dce cluster rolls back when passes regress size" {
     }),
   )
   assert_true(
-    not(optimized.removed_sections.any(s => s.contains("cfp-const:calls:"))),
+    !optimized.removed_sections.any(s => s.contains("cfp-const:calls:")),
   )
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
     assert_true(false)
@@ -6953,7 +6938,7 @@ test "optimize peephole precomputes i32.const+i32.const+i32.add" {
   assert_eq(after.code_body_bytes, 4U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x2a, 0x0b]))
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x14, 0x41, 0x16, 0x6a])),
+    !bytes_contains_seq(optimized.bytes, [0x41, 0x14, 0x41, 0x16, 0x6a]),
   )
 }
 
@@ -6989,9 +6974,7 @@ test "optimize peephole precomputes i32.add with multibyte nonnegative consts" {
   assert_eq(after.code_body_bytes, 5U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0xb4, 0x08, 0x0b]))
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [0x41, 0x94, 0x08, 0x41, 0x20, 0x6a]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [0x41, 0x94, 0x08, 0x41, 0x20, 0x6a]),
   )
 }
 
@@ -7066,7 +7049,7 @@ test "optimize peephole precomputes i32.const+i32.const+i32.sub" {
   assert_eq(after.code_body_bytes, 4U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x29, 0x0b]))
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x2a, 0x41, 0x01, 0x6b])),
+    !bytes_contains_seq(optimized.bytes, [0x41, 0x2a, 0x41, 0x01, 0x6b]),
   )
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
@@ -7103,11 +7086,9 @@ test "optimize peephole precomputes i32.const+i32.const+i32.cmp" {
   assert_eq(after.code_body_bytes, 4U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0b]))
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [
-        0x41, 0x1f, 0x41, 0xff, 0xff, 0xff, 0x07, 0x4b,
-      ]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [
+      0x41, 0x1f, 0x41, 0xff, 0xff, 0xff, 0x07, 0x4b,
+    ]),
   )
 }
 
@@ -7143,7 +7124,7 @@ test "optimize peephole precomputes i32.const+i32.const+i32.cmp with signed imme
   assert_eq(after.code_body_bytes, 4U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x0b]))
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x7f, 0x41, 0x01, 0x48])),
+    !bytes_contains_seq(optimized.bytes, [0x41, 0x7f, 0x41, 0x01, 0x48]),
   )
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
@@ -7182,11 +7163,9 @@ test "optimize peephole folds local.get+i32.const+i32.add into i32.load offset" 
     bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x28, 0x02, 0x28]),
   )
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [
-        0x20, 0x00, 0x41, 0x20, 0x6a, 0x28, 0x02, 0x08,
-      ]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [
+      0x20, 0x00, 0x41, 0x20, 0x6a, 0x28, 0x02, 0x08,
+    ]),
   )
 }
 
@@ -7267,11 +7246,9 @@ test "optimize peephole folds local.get+i32.const+i32.add into i32.store offset"
     ]),
   )
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [
-        0x20, 0x00, 0x41, 0x20, 0x6a, 0x20, 0x01, 0x36, 0x02, 0x08,
-      ]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [
+      0x20, 0x00, 0x41, 0x20, 0x6a, 0x20, 0x01, 0x36, 0x02, 0x08,
+    ]),
   )
 }
 
@@ -7404,9 +7381,7 @@ test "optimize peephole rewrites local.set+local.get to local.tee" {
   }
   assert_eq(after.code_body_bytes, 8U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x22, 0x00]))
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x21, 0x00, 0x20, 0x00])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x21, 0x00, 0x20, 0x00]))
 }
 
 ///|
@@ -7439,7 +7414,7 @@ test "optimize peephole removes local.get+drop" {
     return
   }
   assert_eq(after.code_body_bytes, 2U)
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x1a])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x1a]))
 }
 
 ///|
@@ -7473,7 +7448,7 @@ test "optimize peephole rewrites local.tee+drop to local.set" {
   }
   assert_eq(after.code_body_bytes, 8U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x21, 0x00]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x22, 0x00, 0x1a])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x22, 0x00, 0x1a]))
 }
 
 ///|
@@ -7506,9 +7481,7 @@ test "optimize peephole removes local.get+local.set noop" {
     return
   }
   assert_eq(after.code_body_bytes, 2U)
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x00])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x00]))
 }
 
 ///|
@@ -7541,9 +7514,7 @@ test "optimize peephole simplifies local.get+local.tee to local.get" {
     return
   }
   assert_eq(after.code_body_bytes, 4U)
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x22, 0x00])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x22, 0x00]))
 }
 
 ///|
@@ -7577,9 +7548,9 @@ test "optimize peephole removes i32 arithmetic identity operations" {
   }
   assert_eq(after.code_body_bytes, 4U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x6a])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x6b])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x6c])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x6a]))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x6b]))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x6c]))
 }
 
 ///|
@@ -7613,10 +7584,10 @@ test "optimize-instructions simplifies i32 identity and same-local patterns" {
   }
   assert_eq(after.code_body_bytes, 4U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x72])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x74])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x72]))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x74]))
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x20, 0x00, 0x73])),
+    !bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x20, 0x00, 0x73]),
   )
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
@@ -7655,10 +7626,10 @@ test "optimize-instructions simplifies bitwise and cmp with i32.const 0" {
     return
   }
   assert_true(after.code_body_bytes < before.code_body_bytes)
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x49])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x4f])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x71])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x46])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x49]))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x4f]))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x71]))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x46]))
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
       -7, -1, 0, 1, 42, 123456,
@@ -7697,16 +7668,16 @@ test "optimize-instructions simplifies const-first bitwise and cmp patterns" {
   }
   assert_true(after.code_body_bytes < before.code_body_bytes)
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x46])),
+    !bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x46]),
   )
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x47])),
+    !bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x47]),
   )
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x72])),
+    !bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x20, 0x00, 0x72]),
   )
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x7f, 0x20, 0x00, 0x71])),
+    !bytes_contains_seq(optimized.bytes, [0x41, 0x7f, 0x20, 0x00, 0x71]),
   )
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
@@ -7749,9 +7720,7 @@ test "optimize local-cse rewrites local.get+local.set+local.get" {
     bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x22, 0x01, 0x0b]),
   )
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x01, 0x20, 0x00]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x01, 0x20, 0x00]),
   )
 }
 
@@ -7788,9 +7757,7 @@ test "optimize rse rewrites local.tee+local.set(same) to local.set" {
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x21, 0x00, 0x0b]),
   )
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x22, 0x00, 0x21, 0x00])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x22, 0x00, 0x21, 0x00]))
 }
 
 ///|
@@ -7823,12 +7790,8 @@ test "optimize local simplify chain reaches fixed-point" {
     return
   }
   assert_eq(after.code_body_bytes, 2U)
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x22, 0x00])),
-  )
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x00])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x22, 0x00]))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x21, 0x00]))
 }
 
 ///|
@@ -7861,9 +7824,7 @@ test "optimize precompute removes dead overwritten local.set" {
     return
   }
   assert_eq(after.code_body_bytes, 8U)
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x21, 0x00])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x21, 0x00]))
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
@@ -7899,9 +7860,7 @@ test "optimize precompute removes i32.const 0 + br_if" {
     return
   }
   assert_eq(after.code_body_bytes, 5U)
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0d, 0x00])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0d, 0x00]))
 }
 
 ///|
@@ -7939,9 +7898,7 @@ test "optimize precompute rewrites i32.const nonzero + br_if to br" {
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x02, 0x40, 0x0c, 0x00, 0x0b]),
   )
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x0d, 0x00])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x01, 0x0d, 0x00]))
 }
 
 ///|
@@ -7980,7 +7937,7 @@ test "optimize precompute rewrites i32.const multibyte nonzero + br_if to br" {
     bytes_contains_seq(optimized.bytes, [0x02, 0x40, 0x0c, 0x00, 0x0b]),
   )
   assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x80, 0x01, 0x0d, 0x00])),
+    !bytes_contains_seq(optimized.bytes, [0x41, 0x80, 0x01, 0x0d, 0x00]),
   )
 }
 
@@ -8016,9 +7973,7 @@ test "optimize precompute rewrites block+br_if0 to if form" {
   }
   assert_true(after.code_body_bytes < before.code_body_bytes)
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [0x02, 0x40, 0x20, 0x00, 0x0d, 0x00]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [0x02, 0x40, 0x20, 0x00, 0x0d, 0x00]),
   )
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x45, 0x04, 0x40]),
@@ -8062,11 +8017,9 @@ test "optimize precompute rewrites block+br_if0 with multi-instruction cond to i
   }
   assert_true(after.code_body_bytes < before.code_body_bytes)
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [
-        0x02, 0x40, 0x20, 0x00, 0x41, 0x0a, 0x49, 0x0d, 0x00,
-      ]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [
+      0x02, 0x40, 0x20, 0x00, 0x41, 0x0a, 0x49, 0x0d, 0x00,
+    ]),
   )
   assert_true(
     bytes_contains_seq(optimized.bytes, [
@@ -8111,7 +8064,7 @@ test "optimize precompute rewrites br_if 0 before end to drop/dae" {
     return
   }
   assert_true(after.code_body_bytes < before.code_body_bytes)
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x0d, 0x00, 0x0b])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x0d, 0x00, 0x0b]))
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
       -7, -1, 0, 1, 42, 123456,
@@ -8158,9 +8111,7 @@ test "optimize precompute removes i32.eqz+i32.eqz before br_if" {
     bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x1a]),
   )
   assert_true(
-    not(
-      bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x45, 0x45, 0x0d, 0x00]),
-    ),
+    !bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x45, 0x45, 0x0d, 0x00]),
   )
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
@@ -8202,9 +8153,7 @@ test "optimize precompute folds i32.eqz on multibyte i32.const" {
   }
   assert_eq(after.code_body_bytes, 4U)
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x0b]))
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x41, 0x80, 0x01, 0x45])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x80, 0x01, 0x45]))
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
@@ -8240,7 +8189,7 @@ test "optimize precompute rewrites x+i32.const 0+i32.ne to i32.eqz+i32.eqz" {
     return
   }
   assert_eq(after.code_body_bytes, 9U)
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x47])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x41, 0x00, 0x47]))
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x28, 0x02, 0x00, 0x45, 0x45]),
   )
@@ -8279,7 +8228,7 @@ test "optimize precompute rewrites x+i64.const 0+i64.ne to i64.eqz+i32.eqz" {
     return
   }
   assert_eq(after.code_body_bytes, 6U)
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x42, 0x00, 0x52])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x42, 0x00, 0x52]))
   assert_true(
     bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x50, 0x45, 0x0b]),
   )
@@ -8316,9 +8265,7 @@ test "optimize precompute removes local-bool i32.eqz+i32.eqz" {
     return
   }
   assert_true(after.code_body_bytes < before.code_body_bytes)
-  assert_true(
-    not(bytes_contains_seq(optimized.bytes, [0x20, 0x01, 0x45, 0x45])),
-  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x20, 0x01, 0x45, 0x45]))
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
       -7, -1, 0, 1, 42, 123456,
@@ -8396,7 +8343,7 @@ test "optimize precompute propagates local const and folds arithmetic" {
   }
   assert_true(after.code_body_bytes < before.code_body_bytes)
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0x2b, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x20, 0x00]))
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
@@ -8429,7 +8376,7 @@ test "optimize precompute propagates negative local const and folds and -1" {
     return
   }
   assert_true(after.code_body_bytes < before.code_body_bytes)
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x20, 0x01]))
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
       -7, -1, 0, 1, 42,
@@ -8468,7 +8415,7 @@ test "optimize precompute propagates multibyte local const and folds arithmetic"
   }
   assert_true(after.code_body_bytes < before.code_body_bytes)
   assert_true(bytes_contains_seq(optimized.bytes, [0x41, 0xb4, 0x08, 0x0b]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x00])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x20, 0x00]))
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
@@ -8558,7 +8505,7 @@ test "optimize with dce apply directizes const call_indirect to call" {
     optimized.removed_sections.any(s => s.contains("directize:calls:1")),
   )
   assert_true(bytes_contains_seq(optimized.bytes, [0x10, 0x00]))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x11, 0x01, 0x00])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x11, 0x01, 0x00]))
 }
 
 ///|
@@ -8631,8 +8578,8 @@ test "optimize coalesces unused locals and remaps local indices" {
   assert_true(
     optimized.removed_sections.any(s => s.contains("coalesce-locals:removed:1")),
   )
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x21, 0x01])))
-  assert_true(not(bytes_contains_seq(optimized.bytes, [0x20, 0x01])))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x21, 0x01]))
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x20, 0x01]))
   assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
@@ -9051,7 +8998,7 @@ test "component root policy report combines component/wit/canonical roots" {
       return
     }
   }
-  guard analyze_component_root_policy(bytes, resolved_wit=Some(resolved))
+  guard analyze_component_root_policy(bytes, resolved_wit=resolved)
     is Ok(policy) else {
     assert_true(false)
     return
@@ -9195,7 +9142,7 @@ test "kpi core runtime corpus -O1 preserves runtime behavior" {
     } else {
       runtime_zero_arg_export_behaviors_equal(bytes, result.bytes)
     }
-    if not(ok) {
+    if !ok {
       inspect(path, content="runtime mismatch")
       assert_true(false)
       return

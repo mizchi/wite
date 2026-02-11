@@ -16,7 +16,7 @@ pub fn analyze_component_core_optimize(Bytes, config? : @types.OptimizeConfig, e
 
 pub fn analyze_component_function_sizes(Bytes) -> Result[Array[@types.ComponentFunctionSizeReport], String]
 
-pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput?, exclude? : Array[String]) -> Result[@types.ComponentRootPolicyReport, String]
+pub fn analyze_component_root_policy(Bytes, resolved_wit? : @wit.ResolveInput, exclude? : Array[String]) -> Result[@types.ComponentRootPolicyReport, String]
 
 pub fn analyze_hotness_size_matrix(Bytes, iterations? : UInt, scenarios? : Array[@types.RuntimeProfileScenario]) -> Result[@types.HotnessSizeMatrixReport, String]
 
@@ -25,6 +25,8 @@ pub fn apply_directize_raise(Bytes) -> @optimize.DirectizeApplyResult raise @typ
 pub fn bytes_equal(Bytes, Bytes) -> Bool
 
 pub fn collect_call_forwarding_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, @optimize.FunctionTypeEntry], Array[UInt], Map[UInt, UInt]) -> Map[UInt, UInt]
+
+pub fn collect_call_indirect_table_indices_from_code_section(Bytes) -> Array[UInt]?
 
 pub fn collect_const_call_forwarding_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, @optimize.FunctionTypeEntry], Map[UInt, UInt]) -> Map[UInt, @optimize.CfpConstAlias]
 
@@ -73,6 +75,8 @@ pub fn parse_core_sections_raise(Bytes) -> Array[@optimize.RawSection] raise @ty
 pub fn parse_custom_section_name_prefix_end(Bytes) -> Int raise @types.WiteError
 
 pub fn parse_element_section_function_refs_raise(Bytes) -> Array[UInt] raise @types.WiteError
+
+pub fn parse_element_section_table_function_refs_raise(Bytes) -> Map[UInt, Array[UInt]] raise @types.WiteError
 
 pub fn parse_export_function_names(Bytes) -> Map[UInt, Array[String]] raise @types.WiteError
 

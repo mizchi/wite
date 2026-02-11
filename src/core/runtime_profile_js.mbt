@@ -15,7 +15,7 @@ fn split_non_empty(s : String, delim : String) -> Array[String] {
   let out : Array[String] = []
   for part in s.split(delim) {
     let item = part.to_string()
-    if not(item.is_empty()) {
+    if !item.is_empty() {
       out.push(item)
     }
   }
@@ -100,10 +100,9 @@ fn serialize_runtime_profile_scenarios(
   }
   let entries : Array[String] = []
   for scenario in scenarios {
-    let args_text = if scenario.args.length() == 0 {
-      ""
-    } else {
-      scenario.args.map(v => v.to_string()).join(",")
+    let args_text = match scenario.args {
+      [] => ""
+      [_, ..] => scenario.args.map(v => v.to_string()).join(",")
     }
     entries.push(scenario.export_name + "\t" + args_text)
   }

@@ -3,7 +3,6 @@ fn read_fixture_or_fail(path : String) -> Bytes {
   @fs.read_file_to_bytes(path) catch {
     e => {
       println("failed to read fixture: " + path + " (" + e.to_string() + ")")
-      panic()
       b""
     }
   }
@@ -73,21 +72,21 @@ fn must_analyze_call_graph_summary_score(bytes : Bytes) -> UInt {
 ///|
 test "bench: core profile binaryen zlib" (b : @bench.T) {
   let bytes = read_fixture_or_fail("bench/corpus/core/binaryen/zlib.wasm")
-  b.bench(fn() { b.keep(must_profile_module_total(bytes)) })
+  b.bench(() => b.keep(must_profile_module_total(bytes)))
 }
 
 ///|
 test "bench: core optimize -O2 binaryen zlib" (b : @bench.T) {
   let bytes = read_fixture_or_fail("bench/corpus/core/binaryen/zlib.wasm")
   let config = OptimizeConfig::o2()
-  b.bench(fn() { b.keep(must_optimize_after_size(bytes, config)) })
+  b.bench(() => b.keep(must_optimize_after_size(bytes, config)))
 }
 
 ///|
 test "bench: core optimize -O1 binaryen zlib" (b : @bench.T) {
   let bytes = read_fixture_or_fail("bench/corpus/core/binaryen/zlib.wasm")
   let config = OptimizeConfig::o1()
-  b.bench(fn() { b.keep(must_optimize_after_size(bytes, config)) })
+  b.bench(() => b.keep(must_optimize_after_size(bytes, config)))
 }
 
 ///|
@@ -96,7 +95,7 @@ test "bench: core optimize -O1 binaryen gc_target_feature" (b : @bench.T) {
     "bench/corpus/core/binaryen/gc_target_feature.wasm",
   )
   let config = OptimizeConfig::o1()
-  b.bench(fn() { b.keep(must_optimize_after_size(bytes, config)) })
+  b.bench(() => b.keep(must_optimize_after_size(bytes, config)))
 }
 
 ///|
@@ -104,7 +103,7 @@ test "bench: component profile wac dummy_wasi_http_0.2.3" (b : @bench.T) {
   let bytes = read_fixture_or_fail(
     "bench/corpus/component/wac/dummy_wasi_http_0.2.3.wasm",
   )
-  b.bench(fn() { b.keep(must_profile_component_total(bytes)) })
+  b.bench(() => b.keep(must_profile_component_total(bytes)))
 }
 
 ///|
@@ -126,20 +125,20 @@ test "bench: component top functions wac dummy_wasi_http_0.2.3" (b : @bench.T) {
 ///|
 test "bench: core deep analyze binaryen zlib (top20)" (b : @bench.T) {
   let bytes = read_fixture_or_fail("bench/corpus/core/binaryen/zlib.wasm")
-  b.bench(fn() { b.keep(must_analyze_wasm_breakdown_score(bytes, 20U)) })
+  b.bench(() => b.keep(must_analyze_wasm_breakdown_score(bytes, 20U)))
 }
 
 ///|
 test "bench: core analyze summary pglite" (b : @bench.T) {
   let bytes = read_fixture_or_fail("bench/corpus/core/pglite/pglite.wasm")
-  b.bench(fn() { b.keep(must_analyze_call_graph_summary_score(bytes)) })
+  b.bench(() => b.keep(must_analyze_call_graph_summary_score(bytes)))
 }
 
 ///|
 test "bench: core optimize -O1 pglite" (b : @bench.T) {
   let bytes = read_fixture_or_fail("bench/corpus/core/pglite/pglite.wasm")
   let config = OptimizeConfig::o1()
-  b.bench(fn() { b.keep(must_optimize_after_size(bytes, config)) })
+  b.bench(() => b.keep(must_optimize_after_size(bytes, config)))
 }
 
 ///|
@@ -147,5 +146,5 @@ test "bench: core analyze summary duckdb-mvp" (b : @bench.T) {
   let bytes = read_fixture_or_fail(
     "bench/corpus/core-analyze/duckdb/duckdb-mvp.wasm",
   )
-  b.bench(fn() { b.keep(must_analyze_call_graph_summary_score(bytes)) })
+  b.bench(() => b.keep(must_analyze_call_graph_summary_score(bytes)))
 }

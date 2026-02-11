@@ -239,17 +239,17 @@ pub fn analyze_component_contract(
   let component_exports = unique_sorted(
     detail.exports.map(item => item.name.to_string()),
   )
-  let wit_imports = unique_sorted(world_keys(world.imports))
-  let wit_exports = unique_sorted(world_keys(world.exports))
+  let wit_imports = world.imports |> world_keys |> unique_sorted
+  let wit_exports = world.exports |> world_keys |> unique_sorted
   let missing_component_imports : Array[String] = []
   for name in wit_imports {
-    if not(component_imports.contains(name)) {
+    if !component_imports.contains(name) {
       missing_component_imports.push(name)
     }
   }
   let missing_component_exports : Array[String] = []
   for name in wit_exports {
-    if not(component_exports.contains(name)) {
+    if !component_exports.contains(name) {
       missing_component_exports.push(name)
     }
   }
@@ -284,7 +284,7 @@ fn collect_canonical_abi_root_names(
 ///|
 pub fn analyze_component_root_policy(
   bytes : Bytes,
-  resolved_wit? : @wit.ResolveInput? = None,
+  resolved_wit? : @wit.ResolveInput,
   exclude? : Array[String] = [],
 ) -> Result[ComponentRootPolicyReport, String] {
   let detail = match @mwac_component.parse_component_detail(bytes) {
@@ -299,17 +299,14 @@ pub fn analyze_component_root_policy(
   )
   let mut wit_imports : Array[String] = []
   let mut wit_exports : Array[String] = []
-  match resolved_wit {
-    Some(resolved) => {
-      if resolved.world_id < 0 ||
-        resolved.world_id >= resolved.resolve.worlds.length() {
-        return Err("invalid world id: " + resolved.world_id.to_string())
-      }
-      let world = resolved.resolve.worlds[resolved.world_id]
-      wit_imports = unique_sorted(world_keys(world.imports))
-      wit_exports = unique_sorted(world_keys(world.exports))
+  if resolved_wit is Some(resolved) {
+    if resolved.world_id < 0 ||
+      resolved.world_id >= resolved.resolve.worlds.length() {
+      return Err("invalid world id: " + resolved.world_id.to_string())
     }
-    None => ()
+    let world = resolved.resolve.worlds[resolved.world_id]
+    wit_imports = world.imports |> world_keys |> unique_sorted
+    wit_exports = world.exports |> world_keys |> unique_sorted
   }
   let canonical_abi_roots = collect_canonical_abi_root_names(
     component_exports, wit_exports,
@@ -440,7 +437,7 @@ fn classify_hotness_size_bucket(
   large_threshold_bytes : UInt,
   resolved : Bool,
 ) -> String {
-  if not(resolved) {
+  if !resolved {
     return "unresolved"
   }
   let hot = total_ns >= hot_threshold_ns
@@ -539,14 +536,8 @@ fn collect_hotness_unresolved_reason_counts(
     if entry.bucket != "unresolved" {
       continue
     }
-    let reason = match entry.unresolved_reason {
-      Some(v) => v
-      None => "unknown"
-    }
-    let prev = match counts.get(reason) {
-      Some(v) => v
-      None => 0U
-    }
+    let reason = entry.unresolved_reason.unwrap_or("unknown")
+    let prev = counts.get(reason).unwrap_or(0U)
     counts.set(reason, prev + 1U)
   }
   let out : Array[HotnessUnresolvedReasonCount] = []
