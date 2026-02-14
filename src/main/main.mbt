@@ -15,7 +15,6 @@ async fn main {
     "deps" => @wite_deps.run_deps_command(args, print_usage)
     "diff" => run_diff_command(args)
     "optimize" => run_optimize(args)
-    "componentize" => run_componentize_command(args)
     _ => {
       print_usage()
       @sys.exit(1)
