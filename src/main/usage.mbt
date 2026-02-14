@@ -16,6 +16,10 @@ fn print_usage() -> Unit {
   println("  optimize <input.wasm> <output.wasm> [options]")
   println("  deps verify|sync [options]")
   println("  analyze [subcommand] <file.wasm> [options]")
+  println("  componentize [--force]")
+  println(
+    "  componentize <core.wasm> [-o <path>] [--wit <dir>] [--world <name>]",
+  )
   println("")
   println("Run 'wite <command> -h' for more information on a command.")
 }

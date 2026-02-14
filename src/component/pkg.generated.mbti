@@ -2,6 +2,8 @@
 package "mizchi/wite/component"
 
 // Values
+pub fn componentize_core_module(Bytes) -> Result[ComponentizeResult, String]
+
 pub fn read_bytes_or_exit(String) -> Bytes
 
 pub fn run_component_callgraph(String, UInt) -> Unit
@@ -23,6 +25,10 @@ pub fn verify_component_interface(Bytes, String, world? : String) -> Result[Unit
 // Errors
 
 // Types and methods
+pub(all) struct ComponentizeResult {
+  bytes : Bytes
+  exported_functions : Array[String]
+}
 
 // Type aliases
 
