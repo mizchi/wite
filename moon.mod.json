@@ -4,8 +4,8 @@
   "deps": {
     "moonbitlang/async": "0.16.2",
     "moonbitlang/x": "0.4.40",
-    "mizchi/mwac": "0.1.2",
-    "mizchi/wit": "0.1.1",
+    "mizchi/mwac": "0.1.6",
+    "mizchi/wit": "0.2.4",
     "mizchi/oci_wasm": "0.3.0"
   },
   "source": "src",
