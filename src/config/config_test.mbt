@@ -350,6 +350,15 @@ test "parse_wite_config_json backward compat empty object" {
 }
 
 ///|
+test "is_ts_config detects typescript config files" {
+  assert_true(@config.is_ts_config("wite.config.ts"))
+  assert_true(@config.is_ts_config("path/to/wite.config.ts"))
+  assert_true(!@config.is_ts_config("wite.config.jsonc"))
+  assert_true(!@config.is_ts_config("wite.config.json"))
+  assert_true(!@config.is_ts_config("config.ts.bak"))
+}
+
+///|
 test "config_input_single_path" {
   inspect(
     @config.config_input_single_path(@config.ConfigInput::new_none()),

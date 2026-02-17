@@ -10,6 +10,8 @@ pub fn config_input_single_path(ConfigInput) -> String?
 
 pub fn empty_wite_config_file() -> WiteConfigFile
 
+pub fn is_ts_config(String) -> Bool
+
 pub fn load_wite_config_or_exit(String) -> WiteConfigFile
 
 pub fn merge_command_flags(Array[String], Array[String]) -> Array[String]
@@ -31,6 +33,8 @@ pub fn parse_wite_config_json(Json) -> Result[WiteConfigFile, String]
 pub fn parse_wite_config_section(Json, String) -> Result[(Array[String], BinaryKind), String]
 
 pub fn parse_wite_config_text(String) -> Result[WiteConfigFile, String]
+
+pub fn resolve_config_file_path(ConfigSelectionFlags) -> String?
 
 pub fn resolve_wite_config_or_default(ConfigSelectionFlags) -> WiteConfigFile
 

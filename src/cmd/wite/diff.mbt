@@ -1,5 +1,5 @@
 ///|
-fn run_diff_command(args : Array[String]) -> Unit {
+async fn run_diff_command(args : Array[String]) -> Unit {
   if args.length() < 3 {
     print_usage()
     @sys.exit(1)
@@ -86,7 +86,7 @@ fn run_diff_command(args : Array[String]) -> Unit {
     match baseline {
       Some(DiffBaseline::WasmOpt) => {
         let wasm_opt_bin = resolve_wasm_opt_bin(wasm_opt_bin_override)
-        let output_path = js_make_temp_wasm_path("wite-diff-wasm-opt")
+        let output_path = make_temp_wasm_path("wite-diff-wasm-opt")
         run_wasm_opt_baseline_or_exit(
           left_path, output_path, wasm_opt_bin, baseline_opt_level, wasm_opt_extra_args,
         )

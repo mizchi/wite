@@ -1,12 +1,21 @@
 ///|
 fn init_wite_config_template_text() -> String {
   let template =
-    #|{
-    #|  "build": { "kind": "auto", "flags": ["-Oz"] },
-    #|  "analyze": { "kind": "core", "flags": ["--view=summary"] },
-    #|  "profile": { "kind": "auto", "flags": [] },
-    #|  "deps": {}
-    #|}
+    #|type WiteConfig = {
+    #|  build?: { kind?: "auto" | "core" | "component"; flags?: string[] };
+    #|  analyze?: { kind?: "auto" | "core" | "component"; flags?: string[] } | string[];
+    #|  profile?: { kind?: "auto" | "core" | "component"; flags?: string[] } | string[];
+    #|  input?: string | Record<string, string>;
+    #|  output?: string | { dir?: string };
+    #|  deps?: Record<string, string>;
+    #|};
+    #|
+    #|export default {
+    #|  build: { kind: "auto", flags: ["-Oz"] },
+    #|  analyze: { kind: "core", flags: ["--view=summary"] },
+    #|  profile: { kind: "auto", flags: [] },
+    #|  deps: {},
+    #|} satisfies WiteConfig;
     #|
   template
 }
@@ -34,7 +43,7 @@ fn write_init_file(path : String, content : String, force : Bool) -> Bool {
   if @fs.path_exists(path) && !force {
     return false
   }
-  js_ensure_parent_dir_for_file(path)
+  ensure_parent_dir(path)
   @fs.write_string_to_file(path, content) catch {
     e => {
       println("failed to write file: " + path + " (" + e.to_string() + ")")
@@ -57,7 +66,7 @@ fn run_init_command(args : Array[String]) -> Unit {
     print_usage()
     @sys.exit(1)
   }
-  let config_path = "wite.config.jsonc"
+  let config_path = "wite.config.ts"
   let wac_path = "main.wac"
   let config_written = write_init_file(
     config_path,

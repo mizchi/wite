@@ -20,7 +20,7 @@ just example-sample-app
 内部的には次を実行します:
 
 ```bash
-moon run src/main --target js -- build ./examples/sample_app/main.wac --no-config -o ./examples/sample_app/sample.composed.wasm
+moon run src/cmd/wite --target js -- build ./examples/sample_app/main.wac --no-config -o ./examples/sample_app/sample.composed.wasm
 ```
 
 `--no-config` により、ネットワーク依存なしでローカル `deps/` だけで compose できます。
@@ -32,6 +32,6 @@ moon run src/main --target js -- build ./examples/sample_app/main.wac --no-confi
 
 ```bash
 cd examples/sample_app
-moon run ../../src/main --target js -- new --moonbit --force
+moon run ../../src/cmd/wite --target js -- new --moonbit --force
 # main.wac は sample 用に戻す
 ```

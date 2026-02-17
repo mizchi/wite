@@ -168,7 +168,7 @@ just check         # type check
 just test          # run tests
 just bench         # run benchmark suite
 just kpi           # collect KPI report
-just run           # run CLI (src/main)
+just run           # run CLI (src/cmd/wite)
 just info          # generate .mbti
 just release-check # fmt + info + check + test
 ```

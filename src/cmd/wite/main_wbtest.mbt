@@ -378,8 +378,8 @@ test "collect wac new package names extracts instantiated packages" {
 ///|
 test "init templates include quickstart defaults" {
   let config = init_wite_config_template_text()
-  assert_true(config.contains("\"build\""))
-  assert_true(config.contains("\"deps\""))
+  assert_true(config.contains("build:"))
+  assert_true(config.contains("deps:"))
   let wac = init_main_wac_template_text()
   assert_true(wac.contains("wite add dep:a"))
   assert_true(wac.contains("let a = new dep:a {}"))
@@ -504,7 +504,7 @@ test "new --moonbit generates buildable moonbit guest template" {
       restore_error,
     )
   }
-  (temp_dir + "/wite.config.jsonc") |> @fs.path_exists |> assert_true
+  (temp_dir + "/wite.config.ts") |> @fs.path_exists |> assert_true
   (temp_dir + "/main.wac") |> @fs.path_exists |> assert_true
   (temp_dir + "/guest/moonbit/moon.mod.json") |> @fs.path_exists |> assert_true
   let raw = js_run_command_in_dir(
@@ -621,7 +621,7 @@ extern "js" fn js_prepare_build_bundle_fixture_workspace() -> String =
   #|     let dir = process.cwd();
   #|     while (true) {
   #|       if (fs.existsSync(path.join(dir, 'moon.mod.json')) &&
-  #|           fs.existsSync(path.join(dir, 'src', 'main', 'main.mbt'))) {
+  #|           fs.existsSync(path.join(dir, 'src', 'cmd', 'wite', 'main.mbt'))) {
   #|         return dir;
   #|       }
   #|       const parent = path.dirname(dir);
@@ -678,7 +678,7 @@ extern "js" fn js_prepare_example_sample_app_workspace() -> String =
   #|     let dir = process.cwd();
   #|     while (true) {
   #|       if (fs.existsSync(path.join(dir, 'moon.mod.json')) &&
-  #|           fs.existsSync(path.join(dir, 'src', 'main', 'main.mbt'))) {
+  #|           fs.existsSync(path.join(dir, 'src', 'cmd', 'wite', 'main.mbt'))) {
   #|         return dir;
   #|       }
   #|       const parent = path.dirname(dir);
@@ -1217,6 +1217,40 @@ test "build auto sync deps command args pins config and fail-fast" {
     @wite_config.build_auto_sync_deps_command_args("./wite.config.jsonc"),
     ["wite", "deps", "sync", "--config=./wite.config.jsonc", "--fail-fast"],
   )
+}
+
+///|
+async test "evaluate_ts_config parses valid ts config file" {
+  let temp_dir = js_make_temp_dir("wite-ts-config-")
+  let config_path = temp_dir + "/wite.config.ts"
+  let ts_content =
+    #|export default {
+    #|  build: { kind: "auto", flags: ["-Oz"] },
+    #|  analyze: { kind: "core", flags: ["--view=summary"] },
+    #|};
+    #|
+  @fs.write_string_to_file(config_path, ts_content) catch {
+    e => {
+      js_remove_dir_recursive(temp_dir)
+      fail("failed to write ts config: " + e.to_string())
+    }
+  }
+  let raw = evaluate_ts_config(config_path)
+  js_remove_dir_recursive(temp_dir)
+  let tab_index = raw.find("\t")
+  guard tab_index is Some(i) else {
+    fail("expected tab-separated result from evaluate_ts_config: " + raw)
+  }
+  let tag = raw[:i].to_string() catch { _ => raw }
+  let payload = raw[i + 1:].to_string() catch { _ => "" }
+  assert_eq(tag, "ok")
+  guard @wite_config.parse_wite_config_text(payload) is Ok(config) else {
+    fail("failed to parse ts config output: " + payload)
+  }
+  assert_eq(config.build_flags, ["-Oz"])
+  assert_eq(config.analyze_flags, ["--view=summary"])
+  assert_true(config.build_kind is @wite_config.BinaryKind::Auto)
+  assert_true(config.analyze_kind is @wite_config.BinaryKind::Core)
 }
 
 ///|

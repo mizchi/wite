@@ -1,6 +1,6 @@
 ///|
 fn write_output_or_exit(output_path : String, bytes : Bytes) -> Unit {
-  js_ensure_parent_dir_for_file(output_path)
+  ensure_parent_dir(output_path)
   @fs.write_bytes_to_file(output_path, bytes) catch {
     e => {
       println(

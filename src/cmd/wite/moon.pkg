@@ -11,17 +11,15 @@ import {
   "mizchi/x/fs" @xfs,
   "moonbitlang/async",
   "moonbitlang/async/io" @io,
+  "moonbitlang/core/random" @random,
   "moonbitlang/x/fs" @fs,
   "moonbitlang/x/sys" @sys,
 }
 
 options(
   "is-main": true,
-  "native-stub": [ "ffi_native.c" ],
   targets: {
     "dev_e2e_wbtest.mbt": [ "js" ],
-    "main_ffi_js.mbt": [ "js" ],
-    "main_ffi_native.mbt": [ "native" ],
     "main_wbtest.mbt": [ "js" ],
   },
 )

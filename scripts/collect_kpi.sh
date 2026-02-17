@@ -105,13 +105,13 @@ parse_optimized_before_after() {
 
 parse_profile_code_body_bytes() {
   local wasm_path="$1"
-  moon run src/main --target js -- analyze profile "$wasm_path" 2>/dev/null |
+  moon run src/cmd/wite --target js -- analyze profile "$wasm_path" 2>/dev/null |
     awk -F ': ' '/^  code_body_bytes: / { print $2; exit }'
 }
 
 parse_block_total_instruction_bytes() {
   local wasm_path="$1"
-  moon run src/main --target js -- analyze block-sizes "$wasm_path" 0 2>/dev/null |
+  moon run src/cmd/wite --target js -- analyze block-sizes "$wasm_path" 0 2>/dev/null |
     awk -F ': ' '/^  total_instruction_bytes: / { print $2; exit }'
 }
 
@@ -145,7 +145,7 @@ core_analyze_only_corpus_files() {
 parse_section_sizes_to_tsv() {
   local wasm_path="$1"
   local out_tsv="$2"
-  moon run src/main --target js -- analyze "$wasm_path" 2>/dev/null |
+  moon run src/cmd/wite --target js -- analyze "$wasm_path" 2>/dev/null |
     awk '
       /^[[:space:]]+[^:][^:]*: [0-9]+ bytes( \([0-9.]+%\))?$/ {
         line = $0
@@ -429,7 +429,7 @@ generate_zlib_gap_report() {
   zlib_gap_before_bytes="$(wc -c < "$zlib_abs" | tr -d '[:space:]')"
 
   local zlib_o1_output zlib_line parsed_before_after
-  if zlib_o1_output="$(moon run src/main --target js -- optimize "$zlib_rel" "$tmp_zlib_wite" -O1 --verbose 2>&1)"; then
+  if zlib_o1_output="$(moon run src/cmd/wite --target js -- optimize "$zlib_rel" "$tmp_zlib_wite" -O1 --verbose 2>&1)"; then
     zlib_line="$(extract_optimized_line "$zlib_o1_output")"
     if [[ -n "${zlib_line:-}" ]] && parsed_before_after="$(parse_optimized_before_after "$zlib_line")"; then
       local zlib_before_from_opt
@@ -511,16 +511,16 @@ generate_zlib_gap_report() {
     zlib_gap_type_section_to_wasm_opt_bytes=$((zlib_type_gain_wasm_opt - zlib_type_gain_wite))
   fi
 
-  moon run src/main --target js -- analyze top-functions "$zlib_rel" 20 > "$tmp_zlib_fn_before" 2>&1 || true
-  moon run src/main --target js -- analyze top-functions "$tmp_zlib_wite" 20 > "$tmp_zlib_fn_wite" 2>&1 || true
+  moon run src/cmd/wite --target js -- analyze top-functions "$zlib_rel" 20 > "$tmp_zlib_fn_before" 2>&1 || true
+  moon run src/cmd/wite --target js -- analyze top-functions "$tmp_zlib_wite" 20 > "$tmp_zlib_fn_wite" 2>&1 || true
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
-    moon run src/main --target js -- analyze top-functions "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_fn_wasm_opt" 2>&1 || true
+    moon run src/cmd/wite --target js -- analyze top-functions "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_fn_wasm_opt" 2>&1 || true
   else
     echo "wasm-opt unavailable" > "$tmp_zlib_fn_wasm_opt"
   fi
   echo -e "rank\tkind\tkey\tleft_idx\tright_idx\tleft_body_bytes\tright_body_bytes\tdelta_bytes\tabs_gap_bytes\tleft_exports\tright_exports" > "$ZLIB_FUNCTION_GAP_TSV"
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
-    moon run src/main --target js -- analyze function-gap "$tmp_zlib_wite" "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_function_gap_raw" 2>&1 || true
+    moon run src/cmd/wite --target js -- analyze function-gap "$tmp_zlib_wite" "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_function_gap_raw" 2>&1 || true
     awk -F '\t' '
       /^[[:space:]]*tsv\t/ {
         rank += 1
@@ -536,10 +536,10 @@ generate_zlib_gap_report() {
     zlib_function_gap_positive_sum_bytes="NA"
   fi
 
-  moon run src/main --target js -- analyze block-sizes "$zlib_rel" 20 > "$tmp_zlib_block_before" 2>&1 || true
-  moon run src/main --target js -- analyze block-sizes "$tmp_zlib_wite" 20 > "$tmp_zlib_block_wite" 2>&1 || true
+  moon run src/cmd/wite --target js -- analyze block-sizes "$zlib_rel" 20 > "$tmp_zlib_block_before" 2>&1 || true
+  moon run src/cmd/wite --target js -- analyze block-sizes "$tmp_zlib_wite" 20 > "$tmp_zlib_block_wite" 2>&1 || true
   if is_uint "$zlib_gap_wasm_opt_after_bytes"; then
-    moon run src/main --target js -- analyze block-sizes "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_block_wasm_opt" 2>&1 || true
+    moon run src/cmd/wite --target js -- analyze block-sizes "$tmp_zlib_wasm_opt" 20 > "$tmp_zlib_block_wasm_opt" 2>&1 || true
   else
     echo "wasm-opt unavailable" > "$tmp_zlib_block_wasm_opt"
   fi
@@ -714,7 +714,7 @@ while IFS= read -r file; do
       break
     fi
   done
-  if ! o1_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" -O1 --verbose 2>&1)"; then
+  if ! o1_output="$(moon run src/cmd/wite --target js -- optimize "$rel" "$tmp_wasm" -O1 --verbose 2>&1)"; then
     echo "failed to optimize with -O1: $rel" >&2
     exit 1
   fi
@@ -748,7 +748,7 @@ while IFS= read -r file; do
   code_gain_bytes="NA"
   waterfall_total_gain_bytes="NA"
 
-  if strip_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=1 --no-peephole --no-vacuum --no-merge-blocks --no-remove-unused-brs --verbose 2>&1)"; then
+  if strip_output="$(moon run src/cmd/wite --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=1 --no-peephole --no-vacuum --no-merge-blocks --no-remove-unused-brs --verbose 2>&1)"; then
     record_no_change_reasons "$strip_output" "strip" "$rel"
     strip_line="$(extract_optimized_line "$strip_output")"
     if [[ -n "${strip_line:-}" ]] && parsed_before_after="$(parse_optimized_before_after "$strip_line")"; then
@@ -764,7 +764,7 @@ while IFS= read -r file; do
     waterfall_status="strip-error"
   fi
 
-  if pre_dce_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --verbose 2>&1)"; then
+  if pre_dce_output="$(moon run src/cmd/wite --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --verbose 2>&1)"; then
     record_no_change_reasons "$pre_dce_output" "code" "$rel"
     pre_dce_line="$(extract_optimized_line "$pre_dce_output")"
     if [[ -n "${pre_dce_line:-}" ]] && parsed_before_after="$(parse_optimized_before_after "$pre_dce_line")"; then
@@ -781,7 +781,7 @@ while IFS= read -r file; do
   fi
 
   if [[ "$directize_status" == "ok" ]]; then
-    if post_dce_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --dce-apply --dfe-apply --msf-apply --verbose 2>&1)"; then
+    if post_dce_output="$(moon run src/cmd/wite --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --dce-apply --dfe-apply --msf-apply --verbose 2>&1)"; then
       record_no_change_reasons "$post_dce_output" "dce" "$rel"
       post_dce_line="$(extract_optimized_line "$post_dce_output")"
       if [[ -n "${post_dce_line:-}" ]] && parsed_before_after="$(parse_optimized_before_after "$post_dce_line")"; then
@@ -798,7 +798,7 @@ while IFS= read -r file; do
   fi
 
   if [[ "$directize_status" == "ok" ]]; then
-    if post_rume_output="$(moon run src/main --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --dce-apply --dfe-apply --msf-apply --rume-apply --verbose 2>&1)"; then
+    if post_rume_output="$(moon run src/cmd/wite --target js -- optimize "$rel" "$tmp_wasm" --strip-debug --strip-dwarf --strip-target-features --rounds=2 --dce-apply --dfe-apply --msf-apply --rume-apply --verbose 2>&1)"; then
       record_no_change_reasons "$post_rume_output" "rume" "$rel"
       post_rume_line="$(extract_optimized_line "$post_rume_output")"
       if [[ -n "${post_rume_line:-}" ]] && parsed_before_after="$(parse_optimized_before_after "$post_rume_line")"; then
@@ -1016,7 +1016,7 @@ component_total_after=0
 
 while IFS= read -r file; do
   rel="${file#$ROOT_DIR/}"
-  moon run src/main --target js -- analyze component-dce-kpi "$rel" > "$tmp_component"
+  moon run src/cmd/wite --target js -- analyze component-dce-kpi "$rel" > "$tmp_component"
 
   component_bytes="$(awk -F '=' '/^kpi-total-component-bytes=/{print $2; exit}' "$tmp_component")"
   core_before="$(awk -F '=' '/^kpi-total-core-before-bytes=/{print $2; exit}' "$tmp_component")"
@@ -1065,7 +1065,7 @@ while IFS= read -r file; do
   dead_body_bytes="NA"
   status="ok"
 
-  if profile_output="$(moon run src/main --target js -- analyze profile "$rel" 2>&1)"; then
+  if profile_output="$(moon run src/cmd/wite --target js -- analyze profile "$rel" 2>&1)"; then
     module_bytes="$(awk -F ': ' '/^  total_bytes: / { print $2; exit }' <<< "$profile_output")"
     code_body_bytes="$(awk -F ': ' '/^  code_body_bytes: / { print $2; exit }' <<< "$profile_output")"
     import_count="$(awk -F ': ' '/^  import_count: / { print $2; exit }' <<< "$profile_output")"
@@ -1076,7 +1076,7 @@ while IFS= read -r file; do
   fi
 
   if [[ "$status" == "ok" ]]; then
-    if analyze_output="$(moon run src/main --target js -- analyze "$rel" 2>&1)"; then
+    if analyze_output="$(moon run src/cmd/wite --target js -- analyze "$rel" 2>&1)"; then
       callgraph_line="$(awk '/^  functions: imported=/ { print; exit }' <<< "$analyze_output")"
       if [[ "$callgraph_line" =~ imported=([0-9]+)[[:space:]]+local=([0-9]+)[[:space:]]+reachable=([0-9]+)[[:space:]]+dead=([0-9]+) ]]; then
         callgraph_imported_function_count="${BASH_REMATCH[1]}"

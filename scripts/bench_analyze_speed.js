@@ -10,7 +10,7 @@ function parse_args(argv) {
     include_pglite: false,
     include_duckdb: false,
     output: "bench/kpi/analyze_speed.tsv",
-    binary: "target/native/release/build/main/main.exe",
+    binary: "target/native/release/build/cmd/wite/wite.exe",
     build_if_missing: true,
   }
   for (const arg of argv) {
@@ -53,7 +53,7 @@ function ensure_native_binary(root_dir, binary_path) {
   }
   const result = spawnSync(
     "moon",
-    ["build", "src/main", "--target", "native"],
+    ["build", "src/cmd/wite", "--target", "native"],
     {
       cwd: root_dir,
       stdio: "inherit",

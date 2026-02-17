@@ -263,9 +263,7 @@ async fn run_profile_command(args : Array[String]) -> Unit {
   }
   let config_selection = @wite_config.parse_config_selection_flags(raw_flags)
   auto_sync_deps_from_config_if_needed(config_selection)
-  let config_file = @wite_config.resolve_wite_config_or_default(
-    config_selection,
-  )
+  let config_file = resolve_config_or_default(config_selection)
   let merged_flags = @wite_config.merge_command_flags(
     config_file.profile_flags,
     config_selection.remaining_flags,

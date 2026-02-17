@@ -1,5 +1,5 @@
 // Generated using `moon info`, DON'T EDIT IT
-package "mizchi/wite/main"
+package "mizchi/wite/cmd/wite"
 
 import {
   "mizchi/wite/types",

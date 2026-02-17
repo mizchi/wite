@@ -347,6 +347,28 @@ pub fn build_auto_sync_deps_command_args(config_path : String) -> Array[String] 
 }
 
 ///|
+pub fn is_ts_config(path : String) -> Bool {
+  path.has_suffix(".ts")
+}
+
+///|
+pub fn resolve_config_file_path(selection : ConfigSelectionFlags) -> String? {
+  if !selection.use_config {
+    return None
+  }
+  if selection.explicit_config_path {
+    return Some(selection.config_path)
+  }
+  if @fs.path_exists("wite.config.ts") {
+    return Some("wite.config.ts")
+  }
+  if @fs.path_exists("wite.config.jsonc") {
+    return Some("wite.config.jsonc")
+  }
+  None
+}
+
+///|
 pub fn load_wite_config_or_exit(path : String) -> WiteConfigFile {
   let text = @fs.read_file_to_string(path) catch {
     e => {

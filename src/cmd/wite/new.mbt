@@ -164,7 +164,7 @@ fn collect_new_template_files(
 ) -> Array[NewTemplateFile] {
   let files : Array[NewTemplateFile] = [
     { path: ".gitignore", content: new_gitignore_template_text(template) },
-    { path: "wite.config.jsonc", content: init_wite_config_template_text() },
+    { path: "wite.config.ts", content: init_wite_config_template_text() },
     { path: "main.wac", content: init_main_wac_template_text() },
   ]
   match template {

@@ -165,7 +165,7 @@ just check         # 型チェック
 just test          # テスト実行
 just bench         # ベンチマーク実行
 just kpi           # KPI レポート収集
-just run           # CLI 実行（src/main）
+just run           # CLI 実行（src/cmd/wite）
 just info          # .mbti 生成
 just release-check # fmt + info + check + test
 ```

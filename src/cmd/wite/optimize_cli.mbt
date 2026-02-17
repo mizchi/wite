@@ -20,23 +20,47 @@ fn resolve_wasm_opt_bin(cli_value : String?) -> String {
 }
 
 ///|
-fn run_wasm_opt_baseline_or_exit(
+async fn run_wasm_opt_cli(
+  wasm_opt_bin : String,
+  args : Array[String],
+  input_path : String,
+  output_path : String,
+) -> String {
+  let full_args : Array[String] = []
+  full_args.append(args[:])
+  full_args.push(input_path)
+  full_args.push("-o")
+  full_args.push(output_path)
+  let (exit_code, _stdout, stderr) = @xprocess.collect_output(
+    wasm_opt_bin, full_args[:],
+  )
+  if exit_code != 0 {
+    let detail = try {
+      sanitize_process_output(stderr.text())
+    } catch {
+      _ => ""
+    }
+    if detail.is_empty() {
+      return "error\texit:" + exit_code.to_string() + "\twasm-opt command failed"
+    }
+    return "error\texit:" + exit_code.to_string() + "\t" + detail
+  }
+  "ok\t0\t"
+}
+
+///|
+async fn run_wasm_opt_baseline_or_exit(
   input_path : String,
   output_path : String,
   wasm_opt_bin : String,
   baseline_opt_level : String,
   extra_args : Array[String],
 ) -> Unit {
-  let args = [
+  let args : Array[String] = [
     baseline_opt_level, "--all-features", "--strip-debug", "--strip-dwarf", "--strip-target-features",
   ]
   args.append(extra_args[:])
-  let result = js_run_wasm_opt_cli(
-    wasm_opt_bin,
-    args.join("\t"),
-    input_path,
-    output_path,
-  )
+  let result = run_wasm_opt_cli(wasm_opt_bin, args, input_path, output_path)
   let parts = split_string(result, "\t")
   if parts.length() == 0 || parts[0] != "ok" {
     let stage = if parts.length() >= 2 { parts[1] } else { "unknown" }

@@ -8,18 +8,18 @@ default: check test
 
 # Install wite to ~/.local/bin (JS version, requires Node.js)
 install:
-    moon build src/main --target js
+    moon build src/cmd/wite --target js
     mkdir -p ~/.local/bin
     printf '#!/usr/bin/env node\n' > ~/.local/bin/wite
-    cat target/js/release/build/main/main.js >> ~/.local/bin/wite
+    cat target/js/release/build/cmd/wite/wite.js >> ~/.local/bin/wite
     chmod +x ~/.local/bin/wite
     @echo "installed: ~/.local/bin/wite"
 
 # Install wite native binary to ~/.local/bin (no Node.js needed)
 install-native:
-    moon build src/main --target native
+    moon build src/cmd/wite --target native
     mkdir -p ~/.local/bin
-    cp target/native/release/build/main/main.exe ~/.local/bin/wite
+    cp target/native/release/build/cmd/wite/wite.exe ~/.local/bin/wite
     @echo "installed: ~/.local/bin/wite (native)"
 
 # Format code
@@ -60,15 +60,15 @@ test-update:
 
 # Run main
 run:
-    moon run src/main --target {{target}}
+    moon run src/cmd/wite --target {{target}}
 
 # Verify configured wasm package dependencies
 deps-verify:
-    moon run src/main --target {{target}} -- deps verify --config=./wite.config.jsonc --fail-fast
+    moon run src/cmd/wite --target {{target}} -- deps verify --config=./wite.config.jsonc --fail-fast
 
 # Sync configured wasm package dependencies to deps/
 deps-sync:
-    moon run src/main --target {{target}} -- deps sync --config=./wite.config.jsonc --verify --fail-fast
+    moon run src/cmd/wite --target {{target}} -- deps sync --config=./wite.config.jsonc --verify --fail-fast
 
 # Build WAT deps for minimal example
 example-minimal-deps:
@@ -79,7 +79,7 @@ example-minimal-deps:
 # Build minimal example (compose components)
 example-minimal: example-minimal-deps
     mkdir -p examples/minimal/dist
-    moon run src/main --target {{target}} -- build ./examples/minimal/main.wac --config=./examples/minimal/wite.config.jsonc -o ./examples/minimal/dist/composed.wasm
+    moon run src/cmd/wite --target {{target}} -- build ./examples/minimal/main.wac --config=./examples/minimal/wite.config.jsonc -o ./examples/minimal/dist/composed.wasm
 
 # Build WAT deps for wat-moonbit example
 example-wat-moonbit-deps:
@@ -90,7 +90,7 @@ example-wat-moonbit-deps:
 # Note: moonbit guest build needs manual step - see examples/wat-moonbit/README.md
 example-wat-moonbit: example-wat-moonbit-deps
     mkdir -p examples/wat-moonbit/dist
-    moon run src/main --target {{target}} -- build ./examples/wat-moonbit/main.wac --config=./examples/wat-moonbit/wite.config.jsonc -o ./examples/wat-moonbit/dist/composed.wasm
+    moon run src/cmd/wite --target {{target}} -- build ./examples/wat-moonbit/main.wac --config=./examples/wat-moonbit/wite.config.jsonc -o ./examples/wat-moonbit/dist/composed.wasm
 
 # Build Rust guest deps for moonbit-rust example (requires: cargo-component)
 example-moonbit-rust-deps:
@@ -101,7 +101,7 @@ example-moonbit-rust-deps:
 # Build moonbit-rust example (compose)
 example-moonbit-rust: example-moonbit-rust-deps
     mkdir -p examples/moonbit-rust/dist
-    moon run src/main --target {{target}} -- build ./examples/moonbit-rust/main.wac --config=./examples/moonbit-rust/wite.config.jsonc -o ./examples/moonbit-rust/dist/composed.wasm
+    moon run src/cmd/wite --target {{target}} -- build ./examples/moonbit-rust/main.wac --config=./examples/moonbit-rust/wite.config.jsonc -o ./examples/moonbit-rust/dist/composed.wasm
 
 # Build Rust guest deps for moonbit-mixed example (requires: cargo-component)
 example-moonbit-mixed-deps:
@@ -112,18 +112,18 @@ example-moonbit-mixed-deps:
 # Build moonbit-mixed example (compose Rust guest part)
 example-moonbit-mixed: example-moonbit-mixed-deps
     mkdir -p examples/moonbit-mixed/dist
-    moon run src/main --target {{target}} -- build ./examples/moonbit-mixed/main.wac --config=./examples/moonbit-mixed/wite.config.jsonc -o ./examples/moonbit-mixed/dist/composed.wasm
+    moon run src/cmd/wite --target {{target}} -- build ./examples/moonbit-mixed/main.wac --config=./examples/moonbit-mixed/wite.config.jsonc -o ./examples/moonbit-mixed/dist/composed.wasm
 
 # Build moonbit-wasi guest, fetch WASI deps, optimize, and run (requires: moon, wasmtime)
 example-moonbit-wasi:
     cd examples/moonbit-wasi && moon build --target wasm --release
-    moon run src/main --target {{target}} -- deps sync --config=./examples/moonbit-wasi/wite.config.jsonc --dir=./examples/moonbit-wasi/deps --fail-fast
-    moon run src/main --target {{target}} -- build --config=./examples/moonbit-wasi/wite.config.jsonc
+    moon run src/cmd/wite --target {{target}} -- deps sync --config=./examples/moonbit-wasi/wite.config.jsonc --dir=./examples/moonbit-wasi/deps --fail-fast
+    moon run src/cmd/wite --target {{target}} -- build --config=./examples/moonbit-wasi/wite.config.jsonc
     wasmtime run examples/moonbit-wasi/dist/app.min.wasm
 
 # Build sample app component bundle under examples/sample_app
 example-sample-app:
-    moon run src/main --target {{target}} -- build ./examples/sample_app/main.wac --no-config -o ./examples/sample_app/sample.composed.wasm
+    moon run src/cmd/wite --target {{target}} -- build ./examples/sample_app/main.wac --no-config -o ./examples/sample_app/sample.composed.wasm
 
 # Test all buildable examples
 test-examples: example-minimal example-wat-moonbit-deps example-moonbit-rust example-moonbit-mixed example-moonbit-wasi

@@ -2,7 +2,8 @@
 async fn auto_sync_deps_from_config_if_needed(
   selection : @wite_config.ConfigSelectionFlags,
 ) -> Unit {
-  let config_exists = @fs.path_exists(selection.config_path)
+  let config_exists = @wite_config.resolve_config_file_path(selection)
+    is Some(_)
   if !@wite_config.should_auto_sync_deps(selection.use_config, config_exists) {
     return
   }
@@ -14,6 +15,51 @@ async fn auto_sync_deps_from_config_if_needed(
   )
   println("auto deps sync: " + selection.config_path + " -> deps/")
   @wite_deps.run_deps_sync_command(sync_args, @wite_deps.noop_usage_printer)
+}
+
+///|
+fn ensure_parent_dirs(path : String) -> Unit {
+  if @fs.path_exists(path) {
+    return
+  }
+  let parent = path_dirname(path)
+  if parent != path && parent != "." && parent != "/" && parent != "\\" {
+    ensure_parent_dirs(parent)
+  }
+  @fs.create_dir(path) catch { _ => () }
+}
+
+///|
+fn ensure_parent_dir(path : String) -> Unit {
+  let parent = path_dirname(path)
+  if parent != "." {
+    ensure_parent_dirs(parent)
+  }
+}
+
+///|
+fn sanitize_filename(s : String) -> String {
+  let buf : Array[Char] = []
+  for ch in s {
+    let safe = (ch >= 'a' && ch <= 'z') ||
+      (ch >= 'A' && ch <= 'Z') ||
+      (ch >= '0' && ch <= '9') ||
+      ch == '.' ||
+      ch == '_' ||
+      ch == '-'
+    buf.push(if safe { ch } else { '-' })
+  }
+  String::from_array(buf)
+}
+
+///|
+fn make_temp_wasm_path(prefix : String) -> String {
+  let base = if prefix.is_empty() { "wite-diff" } else { prefix }
+  let safe_base = sanitize_filename(base)
+  let tmpdir = @sys.get_env_var("TMPDIR").unwrap_or("/tmp")
+  let rng = @random.Rand::chacha8()
+  let token = rng.uint64().to_string()
+  tmpdir + "/" + safe_base + "-" + token + ".wasm"
 }
 
 ///|
