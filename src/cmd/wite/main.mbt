@@ -6,6 +6,7 @@ async fn main {
     @sys.exit(1)
   }
   match args[1] {
+    "-h" | "--help" | "help" => print_usage()
     "init" => run_init_command(args)
     "new" => run_new_command(args)
     "add" => @wite_deps.run_add_command(args, print_usage)
@@ -16,6 +17,7 @@ async fn main {
     "diff" => run_diff_command(args)
     "optimize" => run_optimize(args)
     "dev" => run_dev_command(args)
+    "doc" => run_doc_command(args)
     _ => {
       print_usage()
       @sys.exit(1)

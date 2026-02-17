@@ -19,8 +19,9 @@ fn print_usage() -> Unit {
   )
   println("  deps verify|sync [options]")
   println("  analyze [subcommand] <file.wasm> [options]")
+  println("  doc [command]")
   println("")
-  println("Run 'wite <command> -h' for more information on a command.")
+  println("Run 'wite doc <command>' for detailed documentation.")
 }
 
 ///|
