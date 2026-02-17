@@ -32,16 +32,15 @@ async fn run_wasm_opt_cli(
   full_args.push("-o")
   full_args.push(output_path)
   let (exit_code, _stdout, stderr) = @xprocess.collect_output(
-    wasm_opt_bin, full_args[:],
+    wasm_opt_bin,
+    full_args[:],
   )
   if exit_code != 0 {
-    let detail = try {
-      sanitize_process_output(stderr.text())
-    } catch {
-      _ => ""
-    }
+    let detail = sanitize_process_output(stderr.text()) catch { _ => "" }
     if detail.is_empty() {
-      return "error\texit:" + exit_code.to_string() + "\twasm-opt command failed"
+      return "error\texit:" +
+        exit_code.to_string() +
+        "\twasm-opt command failed"
     }
     return "error\texit:" + exit_code.to_string() + "\t" + detail
   }

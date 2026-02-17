@@ -18,8 +18,5 @@ import {
 
 options(
   "is-main": true,
-  targets: {
-    "dev_e2e_wbtest.mbt": [ "js" ],
-    "main_wbtest.mbt": [ "js" ],
-  },
+  targets: { "dev_e2e_wbtest.mbt": [ "js" ], "main_wbtest.mbt": [ "js" ] },
 )

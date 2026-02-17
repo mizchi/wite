@@ -26,7 +26,9 @@ fn ensure_parent_dirs(path : String) -> Unit {
   if parent != path && parent != "." && parent != "/" && parent != "\\" {
     ensure_parent_dirs(parent)
   }
-  @fs.create_dir(path) catch { _ => () }
+  @fs.create_dir(path) catch {
+    _ => ()
+  }
 }
 
 ///|

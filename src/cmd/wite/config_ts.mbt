@@ -27,14 +27,15 @@ async fn evaluate_ts_config(config_path : String) -> String {
     "));process.stdout.write(JSON.stringify(m.default))"
   let args : Array[String] = ["--input-type=module", "-e", code]
   let (exit_code, stdout) = @xprocess.collect_stdout("node", args[:])
-  let output = try {
-    stdout.text()
-  } catch {
-    _ => ""
-  }
+  let output = stdout.text() catch { _ => "" }
   if exit_code != 0 {
     let detail = sanitize_process_output(output)
-    return "err\t" + (if detail.is_empty() { "node evaluation failed (exit=" + exit_code.to_string() + ")" } else { detail })
+    return "err\t" +
+      (if detail.is_empty() {
+        "node evaluation failed (exit=" + exit_code.to_string() + ")"
+      } else {
+        detail
+      })
   }
   let trimmed = output.trim().to_string()
   if trimmed.is_empty() {
