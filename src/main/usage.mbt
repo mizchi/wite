@@ -14,6 +14,9 @@ fn print_usage() -> Unit {
   )
   println("  diff <left.wasm> [right.wasm] [options]")
   println("  optimize <input.wasm> <output.wasm> [options]")
+  println(
+    "  dev [dir] [--port=<n>] [--target=wasm-gc|wasm] [--build-cmd=<cmd>] [--watch=<path>]",
+  )
   println("  deps verify|sync [options]")
   println("  analyze [subcommand] <file.wasm> [options]")
   println("")

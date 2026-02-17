@@ -6,7 +6,11 @@ import {
   "mizchi/wite/analyze" @wite_analyze,
   "mizchi/wite/optimize" @wite_optimize,
   "mizchi/wite/core" @wite,
+  "mizchi/x/http" @xhttp,
+  "mizchi/x/process" @xprocess,
+  "mizchi/x/fs" @xfs,
   "moonbitlang/async",
+  "moonbitlang/async/io" @io,
   "moonbitlang/x/fs" @fs,
   "moonbitlang/x/sys" @sys,
 }
