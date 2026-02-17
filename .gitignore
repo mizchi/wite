@@ -5,6 +5,9 @@ target
 .mooncakes/
 .moonagent/
 .jj/
+node_modules/
+packages/*/dist/
+examples/*/dist/
 deps/
 !src/deps/
 !bench/corpus/**/deps/

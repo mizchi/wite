@@ -129,6 +129,26 @@ test-examples: example-minimal example-wat-moonbit-deps example-moonbit-rust exa
     wasmtime run examples/moonbit-wasi/dist/app.min.wasm | grep -q "hello from moonbit-wasi"
     @echo "all example tests passed"
 
+# Build WAT deps for vite-plugin example
+example-vite-plugin-deps:
+    wasm-tools parse examples/vite-plugin/src/add.wat -o examples/vite-plugin/src/add.wasm
+
+# Build vite-plugin example (requires: wasm-tools, pnpm)
+example-vite-plugin: example-vite-plugin-deps
+    cd packages/vite-plugin-wite && pnpm build
+    cd examples/vite-plugin && pnpm install && pnpm build
+
+# Build WAT deps for vite-plugin-multi example
+example-vite-plugin-multi-deps:
+    wasm-tools parse examples/vite-plugin-multi/src/add.wat -o examples/vite-plugin-multi/src/add.wasm
+    wasm-tools parse examples/vite-plugin-multi/src/mul.wat -o examples/vite-plugin-multi/src/mul.wasm
+    wasm-tools parse examples/vite-plugin-multi/src/math.wat -o examples/vite-plugin-multi/src/math.wasm
+
+# Build vite-plugin-multi example (requires: wasm-tools, pnpm)
+example-vite-plugin-multi: example-vite-plugin-multi-deps
+    cd packages/vite-plugin-wite && pnpm build
+    cd examples/vite-plugin-multi && pnpm install && pnpm build
+
 # Generate type definition files
 info:
     moon info

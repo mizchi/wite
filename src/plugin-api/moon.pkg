@@ -1,0 +1,17 @@
+import {
+  "mizchi/wite/optimize" @wite_optimize,
+  "mizchi/wite/types" @wite,
+}
+
+options(
+  "is-main": true,
+  link: {
+    "js": {
+      "exports": [
+        "parse_wasm_metadata",
+        "extract_first_core_module",
+      ],
+      "format": "esm",
+    },
+  },
+)
