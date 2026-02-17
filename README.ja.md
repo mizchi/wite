@@ -7,11 +7,14 @@
 ## インストール
 
 ```bash
+# CLI
+moon install mizchi/wite/cmd/wite
+
+# ローカルインストール（ソースから）
+just install
+
 # ライブラリとして
 moon add mizchi/wite
-
-# CLI（ソースから実行）
-just run -- <command> [args...]
 ```
 
 ## クイックスタート

@@ -7,11 +7,14 @@ Component-model-aware WebAssembly analyzer, optimizer, and profiler for [MoonBit
 ## Installation
 
 ```bash
+# CLI
+moon install mizchi/wite/cmd/wite
+
+# Local install (from source)
+just install
+
 # As a library
 moon add mizchi/wite
-
-# CLI (from source)
-just run -- <command> [args...]
 ```
 
 ## Quickstart

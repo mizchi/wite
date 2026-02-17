@@ -6,21 +6,9 @@ target := "js"
 # Default task: check and test
 default: check test
 
-# Install wite to ~/.local/bin (JS version, requires Node.js)
+# Install wite via moon install (native binary to ~/.moon/bin/wite)
 install:
-    moon build src/cmd/wite --target js
-    mkdir -p ~/.local/bin
-    printf '#!/usr/bin/env node\n' > ~/.local/bin/wite
-    cat target/js/release/build/cmd/wite/wite.js >> ~/.local/bin/wite
-    chmod +x ~/.local/bin/wite
-    @echo "installed: ~/.local/bin/wite"
-
-# Install wite native binary to ~/.local/bin (no Node.js needed)
-install-native:
-    moon build src/cmd/wite --target native
-    mkdir -p ~/.local/bin
-    cp target/native/release/build/cmd/wite/wite.exe ~/.local/bin/wite
-    @echo "installed: ~/.local/bin/wite (native)"
+    moon install ./src/cmd/wite
 
 # Format code
 fmt:
