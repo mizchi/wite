@@ -2,7 +2,9 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-Component-model-aware WebAssembly analyzer, optimizer, and profiler for [MoonBit](https://docs.moonbitlang.com).
+Component Model 版の vite を目指す WebAssembly ビルドツール。MoonBit で実装。
+
+コンポーネントの依存管理・結合 (WAC composition) と DCE (Dead Code Elimination) による最適化を中心に、解析・プロファイリング・開発サーバーを提供する。
 
 ## Installation
 
@@ -45,6 +47,20 @@ wite build hello.component.wasm --interface ./wit --world hello -o hello.checked
 Auto-detects core/component from the input header. For components, applies fixed-point optimization with `--converge`.
 When `--interface` is provided, `build` verifies the final component against the given WIT directory.
 Use `--world` to choose a specific world name in that WIT package.
+
+### dev
+
+```bash
+wite dev                       # start dev server on :8080
+wite dev --port=3000           # custom port
+wite dev --build-cmd="moon build --target wasm-gc --release"
+```
+
+ファイル変更を検知して自動リビルド + SSE によるブラウザのライブリロードを行う。プロジェクトに `index.html` があればそれを配信し、なければ wasm をロードする HTML を自動生成する。
+
+`http://localhost:8080/__wite/` でデバッグ UI（モジュール解析・プロファイリング）にアクセスできる。
+
+> **Note**: 静的サイト配信機能はまだ開発中。現時点では wasm の開発サーバーとしての利用が主。
 
 ### analyze
 
@@ -161,6 +177,36 @@ Use `--converge` to repeat optimization until no further size reduction is achie
 - **wite**: Binary optimizer + profiler (minifier role — analysis, optimization, profiling)
 
 Dependency direction: `wite -> wac` only. The pipeline is: wac produces wasm bytes, wite optimizes them.
+
+## Vite Integration
+
+既存の Vite プロジェクトから `.wasm` ファイルを直接 import するための Vite プラグイン [`vite-plugin-wite`](./packages/vite-plugin-wite/) を提供している。
+
+```bash
+npm install vite-plugin-wite
+```
+
+```typescript
+// vite.config.ts
+import { defineConfig } from "vite";
+import wite from "vite-plugin-wite";
+
+export default defineConfig({
+  plugins: [wite()],
+  build: { target: "esnext" },
+});
+```
+
+```typescript
+// app.ts
+import { add } from "./math.wasm";
+console.log(add(1, 2)); // 3
+```
+
+- `.wasm` の import に対して JS ラッパーと `.d.ts` 型定義を自動生成
+- Component Model wasm は自動的に core module に lowering して読み込む
+- HMR 対応（dev モードで `.wasm` 変更時に自動リロード）
+- 詳細は [vite-plugin-wite README](./packages/vite-plugin-wite/README.md) を参照
 
 ## Development
 
