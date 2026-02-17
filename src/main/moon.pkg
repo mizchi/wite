@@ -19,6 +19,7 @@ options(
   "is-main": true,
   "native-stub": [ "ffi_native.c" ],
   targets: {
+    "dev_e2e_wbtest.mbt": [ "js" ],
     "main_ffi_js.mbt": [ "js" ],
     "main_ffi_native.mbt": [ "native" ],
     "main_wbtest.mbt": [ "js" ],

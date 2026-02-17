@@ -2,6 +2,8 @@
 priv struct DevState {
   mut reload_version : Int
   mut last_wasm_hash : Int
+  wasm_path : String
+  mut last_analyze_json : Json?
 }
 
 ///|
@@ -61,6 +63,7 @@ fn generate_dev_html(wasm_path : String) -> String {
     #|</head>
     #|<body>
     #|<h1>wite dev</h1>
+    #|<nav style="margin-bottom:1rem"><a href="/__wite/" style="color:#89b4fa">debug</a></nav>
     #|<pre id="output"></pre>
     #|<script type="module">
   let script_start =
@@ -278,6 +281,198 @@ async fn handle_sse(state : DevState, conn : @xhttp.ServerConnection) -> Unit {
 }
 
 ///|
+fn uint_to_json(v : UInt) -> Json {
+  Json::number(v.reinterpret_as_int().to_double())
+}
+
+///|
+fn module_profile_to_json(p : @wite.ModuleProfile) -> Json {
+  let sections_json : Array[Json] = []
+  for s in p.sections {
+    sections_json.push(
+      Json::object({
+        "key": Json::string(s.key),
+        "section_id": uint_to_json(s.section_id),
+        "total_bytes": uint_to_json(s.total_bytes),
+      }),
+    )
+  }
+  Json::object({
+    "total_bytes": uint_to_json(p.total_bytes),
+    "function_count": uint_to_json(p.function_count),
+    "import_count": uint_to_json(p.import_count),
+    "export_count": uint_to_json(p.export_count),
+    "code_body_count": uint_to_json(p.code_body_count),
+    "code_body_bytes": uint_to_json(p.code_body_bytes),
+    "sections": Json::array(sections_json),
+  })
+}
+
+///|
+fn function_size_to_json(f : @wite.FunctionSize) -> Json {
+  let export_names_json : Array[Json] = []
+  for name in f.export_names {
+    export_names_json.push(Json::string(name))
+  }
+  let name_json : Json = match f.name {
+    Some(n) => Json::string(n)
+    None => Json::null()
+  }
+  Json::object({
+    "function_index": uint_to_json(f.function_index),
+    "body_bytes": uint_to_json(f.body_bytes),
+    "name": name_json,
+    "export_names": Json::array(export_names_json),
+  })
+}
+
+///|
+async fn build_analyze_json(wasm_path : String) -> Json {
+  let data = @xfs.read_file(wasm_path) catch {
+    _ =>
+      return Json::object({ "error": Json::string("failed to read wasm file") })
+  }
+  let bytes = data.binary()
+  let profile_json = match @wite_analyze.profile_module(bytes) {
+    Ok(p) => module_profile_to_json(p)
+    Err(e) =>
+      Json::object({
+        "error": Json::string("profile: " + @wite.error_to_string(e)),
+      })
+  }
+  let functions_json : Json = match
+    @wite_analyze.analyze_function_sizes(bytes) {
+    Ok(functions) => {
+      let arr : Array[Json] = []
+      for f in functions {
+        arr.push(function_size_to_json(f))
+      }
+      Json::array(arr)
+    }
+    Err(e) =>
+      Json::object({
+        "error": Json::string("functions: " + @wite.error_to_string(e)),
+      })
+  }
+  Json::object({ "profile": profile_json, "functions": functions_json })
+}
+
+///|
+async fn handle_wite_api(
+  state : DevState,
+  url_path : String,
+  conn : @xhttp.ServerConnection,
+) -> Unit {
+  if url_path == "/__wite" || url_path == "/__wite/" {
+    send_text_response(
+      conn,
+      "text/html; charset=utf-8",
+      generate_debug_ui_html(),
+    )
+    return
+  }
+  if url_path == "/__wite/api/status" {
+    let json = Json::object({
+      "reload_version": Json::number(state.reload_version.to_double()),
+      "wasm_hash": Json::number(state.last_wasm_hash.to_double()),
+      "wasm_path": Json::string(state.wasm_path),
+    })
+    send_text_response(conn, "application/json", json.stringify())
+    return
+  }
+  if url_path == "/__wite/api/analyze" {
+    let json = match state.last_analyze_json {
+      Some(cached) => cached
+      None => {
+        let result = build_analyze_json(state.wasm_path)
+        state.last_analyze_json = Some(result)
+        result
+      }
+    }
+    send_text_response(conn, "application/json", json.stringify())
+    return
+  }
+  send_error_response(conn, 404, "Not Found")
+}
+
+///|
+fn generate_debug_ui_html() -> String {
+  let html =
+    #|<!DOCTYPE html>
+    #|<html>
+    #|<head><meta charset="utf-8"><title>wite debug</title>
+    #|<style>
+    #|  * { box-sizing: border-box; }
+    #|  body { font-family: monospace; background: #1e1e2e; color: #cdd6f4; margin: 2rem; }
+    #|  h1 { color: #89b4fa; font-size: 1.2rem; }
+    #|  h2 { color: #a6e3a1; font-size: 1rem; margin-top: 1.5rem; }
+    #|  nav { margin-bottom: 1rem; }
+    #|  nav a { color: #89b4fa; margin-right: 1rem; }
+    #|  table { border-collapse: collapse; width: 100%; margin-top: 0.5rem; }
+    #|  th, td { text-align: left; padding: 4px 8px; border-bottom: 1px solid #313244; }
+    #|  th { color: #89b4fa; }
+    #|  .num { text-align: right; font-variant-numeric: tabular-nums; }
+    #|  .loading { color: #6c7086; }
+    #|  .error { color: #f38ba8; }
+    #|</style>
+    #|</head>
+    #|<body>
+    #|<h1>wite debug</h1>
+    #|<nav><a href="/">app</a><a href="/__wite/api/status">status.json</a><a href="/__wite/api/analyze">analyze.json</a></nav>
+    #|<div id="status"></div>
+    #|<div id="profile"></div>
+    #|<div id="sections"></div>
+    #|<div id="functions"></div>
+    #|<script>
+    #|(function(){
+    #|  function $(id){ return document.getElementById(id); }
+    #|  function fmt(n){ return n.toLocaleString(); }
+    #|  function loadStatus(){
+    #|    fetch('/__wite/api/status').then(r=>r.json()).then(d=>{
+    #|      $('status').innerHTML='<h2>status</h2><p>reload_version: '+d.reload_version+' | wasm_hash: '+d.wasm_hash+'</p><p>wasm_path: '+d.wasm_path+'</p>';
+    #|    }).catch(e=>{ $('status').innerHTML='<p class="error">'+e+'</p>'; });
+    #|  }
+    #|  function loadAnalyze(){
+    #|    $('profile').innerHTML='<p class="loading">loading analyze...</p>';
+    #|    fetch('/__wite/api/analyze').then(r=>r.json()).then(d=>{
+    #|      if(d.profile && !d.profile.error){
+    #|        var p=d.profile;
+    #|        $('profile').innerHTML='<h2>module profile</h2><table>'
+    #|          +'<tr><td>total bytes</td><td class="num">'+fmt(p.total_bytes)+'</td></tr>'
+    #|          +'<tr><td>functions</td><td class="num">'+fmt(p.function_count)+'</td></tr>'
+    #|          +'<tr><td>imports</td><td class="num">'+fmt(p.import_count)+'</td></tr>'
+    #|          +'<tr><td>exports</td><td class="num">'+fmt(p.export_count)+'</td></tr>'
+    #|          +'<tr><td>code bodies</td><td class="num">'+fmt(p.code_body_count)+'</td></tr>'
+    #|          +'<tr><td>code body bytes</td><td class="num">'+fmt(p.code_body_bytes)+'</td></tr>'
+    #|          +'</table>';
+    #|        if(p.sections){
+    #|          var h='<h2>sections</h2><table><tr><th>key</th><th>id</th><th class="num">bytes</th></tr>';
+    #|          p.sections.forEach(function(s){ h+='<tr><td>'+s.key+'</td><td>'+s.section_id+'</td><td class="num">'+fmt(s.total_bytes)+'</td></tr>'; });
+    #|          $('sections').innerHTML=h+'</table>';
+    #|        }
+    #|      }
+    #|      if(d.functions && Array.isArray(d.functions)){
+    #|        var sorted=d.functions.slice().sort(function(a,b){ return b.body_bytes-a.body_bytes; });
+    #|        var h='<h2>functions (by size)</h2><table><tr><th>#</th><th>name</th><th class="num">bytes</th><th>exports</th></tr>';
+    #|        sorted.forEach(function(f){
+    #|          h+='<tr><td>'+f.function_index+'</td><td>'+(f.name||'')+'</td><td class="num">'+fmt(f.body_bytes)+'</td><td>'+(f.export_names||[]).join(', ')+'</td></tr>';
+    #|        });
+    #|        $('functions').innerHTML=h+'</table>';
+    #|      }
+    #|    }).catch(e=>{ $('profile').innerHTML='<p class="error">'+e+'</p>'; });
+    #|  }
+    #|  loadStatus(); loadAnalyze();
+    #|  var es=new EventSource('/__wite_livereload');
+    #|  es.onmessage=function(e){ if(e.data==='reload'){ loadStatus(); loadAnalyze(); } };
+    #|  es.onerror=function(){ setTimeout(function(){ location.reload(); },2000); };
+    #|})();
+    #|</script>
+    #|</body>
+    #|</html>
+  html
+}
+
+///|
 async fn handle_request(
   root_dir : String,
   generated_html : String,
@@ -357,6 +552,7 @@ async fn watch_and_rebuild(
       let new_hash = simple_bytes_hash(data.binary())
       if new_hash != state.last_wasm_hash {
         state.last_wasm_hash = new_hash
+        state.last_analyze_json = None
         state.reload_version += 1
         println("[wite] rebuilt, reloading browser...")
       }
@@ -533,6 +729,8 @@ async fn run_dev_command(args : Array[String]) -> Unit {
       let state = DevState::{
         reload_version: 0,
         last_wasm_hash: simple_bytes_hash(initial_data.binary()),
+        wasm_path: abs_wasm_path,
+        last_analyze_json: None,
       }
       let server = @xhttp.Server::new(host="0.0.0.0", port~) catch {
         err => {
@@ -556,6 +754,8 @@ async fn run_dev_command(args : Array[String]) -> Unit {
             (req, body, conn) => {
               if req.path == "/__wite_livereload" {
                 handle_sse(state, conn)
+              } else if req.path.has_prefix("/__wite") {
+                handle_wite_api(state, req.path, conn)
               } else {
                 handle_request(root, html, req, body, conn)
               }
