@@ -12,26 +12,22 @@ function Result$Err$0$(param0) {
   this._0 = param0;
 }
 Result$Err$0$.prototype.$tag = 0;
-Result$Err$0$.prototype.$name = "Err";
 function Result$Ok$0$(param0) {
   this._0 = param0;
 }
 Result$Ok$0$.prototype.$tag = 1;
-Result$Ok$0$.prototype.$name = "Ok";
-const Error$mizchi$47$wite$47$types$46$WiteError$46$UnexpectedEof = { $tag: 5, $name: "mizchi/wite/types.WiteError.UnexpectedEof" };
-const Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidMagic = { $tag: 4, $name: "mizchi/wite/types.WiteError.InvalidMagic" };
+const Error$mizchi$47$wite$47$types$46$WiteError$46$UnexpectedEof = { $tag: 5 };
+const Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidMagic = { $tag: 4 };
 function Error$mizchi$47$wite$47$types$46$WiteError$46$UnsupportedVersion(param0) {
   this._0 = param0;
 }
 Error$mizchi$47$wite$47$types$46$WiteError$46$UnsupportedVersion.prototype.$tag = 3;
-Error$mizchi$47$wite$47$types$46$WiteError$46$UnsupportedVersion.prototype.$name = "mizchi/wite/types.WiteError.UnsupportedVersion";
 function Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidFormat(param0) {
   this._0 = param0;
 }
 Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidFormat.prototype.$tag = 2;
-Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidFormat.prototype.$name = "mizchi/wite/types.WiteError.InvalidFormat";
-const Error$moonbitlang$47$core$47$builtin$46$CreatingViewError$46$IndexOutOfBounds = { $tag: 1, $name: "moonbitlang/core/builtin.CreatingViewError.IndexOutOfBounds" };
-const Error$moonbitlang$47$core$47$builtin$46$CreatingViewError$46$InvalidIndex = { $tag: 0, $name: "moonbitlang/core/builtin.CreatingViewError.InvalidIndex" };
+const Error$moonbitlang$47$core$47$builtin$46$CreatingViewError$46$IndexOutOfBounds = { $tag: 1 };
+const Error$moonbitlang$47$core$47$builtin$46$CreatingViewError$46$InvalidIndex = { $tag: 0 };
 const _M0FP311moonbitlang4core7builtin20uint__to__string__js = (x, radix) => {
   return (x >>> 0).toString(radix);
 };
@@ -48,93 +44,81 @@ function Result$Err$1$(param0) {
   this._0 = param0;
 }
 Result$Err$1$.prototype.$tag = 0;
-Result$Err$1$.prototype.$name = "Err";
 function Result$Ok$1$(param0) {
   this._0 = param0;
 }
 Result$Ok$1$.prototype.$tag = 1;
-Result$Ok$1$.prototype.$name = "Ok";
 function Result$Err$2$(param0) {
   this._0 = param0;
 }
 Result$Err$2$.prototype.$tag = 0;
-Result$Err$2$.prototype.$name = "Err";
 function Result$Ok$2$(param0) {
   this._0 = param0;
 }
 Result$Ok$2$.prototype.$tag = 1;
-Result$Ok$2$.prototype.$name = "Ok";
 function Result$Err$3$(param0) {
   this._0 = param0;
 }
 Result$Err$3$.prototype.$tag = 0;
-Result$Err$3$.prototype.$name = "Err";
 function Result$Ok$3$(param0) {
   this._0 = param0;
 }
 Result$Ok$3$.prototype.$tag = 1;
-Result$Ok$3$.prototype.$name = "Ok";
 function Result$Err$4$(param0) {
   this._0 = param0;
 }
 Result$Err$4$.prototype.$tag = 0;
-Result$Err$4$.prototype.$name = "Err";
 function Result$Ok$4$(param0) {
   this._0 = param0;
 }
 Result$Ok$4$.prototype.$tag = 1;
-Result$Ok$4$.prototype.$name = "Ok";
 function Result$Err$5$(param0) {
   this._0 = param0;
 }
 Result$Err$5$.prototype.$tag = 0;
-Result$Err$5$.prototype.$name = "Err";
 function Result$Ok$5$(param0) {
   this._0 = param0;
 }
 Result$Ok$5$.prototype.$tag = 1;
-Result$Ok$5$.prototype.$name = "Ok";
 function Result$Err$6$(param0) {
   this._0 = param0;
 }
 Result$Err$6$.prototype.$tag = 0;
-Result$Err$6$.prototype.$name = "Err";
 function Result$Ok$6$(param0) {
   this._0 = param0;
 }
 Result$Ok$6$.prototype.$tag = 1;
-Result$Ok$6$.prototype.$name = "Ok";
 function Result$Err$7$(param0) {
   this._0 = param0;
 }
 Result$Err$7$.prototype.$tag = 0;
-Result$Err$7$.prototype.$name = "Err";
 function Result$Ok$7$(param0) {
   this._0 = param0;
 }
 Result$Ok$7$.prototype.$tag = 1;
-Result$Ok$7$.prototype.$name = "Ok";
 function Result$Err$8$(param0) {
   this._0 = param0;
 }
 Result$Err$8$.prototype.$tag = 0;
-Result$Err$8$.prototype.$name = "Err";
 function Result$Ok$8$(param0) {
   this._0 = param0;
 }
 Result$Ok$8$.prototype.$tag = 1;
-Result$Ok$8$.prototype.$name = "Ok";
 function Result$Err$9$(param0) {
   this._0 = param0;
 }
 Result$Err$9$.prototype.$tag = 0;
-Result$Err$9$.prototype.$name = "Err";
 function Result$Ok$9$(param0) {
   this._0 = param0;
 }
 Result$Ok$9$.prototype.$tag = 1;
-Result$Ok$9$.prototype.$name = "Ok";
 const _M0FP095_40moonbitlang_2fcore_2fbuiltin_2eStringBuilder_24as_24_40moonbitlang_2fcore_2fbuiltin_2eLogger = { method_0: _M0IP311moonbitlang4core7builtin13StringBuilderP311moonbitlang4core7builtin6Logger13write__string, method_1: _M0IP016_24default__implP311moonbitlang4core7builtin6Logger16write__substringGRP311moonbitlang4core7builtin13StringBuilderE, method_2: _M0IP311moonbitlang4core7builtin13StringBuilderP311moonbitlang4core7builtin6Logger11write__view, method_3: _M0IP311moonbitlang4core7builtin13StringBuilderP311moonbitlang4core7builtin6Logger11write__char };
+const _M0FP36mizchi4wite12plugin_2dapi35json__string__array_2e_2abind_7c209 = ",";
+const _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c232 = ",";
+const _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c240 = ",";
+const _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c243 = ",";
+const _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c246 = ",";
+const _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c247 = "";
 function _M0FP311moonbitlang4core5abort5abortGRP311moonbitlang4core5bytes9BytesViewE(msg) {
   return $panic();
 }
@@ -142,10 +126,10 @@ function _M0FP311moonbitlang4core5abort5abortGuE(msg) {
   $panic();
 }
 function _M0FP311moonbitlang4core7builtin5abortGRP311moonbitlang4core5bytes9BytesViewE(string, loc) {
-  return _M0FP311moonbitlang4core5abort5abortGRP311moonbitlang4core5bytes9BytesViewE(`${_M0IP311moonbitlang4core6string6StringP311moonbitlang4core7builtin4Show10to__string(string)}\n  at ${_M0IP016_24default__implP311moonbitlang4core7builtin4Show10to__stringGRP311moonbitlang4core7builtin9SourceLocE(loc)}\n`);
+  return _M0FP311moonbitlang4core5abort5abortGRP311moonbitlang4core5bytes9BytesViewE(`${string}\n  at ${_M0IP016_24default__implP311moonbitlang4core7builtin4Show10to__stringGRP311moonbitlang4core7builtin9SourceLocE(loc)}\n`);
 }
 function _M0FP311moonbitlang4core7builtin5abortGuE(string, loc) {
-  _M0FP311moonbitlang4core5abort5abortGuE(`${_M0IP311moonbitlang4core6string6StringP311moonbitlang4core7builtin4Show10to__string(string)}\n  at ${_M0IP016_24default__implP311moonbitlang4core7builtin4Show10to__stringGRP311moonbitlang4core7builtin9SourceLocE(loc)}\n`);
+  _M0FP311moonbitlang4core5abort5abortGuE(`${string}\n  at ${_M0IP016_24default__implP311moonbitlang4core7builtin4Show10to__stringGRP311moonbitlang4core7builtin9SourceLocE(loc)}\n`);
 }
 function _M0MP311moonbitlang4core5array10FixedArray12unsafe__blitGyE(dst, dst_offset, src, src_offset, len) {
   if (dst === src && dst_offset < src_offset) {
@@ -185,9 +169,6 @@ function _M0MP311moonbitlang4core5array10FixedArray12unsafe__blitGyE(dst, dst_of
 function _M0MP311moonbitlang4core7builtin13StringBuilder11new_2einner(size_hint) {
   return { val: "" };
 }
-function _M0MP311moonbitlang4core7builtin13StringBuilder10to__string(self) {
-  return self.val;
-}
 function _M0IP311moonbitlang4core7builtin13StringBuilderP311moonbitlang4core7builtin6Logger11write__char(self, ch) {
   const _bind = self;
   _bind.val = `${_bind.val}${String.fromCodePoint(ch)}`;
@@ -201,14 +182,11 @@ function _M0MP311moonbitlang4core6uint166UInt1623is__trailing__surrogate(self) {
 function _M0FP311moonbitlang4core7builtin32code__point__of__surrogate__pair(leading, trailing) {
   return (((Math.imul(leading - 55296 | 0, 1024) | 0) + trailing | 0) - 56320 | 0) + 65536 | 0;
 }
-function _M0MP311moonbitlang4core6uint166UInt1616unsafe__to__char(self) {
-  return self;
-}
 function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
   const _bind = { str: repr, start: 0, end: repr.length };
-  const _data = _M0MP311moonbitlang4core6string10StringView4data(_bind);
-  const _start = _M0MP311moonbitlang4core6string10StringView13start__offset(_bind);
-  const _end = _start + _M0MP311moonbitlang4core6string10StringView6length(_bind) | 0;
+  const _data = _bind.str;
+  const _start = _bind.start;
+  const _end = _start + (_bind.end - _bind.start | 0) | 0;
   let _cursor = _start;
   let accept_state = -1;
   let match_end = -1;
@@ -227,17 +205,20 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
   let tag_4 = -1;
   _L: {
     if (_cursor < _end) {
-      const next_char = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+      const _p = _cursor;
+      const next_char = _data.charCodeAt(_p);
       _cursor = _cursor + 1 | 0;
       if (next_char === 64) {
         _L$2: while (true) {
           tag_0 = _cursor;
           if (_cursor < _end) {
-            const next_char$2 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+            const _p$2 = _cursor;
+            const next_char$2 = _data.charCodeAt(_p$2);
             _cursor = _cursor + 1 | 0;
             if (next_char$2 === 58) {
               if (_cursor < _end) {
-                _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                const _p$3 = _cursor;
+                _data.charCodeAt(_p$3);
                 _cursor = _cursor + 1 | 0;
                 let _tmp = 0;
                 _L$3: while (true) {
@@ -251,7 +232,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                           tag_1 = _cursor;
                           if (_cursor < _end) {
                             _L$6: {
-                              const next_char$3 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                              const _p$4 = _cursor;
+                              const next_char$3 = _data.charCodeAt(_p$4);
                               _cursor = _cursor + 1 | 0;
                               if (next_char$3 < 58) {
                                 if (next_char$3 < 48) {
@@ -263,7 +245,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                                   tag_3 = _cursor;
                                   if (_cursor < _end) {
                                     _L$7: {
-                                      const next_char$4 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                                      const _p$5 = _cursor;
+                                      const next_char$4 = _data.charCodeAt(_p$5);
                                       _cursor = _cursor + 1 | 0;
                                       if (next_char$4 < 48) {
                                         if (next_char$4 === 45) {
@@ -311,7 +294,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                           tag_2 = _cursor;
                           if (_cursor < _end) {
                             _L$6: {
-                              const next_char$3 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                              const _p$4 = _cursor;
+                              const next_char$3 = _data.charCodeAt(_p$4);
                               _cursor = _cursor + 1 | 0;
                               if (next_char$3 < 58) {
                                 if (next_char$3 < 48) {
@@ -338,7 +322,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                         case 0: {
                           tag_1 = _cursor;
                           if (_cursor < _end) {
-                            const next_char$3 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                            const _p$4 = _cursor;
+                            const next_char$3 = _data.charCodeAt(_p$4);
                             _cursor = _cursor + 1 | 0;
                             if (next_char$3 === 58) {
                               _tmp = 1;
@@ -356,7 +341,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                           tag_4 = _cursor;
                           if (_cursor < _end) {
                             _L$6: {
-                              const next_char$3 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                              const _p$4 = _cursor;
+                              const next_char$3 = _data.charCodeAt(_p$4);
                               _cursor = _cursor + 1 | 0;
                               if (next_char$3 < 58) {
                                 if (next_char$3 < 48) {
@@ -374,7 +360,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                                   tag_1 = _cursor;
                                   if (_cursor < _end) {
                                     _L$7: {
-                                      const next_char$4 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                                      const _p$5 = _cursor;
+                                      const next_char$4 = _data.charCodeAt(_p$5);
                                       _cursor = _cursor + 1 | 0;
                                       if (next_char$4 < 58) {
                                         if (next_char$4 < 48) {
@@ -385,7 +372,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                                           tag_2 = _cursor;
                                           if (_cursor < _end) {
                                             _L$8: {
-                                              const next_char$5 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                                              const _p$6 = _cursor;
+                                              const next_char$5 = _data.charCodeAt(_p$6);
                                               _cursor = _cursor + 1 | 0;
                                               if (next_char$5 < 58) {
                                                 if (next_char$5 < 48) {
@@ -437,7 +425,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                           tag_2 = _cursor;
                           if (_cursor < _end) {
                             _L$6: {
-                              const next_char$3 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                              const _p$4 = _cursor;
+                              const next_char$3 = _data.charCodeAt(_p$4);
                               _cursor = _cursor + 1 | 0;
                               if (next_char$3 < 58) {
                                 if (next_char$3 < 48) {
@@ -467,7 +456,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                           tag_3 = _cursor;
                           if (_cursor < _end) {
                             _L$6: {
-                              const next_char$3 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                              const _p$4 = _cursor;
+                              const next_char$3 = _data.charCodeAt(_p$4);
                               _cursor = _cursor + 1 | 0;
                               if (next_char$3 < 48) {
                                 if (next_char$3 === 45) {
@@ -500,7 +490,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                           tag_1 = _cursor;
                           if (_cursor < _end) {
                             _L$6: {
-                              const next_char$3 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                              const _p$4 = _cursor;
+                              const next_char$3 = _data.charCodeAt(_p$4);
                               _cursor = _cursor + 1 | 0;
                               if (next_char$3 < 58) {
                                 if (next_char$3 < 48) {
@@ -545,7 +536,8 @@ function _M0MP311moonbitlang4core7builtin13SourceLocRepr5parse(repr) {
                   tag_2 = tag_2_1;
                   if (_cursor < _end) {
                     _L$5: {
-                      const next_char$3 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                      const _p$4 = _cursor;
+                      const next_char$3 = _data.charCodeAt(_p$4);
                       _cursor = _cursor + 1 | 0;
                       if (next_char$3 < 58) {
                         if (next_char$3 < 48) {
@@ -698,14 +690,11 @@ function _M0IP311moonbitlang4core7builtin13StringBuilderP311moonbitlang4core7bui
   const _bind = self;
   _bind.val = `${_bind.val}${str}`;
 }
-function _M0IP311moonbitlang4core6uint166UInt16P311moonbitlang4core7builtin7Compare7compare(self, that) {
-  return $compare_int(self, that);
-}
 function _M0IP016_24default__implP311moonbitlang4core7builtin7Compare6op__leGkE(x, y) {
-  return _M0IP311moonbitlang4core6uint166UInt16P311moonbitlang4core7builtin7Compare7compare(x, y) <= 0;
+  return $compare_int(x, y) <= 0;
 }
 function _M0IP016_24default__implP311moonbitlang4core7builtin7Compare6op__geGkE(x, y) {
-  return _M0IP311moonbitlang4core6uint166UInt16P311moonbitlang4core7builtin7Compare7compare(x, y) >= 0;
+  return $compare_int(x, y) >= 0;
 }
 function _M0MP311moonbitlang4core6string6String11sub_2einner(self, start, end) {
   const len = self.length;
@@ -760,19 +749,10 @@ function _M0IP016_24default__implP311moonbitlang4core7builtin6Logger16write__sub
   }
   _M0IP311moonbitlang4core7builtin13StringBuilderP311moonbitlang4core7builtin6Logger11write__view(self, _tmp);
 }
-function _M0MP311moonbitlang4core6string10StringView4data(self) {
-  return self.str;
-}
-function _M0MP311moonbitlang4core6string10StringView6length(self) {
-  return self.end - self.start | 0;
-}
-function _M0MP311moonbitlang4core6string10StringView13start__offset(self) {
-  return self.start;
-}
 function _M0IP016_24default__implP311moonbitlang4core7builtin4Show10to__stringGRP311moonbitlang4core7builtin9SourceLocE(self) {
   const logger = _M0MP311moonbitlang4core7builtin13StringBuilder11new_2einner(0);
   _M0IP311moonbitlang4core7builtin9SourceLocP311moonbitlang4core7builtin4Show6output(self, { self: logger, method_table: _M0FP095_40moonbitlang_2fcore_2fbuiltin_2eStringBuilder_24as_24_40moonbitlang_2fcore_2fbuiltin_2eLogger });
-  return _M0MP311moonbitlang4core7builtin13StringBuilder10to__string(logger);
+  return logger.val;
 }
 function _M0MP311moonbitlang4core7builtin4Iter4nextGcE(self) {
   const _func = self;
@@ -785,27 +765,12 @@ function _M0MP311moonbitlang4core7builtin4Iter4nextGyE(self) {
 function _M0MP311moonbitlang4core4uint4UInt18to__string_2einner(self, radix) {
   return _M0FP311moonbitlang4core7builtin20uint__to__string__js(self, radix);
 }
-function _M0MP311moonbitlang4core7builtin4Iter3newGcE(f) {
-  return f;
-}
-function _M0MP311moonbitlang4core7builtin4Iter3newGyE(f) {
-  return f;
-}
-function _M0MP311moonbitlang4core4uint4UInt8to__byte(self) {
-  return self & 255;
-}
 function _M0IP311moonbitlang4core6string10StringViewP311moonbitlang4core7builtin4Show10to__string(self) {
   return self.str.substring(self.start, self.end);
 }
-function _M0MP311moonbitlang4core5array9ArrayView6lengthGcE(self) {
-  return self.end - self.start | 0;
-}
-function _M0MP311moonbitlang4core5array9ArrayView6lengthGsE(self) {
-  return self.end - self.start | 0;
-}
 function _M0MP311moonbitlang4core6string6String11from__array(chars) {
-  const buf = _M0MP311moonbitlang4core7builtin13StringBuilder11new_2einner(Math.imul(_M0MP311moonbitlang4core5array9ArrayView6lengthGcE(chars), 4) | 0);
-  const _len = _M0MP311moonbitlang4core5array9ArrayView6lengthGcE(chars);
+  const buf = _M0MP311moonbitlang4core7builtin13StringBuilder11new_2einner(Math.imul(chars.end - chars.start | 0, 4) | 0);
+  const _len = chars.end - chars.start | 0;
   let _tmp = 0;
   while (true) {
     const _i = _tmp;
@@ -818,7 +783,7 @@ function _M0MP311moonbitlang4core6string6String11from__array(chars) {
       break;
     }
   }
-  return _M0MP311moonbitlang4core7builtin13StringBuilder10to__string(buf);
+  return buf.val;
 }
 function _M0MP311moonbitlang4core6string6String24char__length__eq_2einner(self, len, start_offset, end_offset) {
   let end_offset$2;
@@ -881,7 +846,7 @@ function _M0MP311moonbitlang4core5array5Array4pushGRP36mizchi4wite8optimize10Raw
 function _M0MP311moonbitlang4core6string6String4iter(self) {
   const len = self.length;
   const index = { val: 0 };
-  return _M0MP311moonbitlang4core7builtin4Iter3newGcE(() => {
+  const _p = () => {
     if (index.val < len) {
       const c1 = self.charCodeAt(index.val);
       if (_M0MP311moonbitlang4core6uint166UInt1622is__leading__surrogate(c1) && (index.val + 1 | 0) < len) {
@@ -893,20 +858,15 @@ function _M0MP311moonbitlang4core6string6String4iter(self) {
         }
       }
       index.val = index.val + 1 | 0;
-      return _M0MP311moonbitlang4core6uint166UInt1616unsafe__to__char(c1);
+      return c1;
     } else {
       return -1;
     }
-  });
+  };
+  return _p;
 }
 function _M0IP311moonbitlang4core6string6StringP311moonbitlang4core7builtin12ToStringView16to__string__view(self) {
   return { str: self, start: 0, end: self.length };
-}
-function _M0IP311moonbitlang4core6string6StringP311moonbitlang4core7builtin4Show10to__string(self) {
-  return self;
-}
-function _M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(self, that) {
-  return self === that;
 }
 function _M0MP311moonbitlang4core5bytes5Bytes4make(len, init) {
   if (len < 0) {
@@ -931,21 +891,6 @@ function _M0MP311moonbitlang4core3int3Int8to__char(self) {
   }
   return self;
 }
-function _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(self, idx) {
-  return self.charCodeAt(idx);
-}
-function _M0MP311moonbitlang4core4byte4Byte8to__uint(self) {
-  return self;
-}
-function _M0MP311moonbitlang4core5bytes9BytesView6length(self) {
-  return self.end - self.start | 0;
-}
-function _M0MP311moonbitlang4core5bytes9BytesView11unsafe__get(self, index) {
-  const _tmp = self.bytes;
-  const _tmp$2 = self.start + index | 0;
-  $bound_check(_tmp, _tmp$2);
-  return _tmp[_tmp$2];
-}
 function _M0MP311moonbitlang4core5bytes5Bytes12view_2einner(self, start, end) {
   const len = self.length;
   let end$2;
@@ -966,19 +911,21 @@ function _M0MP311moonbitlang4core5bytes5Bytes12view_2einner(self, start, end) {
 }
 function _M0MP311moonbitlang4core5bytes9BytesView4iter(self) {
   const i = { val: 0 };
-  const len = _M0MP311moonbitlang4core5bytes9BytesView6length(self);
-  return _M0MP311moonbitlang4core7builtin4Iter3newGyE(() => {
+  const len = self.end - self.start | 0;
+  const _p = () => {
     if (i.val < len) {
-      const result = _M0MP311moonbitlang4core5bytes9BytesView11unsafe__get(self, i.val);
+      const _p$2 = i.val;
+      const _tmp = self.bytes;
+      const _tmp$2 = self.start + _p$2 | 0;
+      $bound_check(_tmp, _tmp$2);
+      const result = _tmp[_tmp$2];
       i.val = i.val + 1 | 0;
       return result;
     } else {
       return -1;
     }
-  });
-}
-function _M0MP311moonbitlang4core5bytes9BytesView13start__offset(self) {
-  return self.start;
+  };
+  return _p;
 }
 function _M0MP311moonbitlang4core5array10FixedArray17blit__from__bytes(self, bytes_offset, src, src_offset, length) {
   const e1 = (bytes_offset + length | 0) - 1 | 0;
@@ -994,21 +941,18 @@ function _M0MP311moonbitlang4core5array10FixedArray17blit__from__bytes(self, byt
   }
 }
 function _M0MP311moonbitlang4core5bytes9BytesView9to__bytes(self) {
-  if (_M0MP311moonbitlang4core5bytes9BytesView6length(self) === self.bytes.length) {
+  if ((self.end - self.start | 0) === self.bytes.length) {
     return self.bytes;
   }
-  const bytes = $makebytes(_M0MP311moonbitlang4core5bytes9BytesView6length(self), 0);
-  _M0MP311moonbitlang4core5array10FixedArray17blit__from__bytes(bytes, 0, self.bytes, _M0MP311moonbitlang4core5bytes9BytesView13start__offset(self), _M0MP311moonbitlang4core5bytes9BytesView6length(self));
+  const bytes = $makebytes(self.end - self.start | 0, 0);
+  _M0MP311moonbitlang4core5array10FixedArray17blit__from__bytes(bytes, 0, self.bytes, self.start, self.end - self.start | 0);
   return bytes;
-}
-function _M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin6BitAnd4land(self, that) {
-  return self & that & 255;
 }
 function _M0IP311moonbitlang4core7builtin13SourceLocReprP311moonbitlang4core7builtin4Show6output(self, logger) {
   const pkg = self.pkg;
-  const _data = _M0MP311moonbitlang4core6string10StringView4data(pkg);
-  const _start = _M0MP311moonbitlang4core6string10StringView13start__offset(pkg);
-  const _end = _start + _M0MP311moonbitlang4core6string10StringView6length(pkg) | 0;
+  const _data = pkg.str;
+  const _start = pkg.start;
+  const _end = _start + (pkg.end - pkg.start | 0) | 0;
   let _cursor = _start;
   let accept_state = -1;
   let match_end = -1;
@@ -1019,18 +963,21 @@ function _M0IP311moonbitlang4core7builtin13SourceLocReprP311moonbitlang4core7bui
     _L$2: {
       _L$3: while (true) {
         if (_cursor < _end) {
-          const next_char = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+          const _p = _cursor;
+          const next_char = _data.charCodeAt(_p);
           _cursor = _cursor + 1 | 0;
           if (next_char === 47) {
             _L$4: while (true) {
               tag_0 = _cursor;
               if (_cursor < _end) {
-                const next_char$2 = _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                const _p$2 = _cursor;
+                const next_char$2 = _data.charCodeAt(_p$2);
                 _cursor = _cursor + 1 | 0;
                 if (next_char$2 === 47) {
                   while (true) {
                     if (_cursor < _end) {
-                      _M0MP311moonbitlang4core6string6String20unsafe__charcode__at(_data, _cursor);
+                      const _p$3 = _cursor;
+                      _data.charCodeAt(_p$3);
                       _cursor = _cursor + 1 | 0;
                       continue;
                     } else {
@@ -1130,14 +1077,16 @@ function _M0MP311moonbitlang4core5array9ArrayView4joinGsE(self, separator) {
     const _bind$3 = self.end;
     const _x = { buf: _bind, start: _bind$2, end: _bind$3 };
     const hd = _M0IP311moonbitlang4core6string6StringP311moonbitlang4core7builtin12ToStringView16to__string__view(_hd);
-    let size_hint = _M0MP311moonbitlang4core6string10StringView6length(hd);
-    const _len = _M0MP311moonbitlang4core5array9ArrayView6lengthGsE(_x);
+    let size_hint = hd.end - hd.start | 0;
+    const _len = _x.end - _x.start | 0;
     let _tmp = 0;
     while (true) {
       const _i = _tmp;
       if (_i < _len) {
         const s = _bind[_bind$2 + _i | 0];
-        size_hint = size_hint + (_M0MP311moonbitlang4core6string10StringView6length(_M0IP311moonbitlang4core6string6StringP311moonbitlang4core7builtin12ToStringView16to__string__view(s)) + _M0MP311moonbitlang4core6string10StringView6length(separator) | 0) | 0;
+        const _tmp$2 = size_hint;
+        const _p = _M0IP311moonbitlang4core6string6StringP311moonbitlang4core7builtin12ToStringView16to__string__view(s);
+        size_hint = _tmp$2 + ((_p.end - _p.start | 0) + (separator.end - separator.start | 0) | 0) | 0;
         _tmp = _i + 1 | 0;
         continue;
       } else {
@@ -1148,7 +1097,7 @@ function _M0MP311moonbitlang4core5array9ArrayView4joinGsE(self, separator) {
     const buf = _M0MP311moonbitlang4core7builtin13StringBuilder11new_2einner(size_hint);
     _M0IP311moonbitlang4core7builtin13StringBuilderP311moonbitlang4core7builtin6Logger11write__view(buf, hd);
     if (_M0MP311moonbitlang4core6string6String24char__length__eq_2einner(separator.str, 0, separator.start, separator.end)) {
-      const _len$2 = _M0MP311moonbitlang4core5array9ArrayView6lengthGsE(_x);
+      const _len$2 = _x.end - _x.start | 0;
       let _tmp$2 = 0;
       while (true) {
         const _i = _tmp$2;
@@ -1163,7 +1112,7 @@ function _M0MP311moonbitlang4core5array9ArrayView4joinGsE(self, separator) {
         }
       }
     } else {
-      const _len$2 = _M0MP311moonbitlang4core5array9ArrayView6lengthGsE(_x);
+      const _len$2 = _x.end - _x.start | 0;
       let _tmp$2 = 0;
       while (true) {
         const _i = _tmp$2;
@@ -1179,47 +1128,34 @@ function _M0MP311moonbitlang4core5array9ArrayView4joinGsE(self, separator) {
         }
       }
     }
-    return _M0MP311moonbitlang4core7builtin13StringBuilder10to__string(buf);
+    return buf.val;
   }
 }
 function _M0MP311moonbitlang4core5array5Array4joinGsE(self, separator) {
   return _M0MP311moonbitlang4core5array9ArrayView4joinGsE({ buf: self, start: 0, end: self.length }, separator);
 }
 function _M0FP36mizchi4wite5types23wite__error__to__string(err) {
-  let msg;
-  _L: {
-    let msg$2;
-    _L$2: {
-      switch (err.$tag) {
-        case 5: {
-          return "unexpected eof";
-        }
-        case 4: {
-          return "invalid wasm magic";
-        }
-        case 3: {
-          const _UnsupportedVersion = err;
-          const _msg = _UnsupportedVersion._0;
-          msg$2 = _msg;
-          break _L$2;
-        }
-        default: {
-          const _InvalidFormat = err;
-          const _msg$2 = _InvalidFormat._0;
-          msg = _msg$2;
-          break _L;
-        }
-      }
+  switch (err.$tag) {
+    case 5: {
+      return "unexpected eof";
     }
-    return `unsupported version: ${msg$2}`;
+    case 4: {
+      return "invalid wasm magic";
+    }
+    case 3: {
+      const _UnsupportedVersion = err;
+      const _msg = _UnsupportedVersion._0;
+      return `unsupported version: ${_msg}`;
+    }
+    default: {
+      const _InvalidFormat = err;
+      const _msg$2 = _InvalidFormat._0;
+      return `invalid format: ${_msg$2}`;
+    }
   }
-  return `invalid format: ${msg}`;
 }
 function _M0FP36mizchi4wite5types17error__to__string(err) {
   return _M0FP36mizchi4wite5types23wite__error__to__string(err);
-}
-function _M0MP36mizchi4wite8optimize6Cursor3eof(self) {
-  return self.pos >= self.bytes.length;
 }
 function _M0MP36mizchi4wite8optimize6Cursor3new(bytes) {
   return { bytes: bytes, pos: 0 };
@@ -1254,15 +1190,27 @@ function _M0MP36mizchi4wite8optimize6Cursor17read__u32__leb128(self) {
     } else {
       return _bind;
     }
-    if (shift$2 >= 28 && _M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin6BitAnd4land(byte, 128) !== 0) {
+    let _tmp$3;
+    if (shift$2 >= 28) {
+      const _p = 128;
+      _tmp$3 = (byte & _p & 255) !== 0;
+    } else {
+      _tmp$3 = false;
+    }
+    if (_tmp$3) {
       return new Result$Err$2$(new Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidFormat("LEB128 u32 overflow"));
     }
     if (shift$2 >= 28 && byte > 15) {
       return new Result$Err$2$(new Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidFormat("LEB128 u32 value overflow"));
     }
-    const value = _M0MP311moonbitlang4core4byte4Byte8to__uint(_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin6BitAnd4land(byte, 127)) << shift$2;
+    const _p = 127;
+    const _p$2 = byte & _p & 255;
+    const value = _p$2 << shift$2;
     const next = result$2 | value;
-    if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin6BitAnd4land(byte, 128), 0)) {
+    const _p$3 = 128;
+    const _p$4 = byte & _p$3 & 255;
+    const _p$5 = 0;
+    if (_p$4 === _p$5) {
       return new Result$Ok$2$(next);
     } else {
       _tmp = shift$2 + 7 | 0;
@@ -1270,9 +1218,6 @@ function _M0MP36mizchi4wite8optimize6Cursor17read__u32__leb128(self) {
       continue;
     }
   }
-}
-function _M0MP36mizchi4wite8optimize6Cursor8get__pos(self) {
-  return self.pos;
 }
 function _M0MP36mizchi4wite8optimize6Cursor8set__pos(self, pos) {
   self.pos = pos;
@@ -1294,52 +1239,68 @@ function _M0FP36mizchi4wite8optimize20ensure__core__header(bytes) {
   }
   let _tmp;
   $bound_check(bytes, 0);
-  if (bytes[0] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(0)) {
+  const _tmp$2 = bytes[0];
+  const _p = 0;
+  if (_tmp$2 !== (_p & 255)) {
     _tmp = true;
   } else {
-    let _tmp$2;
+    let _tmp$3;
     $bound_check(bytes, 1);
-    if (bytes[1] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(97)) {
-      _tmp$2 = true;
+    const _tmp$4 = bytes[1];
+    const _p$2 = 97;
+    if (_tmp$4 !== (_p$2 & 255)) {
+      _tmp$3 = true;
     } else {
-      let _tmp$3;
+      let _tmp$5;
       $bound_check(bytes, 2);
-      if (bytes[2] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(115)) {
-        _tmp$3 = true;
+      const _tmp$6 = bytes[2];
+      const _p$3 = 115;
+      if (_tmp$6 !== (_p$3 & 255)) {
+        _tmp$5 = true;
       } else {
         $bound_check(bytes, 3);
-        _tmp$3 = bytes[3] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(109);
+        const _tmp$7 = bytes[3];
+        const _p$4 = 109;
+        _tmp$5 = _tmp$7 !== (_p$4 & 255);
       }
-      _tmp$2 = _tmp$3;
+      _tmp$3 = _tmp$5;
     }
-    _tmp = _tmp$2;
+    _tmp = _tmp$3;
   }
   if (_tmp) {
     return new Result$Err$3$(Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidMagic);
   }
-  let _tmp$2;
+  let _tmp$3;
   $bound_check(bytes, 4);
-  if (bytes[4] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(1)) {
-    _tmp$2 = true;
+  const _tmp$4 = bytes[4];
+  const _p$2 = 1;
+  if (_tmp$4 !== (_p$2 & 255)) {
+    _tmp$3 = true;
   } else {
-    let _tmp$3;
+    let _tmp$5;
     $bound_check(bytes, 5);
-    if (bytes[5] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(0)) {
-      _tmp$3 = true;
+    const _tmp$6 = bytes[5];
+    const _p$3 = 0;
+    if (_tmp$6 !== (_p$3 & 255)) {
+      _tmp$5 = true;
     } else {
-      let _tmp$4;
+      let _tmp$7;
       $bound_check(bytes, 6);
-      if (bytes[6] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(0)) {
-        _tmp$4 = true;
+      const _tmp$8 = bytes[6];
+      const _p$4 = 0;
+      if (_tmp$8 !== (_p$4 & 255)) {
+        _tmp$7 = true;
       } else {
         $bound_check(bytes, 7);
-        _tmp$4 = bytes[7] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(0);
+        const _tmp$9 = bytes[7];
+        const _p$5 = 0;
+        _tmp$7 = _tmp$9 !== (_p$5 & 255);
       }
-      _tmp$3 = _tmp$4;
+      _tmp$5 = _tmp$7;
     }
-    _tmp$2 = _tmp$3;
+    _tmp$3 = _tmp$5;
   }
-  if (_tmp$2) {
+  if (_tmp$3) {
     return new Result$Err$3$(new Error$mizchi$47$wite$47$types$46$WiteError$46$UnsupportedVersion("expected core wasm version 1"));
   } else {
     return new Result$Ok$3$(undefined);
@@ -1359,7 +1320,7 @@ function _M0FP36mizchi4wite8optimize28parse__custom__section__name(payload) {
   if (name_len < 0) {
     return new Result$Err$4$(new Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidFormat("custom section name length overflow"));
   }
-  const start = _M0MP36mizchi4wite8optimize6Cursor8get__pos(parser);
+  const start = parser.pos;
   const end_ = start + name_len | 0;
   if (end_ > payload.length) {
     return new Result$Err$4$(Error$mizchi$47$wite$47$types$46$WiteError$46$UnexpectedEof);
@@ -1367,35 +1328,22 @@ function _M0FP36mizchi4wite8optimize28parse__custom__section__name(payload) {
   const out = [];
   const _it = _M0MP311moonbitlang4core5bytes9BytesView4iter(_M0MP311moonbitlang4core5bytes5Bytes12view_2einner(payload, start, end_));
   while (true) {
-    let b;
-    _L: {
-      const _bind$2 = _M0MP311moonbitlang4core7builtin4Iter4nextGyE(_it);
-      if (_bind$2 === -1) {
-        break;
+    const _bind$2 = _M0MP311moonbitlang4core7builtin4Iter4nextGyE(_it);
+    if (_bind$2 === -1) {
+      break;
+    } else {
+      const _Some = _bind$2;
+      const _b = _Some;
+      const _bind$3 = _M0MP311moonbitlang4core3int3Int8to__char(_b);
+      if (_bind$3 === -1) {
+        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 63);
       } else {
-        const _Some = _bind$2;
-        const _b = _Some;
-        b = _b;
-        break _L;
+        const _Some$2 = _bind$3;
+        const _ch = _Some$2;
+        _M0MP311moonbitlang4core5array5Array4pushGcE(out, _ch);
       }
+      continue;
     }
-    let ch;
-    _L$2: {
-      _L$3: {
-        const _bind$2 = _M0MP311moonbitlang4core3int3Int8to__char(b);
-        if (_bind$2 === -1) {
-          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 63);
-        } else {
-          const _Some = _bind$2;
-          const _ch = _Some;
-          ch = _ch;
-          break _L$3;
-        }
-        break _L$2;
-      }
-      _M0MP311moonbitlang4core5array5Array4pushGcE(out, ch);
-    }
-    continue;
   }
   return new Result$Ok$4$(_M0MP311moonbitlang4core6string6String11from__array({ buf: out, start: 0, end: out.length }));
 }
@@ -1404,17 +1352,17 @@ function _M0FP36mizchi4wite8optimize21parse__sections__from(bytes, start) {
   _M0MP36mizchi4wite8optimize6Cursor8set__pos(parser, start);
   const sections = [];
   while (true) {
-    if (!_M0MP36mizchi4wite8optimize6Cursor3eof(parser)) {
-      const section_start = _M0MP36mizchi4wite8optimize6Cursor8get__pos(parser);
+    if (!(parser.pos >= parser.bytes.length)) {
+      const section_start = parser.pos;
       const _bind = _M0MP36mizchi4wite8optimize6Cursor10read__byte(parser);
-      let _tmp;
+      let _p;
       if (_bind.$tag === 1) {
         const _ok = _bind;
-        _tmp = _ok._0;
+        _p = _ok._0;
       } else {
         return _bind;
       }
-      const section_id = _M0MP311moonbitlang4core4byte4Byte8to__uint(_tmp);
+      const section_id = _p;
       const _bind$2 = _M0MP36mizchi4wite8optimize6Cursor17read__u32__leb128(parser);
       let payload_size_u;
       if (_bind$2.$tag === 1) {
@@ -1427,7 +1375,7 @@ function _M0FP36mizchi4wite8optimize21parse__sections__from(bytes, start) {
       if (payload_size < 0) {
         return new Result$Err$5$(new Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidFormat("section size overflow"));
       }
-      const payload_start = _M0MP36mizchi4wite8optimize6Cursor8get__pos(parser);
+      const payload_start = parser.pos;
       const section_end = payload_start + payload_size | 0;
       if (section_end > bytes.length) {
         return new Result$Err$5$(Error$mizchi$47$wite$47$types$46$WiteError$46$UnexpectedEof);
@@ -1470,52 +1418,68 @@ function _M0FP36mizchi4wite8optimize25ensure__component__header(bytes) {
   }
   let _tmp;
   $bound_check(bytes, 0);
-  if (bytes[0] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(0)) {
+  const _tmp$2 = bytes[0];
+  const _p = 0;
+  if (_tmp$2 !== (_p & 255)) {
     _tmp = true;
   } else {
-    let _tmp$2;
+    let _tmp$3;
     $bound_check(bytes, 1);
-    if (bytes[1] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(97)) {
-      _tmp$2 = true;
+    const _tmp$4 = bytes[1];
+    const _p$2 = 97;
+    if (_tmp$4 !== (_p$2 & 255)) {
+      _tmp$3 = true;
     } else {
-      let _tmp$3;
+      let _tmp$5;
       $bound_check(bytes, 2);
-      if (bytes[2] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(115)) {
-        _tmp$3 = true;
+      const _tmp$6 = bytes[2];
+      const _p$3 = 115;
+      if (_tmp$6 !== (_p$3 & 255)) {
+        _tmp$5 = true;
       } else {
         $bound_check(bytes, 3);
-        _tmp$3 = bytes[3] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(109);
+        const _tmp$7 = bytes[3];
+        const _p$4 = 109;
+        _tmp$5 = _tmp$7 !== (_p$4 & 255);
       }
-      _tmp$2 = _tmp$3;
+      _tmp$3 = _tmp$5;
     }
-    _tmp = _tmp$2;
+    _tmp = _tmp$3;
   }
   if (_tmp) {
     return new Result$Err$3$(Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidMagic);
   }
-  let _tmp$2;
+  let _tmp$3;
   $bound_check(bytes, 4);
-  if (bytes[4] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(13)) {
-    _tmp$2 = true;
+  const _tmp$4 = bytes[4];
+  const _p$2 = 13;
+  if (_tmp$4 !== (_p$2 & 255)) {
+    _tmp$3 = true;
   } else {
-    let _tmp$3;
+    let _tmp$5;
     $bound_check(bytes, 5);
-    if (bytes[5] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(0)) {
-      _tmp$3 = true;
+    const _tmp$6 = bytes[5];
+    const _p$3 = 0;
+    if (_tmp$6 !== (_p$3 & 255)) {
+      _tmp$5 = true;
     } else {
-      let _tmp$4;
+      let _tmp$7;
       $bound_check(bytes, 6);
-      if (bytes[6] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(1)) {
-        _tmp$4 = true;
+      const _tmp$8 = bytes[6];
+      const _p$4 = 1;
+      if (_tmp$8 !== (_p$4 & 255)) {
+        _tmp$7 = true;
       } else {
         $bound_check(bytes, 7);
-        _tmp$4 = bytes[7] !== _M0MP311moonbitlang4core4uint4UInt8to__byte(0);
+        const _tmp$9 = bytes[7];
+        const _p$5 = 0;
+        _tmp$7 = _tmp$9 !== (_p$5 & 255);
       }
-      _tmp$3 = _tmp$4;
+      _tmp$5 = _tmp$7;
     }
-    _tmp$2 = _tmp$3;
+    _tmp$3 = _tmp$5;
   }
-  if (_tmp$2) {
+  if (_tmp$3) {
     return new Result$Err$3$(new Error$mizchi$47$wite$47$types$46$WiteError$46$UnsupportedVersion("expected component wasm header 0d 00 01 00"));
   } else {
     return new Result$Ok$3$(undefined);
@@ -1532,7 +1496,7 @@ function _M0FP36mizchi4wite8optimize33parse__component__sections__raise(bytes) {
   return _M0FP36mizchi4wite8optimize21parse__sections__from(bytes, 8);
 }
 function _M0FP36mizchi4wite12plugin_2dapi15val__type__name(b) {
-  const _bind = _M0MP311moonbitlang4core4byte4Byte8to__uint(b);
+  const _bind = b;
   switch (_bind) {
     case 127: {
       return "i32";
@@ -1605,49 +1569,44 @@ function _M0FP36mizchi4wite12plugin_2dapi20escape__json__string(s) {
   const out = [];
   const _it = _M0MP311moonbitlang4core6string6String4iter(s);
   while (true) {
-    let ch;
-    _L: {
-      const _bind = _M0MP311moonbitlang4core7builtin4Iter4nextGcE(_it);
-      if (_bind === -1) {
-        break;
-      } else {
-        const _Some = _bind;
-        const _ch = _Some;
-        ch = _ch;
-        break _L;
+    const _bind = _M0MP311moonbitlang4core7builtin4Iter4nextGcE(_it);
+    if (_bind === -1) {
+      break;
+    } else {
+      const _Some = _bind;
+      const _ch = _Some;
+      switch (_ch) {
+        case 34: {
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 34);
+          break;
+        }
+        case 92: {
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
+          break;
+        }
+        case 10: {
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 110);
+          break;
+        }
+        case 13: {
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 114);
+          break;
+        }
+        case 9: {
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, 116);
+          break;
+        }
+        default: {
+          _M0MP311moonbitlang4core5array5Array4pushGcE(out, _ch);
+        }
       }
+      continue;
     }
-    switch (ch) {
-      case 34: {
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 34);
-        break;
-      }
-      case 92: {
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
-        break;
-      }
-      case 10: {
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 110);
-        break;
-      }
-      case 13: {
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 114);
-        break;
-      }
-      case 9: {
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 92);
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 116);
-        break;
-      }
-      default: {
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, ch);
-      }
-    }
-    continue;
   }
   return _M0MP311moonbitlang4core6string6String11from__array({ buf: out, start: 0, end: out.length });
 }
@@ -1655,27 +1614,43 @@ function _M0FP36mizchi4wite12plugin_2dapi21is__component__header(bytes) {
   if (bytes.length >= 8) {
     let _tmp;
     $bound_check(bytes, 0);
-    if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[0], 0)) {
+    const _p = bytes[0];
+    const _p$2 = 0;
+    if (_p === _p$2) {
       let _tmp$2;
       $bound_check(bytes, 1);
-      if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[1], 97)) {
+      const _p$3 = bytes[1];
+      const _p$4 = 97;
+      if (_p$3 === _p$4) {
         let _tmp$3;
         $bound_check(bytes, 2);
-        if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[2], 115)) {
+        const _p$5 = bytes[2];
+        const _p$6 = 115;
+        if (_p$5 === _p$6) {
           let _tmp$4;
           $bound_check(bytes, 3);
-          if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[3], 109)) {
+          const _p$7 = bytes[3];
+          const _p$8 = 109;
+          if (_p$7 === _p$8) {
             let _tmp$5;
             $bound_check(bytes, 4);
-            if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[4], 13)) {
+            const _p$9 = bytes[4];
+            const _p$10 = 13;
+            if (_p$9 === _p$10) {
               let _tmp$6;
               $bound_check(bytes, 5);
-              if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[5], 0)) {
+              const _p$11 = bytes[5];
+              const _p$12 = 0;
+              if (_p$11 === _p$12) {
                 let _tmp$7;
                 $bound_check(bytes, 6);
-                if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[6], 1)) {
+                const _p$13 = bytes[6];
+                const _p$14 = 1;
+                if (_p$13 === _p$14) {
                   $bound_check(bytes, 7);
-                  _tmp$7 = _M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[7], 0);
+                  const _p$15 = bytes[7];
+                  const _p$16 = 0;
+                  _tmp$7 = _p$15 === _p$16;
                 } else {
                   _tmp$7 = false;
                 }
@@ -1721,7 +1696,7 @@ function _M0FP36mizchi4wite12plugin_2dapi10read__name(parser) {
   if (name_len_int < 0) {
     return new Result$Err$4$(new Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidFormat("name length overflow"));
   }
-  const start = _M0MP36mizchi4wite8optimize6Cursor8get__pos(parser);
+  const start = parser.pos;
   const end_ = start + name_len_int | 0;
   const _bind$2 = _M0MP36mizchi4wite8optimize6Cursor4skip(parser, name_len_int);
   if (_bind$2.$tag === 1) {
@@ -1731,27 +1706,17 @@ function _M0FP36mizchi4wite12plugin_2dapi10read__name(parser) {
     return _bind$2;
   }
   const out = [];
-  const _start115 = start;
-  const _end116 = end_;
-  let _tmp = _start115;
+  let _tmp = start;
   while (true) {
     const i = _tmp;
-    if (i < _end116) {
-      let ch;
-      _L: {
-        _L$2: {
-          const _bind$3 = _M0MP311moonbitlang4core3int3Int8to__char(parser.bytes[i]);
-          if (_bind$3 === -1) {
-            _M0MP311moonbitlang4core5array5Array4pushGcE(out, 63);
-          } else {
-            const _Some = _bind$3;
-            const _ch = _Some;
-            ch = _ch;
-            break _L$2;
-          }
-          break _L;
-        }
-        _M0MP311moonbitlang4core5array5Array4pushGcE(out, ch);
+    if (i < end_) {
+      const _bind$3 = _M0MP311moonbitlang4core3int3Int8to__char(parser.bytes[i]);
+      if (_bind$3 === -1) {
+        _M0MP311moonbitlang4core5array5Array4pushGcE(out, 63);
+      } else {
+        const _Some = _bind$3;
+        const _ch = _Some;
+        _M0MP311moonbitlang4core5array5Array4pushGcE(out, _ch);
       }
       _tmp = i + 1 | 0;
       continue;
@@ -1772,12 +1737,10 @@ function _M0FP36mizchi4wite12plugin_2dapi20parse__exports__full(payload) {
     return _bind;
   }
   const out = [];
-  const _start125 = 0;
-  const _end126 = count;
-  let _tmp = _start125;
+  let _tmp = 0;
   while (true) {
     const _ = _tmp;
-    if (_ >>> 0 < _end126 >>> 0) {
+    if (_ >>> 0 < count >>> 0) {
       const _bind$2 = _M0FP36mizchi4wite12plugin_2dapi10read__name(parser);
       let name;
       if (_bind$2.$tag === 1) {
@@ -1787,14 +1750,14 @@ function _M0FP36mizchi4wite12plugin_2dapi20parse__exports__full(payload) {
         return _bind$2;
       }
       const _bind$3 = _M0MP36mizchi4wite8optimize6Cursor10read__byte(parser);
-      let _tmp$2;
+      let _p;
       if (_bind$3.$tag === 1) {
         const _ok = _bind$3;
-        _tmp$2 = _ok._0;
+        _p = _ok._0;
       } else {
         return _bind$3;
       }
-      const kind = _M0MP311moonbitlang4core4byte4Byte8to__uint(_tmp$2);
+      const kind = _p;
       const _bind$4 = _M0MP36mizchi4wite8optimize6Cursor17read__u32__leb128(parser);
       let index;
       if (_bind$4.$tag === 1) {
@@ -1848,7 +1811,7 @@ function _M0FP36mizchi4wite12plugin_2dapi16skip__heap__type(parser) {
   } else {
     return _bind;
   }
-  const _bind$2 = _M0MP311moonbitlang4core4byte4Byte8to__uint(first);
+  const _bind$2 = first;
   switch (_bind$2) {
     case 112: {
       break;
@@ -1857,8 +1820,9 @@ function _M0FP36mizchi4wite12plugin_2dapi16skip__heap__type(parser) {
       break;
     }
     default: {
-      if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin6BitAnd4land(first, 128) !== 0) {
-        const consumed = { val: 1 };
+      const _p = 128;
+      if ((first & _p & 255) !== 0) {
+        let consumed = 1;
         while (true) {
           const _bind$3 = _M0MP36mizchi4wite8optimize6Cursor10read__byte(parser);
           let b;
@@ -1868,11 +1832,14 @@ function _M0FP36mizchi4wite12plugin_2dapi16skip__heap__type(parser) {
           } else {
             return _bind$3;
           }
-          consumed.val = consumed.val + 1 | 0;
-          if (consumed.val > 5) {
+          consumed = consumed + 1 | 0;
+          if (consumed > 5) {
             return new Result$Err$3$(new Error$mizchi$47$wite$47$types$46$WiteError$46$InvalidFormat("heap type overflow"));
           }
-          if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin6BitAnd4land(b, 128), 0)) {
+          const _p$2 = 128;
+          const _p$3 = b & _p$2 & 255;
+          const _p$4 = 0;
+          if (_p$3 === _p$4) {
             break;
           }
           continue;
@@ -1893,12 +1860,10 @@ function _M0FP36mizchi4wite12plugin_2dapi20parse__imports__full(payload) {
     return _bind;
   }
   const out = [];
-  const _start93 = 0;
-  const _end94 = count;
-  let _tmp = _start93;
+  let _tmp = 0;
   while (true) {
     const _ = _tmp;
-    if (_ >>> 0 < _end94 >>> 0) {
+    if (_ >>> 0 < count >>> 0) {
       const _bind$2 = _M0FP36mizchi4wite12plugin_2dapi10read__name(parser);
       let mod_name;
       if (_bind$2.$tag === 1) {
@@ -1916,14 +1881,14 @@ function _M0FP36mizchi4wite12plugin_2dapi20parse__imports__full(payload) {
         return _bind$3;
       }
       const _bind$4 = _M0MP36mizchi4wite8optimize6Cursor10read__byte(parser);
-      let _tmp$2;
+      let _p;
       if (_bind$4.$tag === 1) {
         const _ok = _bind$4;
-        _tmp$2 = _ok._0;
+        _p = _ok._0;
       } else {
         return _bind$4;
       }
-      const kind = _M0MP311moonbitlang4core4byte4Byte8to__uint(_tmp$2);
+      const kind = _p;
       let type_index;
       switch (kind) {
         case 0: {
@@ -2027,22 +1992,20 @@ function _M0FP36mizchi4wite12plugin_2dapi18parse__func__types(payload) {
     return _bind;
   }
   const out = [];
-  const _start63 = 0;
-  const _end64 = count;
-  let _tmp = _start63;
+  let _tmp = 0;
   while (true) {
     const _ = _tmp;
-    if (_ >>> 0 < _end64 >>> 0) {
+    if (_ >>> 0 < count >>> 0) {
       _L: {
         const _bind$2 = _M0MP36mizchi4wite8optimize6Cursor10read__byte(parser);
-        let _tmp$2;
+        let _p;
         if (_bind$2.$tag === 1) {
           const _ok = _bind$2;
-          _tmp$2 = _ok._0;
+          _p = _ok._0;
         } else {
           return _bind$2;
         }
-        const form = _M0MP311moonbitlang4core4byte4Byte8to__uint(_tmp$2);
+        const form = _p;
         if (form !== 96) {
           _M0MP311moonbitlang4core5array5Array4pushGRP36mizchi4wite12plugin_2dapi7FuncSigE(out, { params: [], results: [] });
           switch (form) {
@@ -2055,12 +2018,10 @@ function _M0FP36mizchi4wite12plugin_2dapi18parse__func__types(payload) {
               } else {
                 return _bind$3;
               }
-              const _start70 = 0;
-              const _end71 = field_count;
-              let _tmp$3 = _start70;
+              let _tmp$2 = 0;
               while (true) {
-                const _$2 = _tmp$3;
-                if (_$2 >>> 0 < _end71 >>> 0) {
+                const _$2 = _tmp$2;
+                if (_$2 >>> 0 < field_count >>> 0) {
                   const _bind$4 = _M0MP36mizchi4wite8optimize6Cursor10read__byte(parser);
                   if (_bind$4.$tag === 1) {
                     const _ok = _bind$4;
@@ -2075,7 +2036,7 @@ function _M0FP36mizchi4wite12plugin_2dapi18parse__func__types(payload) {
                   } else {
                     return _bind$5;
                   }
-                  _tmp$3 = (_$2 >>> 0) + (1 >>> 0) | 0;
+                  _tmp$2 = (_$2 >>> 0) + (1 >>> 0) | 0;
                   continue;
                 } else {
                   break;
@@ -2115,22 +2076,20 @@ function _M0FP36mizchi4wite12plugin_2dapi18parse__func__types(payload) {
           return _bind$3;
         }
         const params = [];
-        const _start77 = 0;
-        const _end78 = param_count;
-        let _tmp$3 = _start77;
+        let _tmp$2 = 0;
         while (true) {
-          const _$2 = _tmp$3;
-          if (_$2 >>> 0 < _end78 >>> 0) {
+          const _$2 = _tmp$2;
+          if (_$2 >>> 0 < param_count >>> 0) {
             const _bind$4 = _M0MP36mizchi4wite8optimize6Cursor10read__byte(parser);
-            let _tmp$4;
+            let _tmp$3;
             if (_bind$4.$tag === 1) {
               const _ok = _bind$4;
-              _tmp$4 = _ok._0;
+              _tmp$3 = _ok._0;
             } else {
               return _bind$4;
             }
-            _M0MP311moonbitlang4core5array5Array4pushGsE(params, _M0FP36mizchi4wite12plugin_2dapi15val__type__name(_tmp$4));
-            _tmp$3 = (_$2 >>> 0) + (1 >>> 0) | 0;
+            _M0MP311moonbitlang4core5array5Array4pushGsE(params, _M0FP36mizchi4wite12plugin_2dapi15val__type__name(_tmp$3));
+            _tmp$2 = (_$2 >>> 0) + (1 >>> 0) | 0;
             continue;
           } else {
             break;
@@ -2145,22 +2104,20 @@ function _M0FP36mizchi4wite12plugin_2dapi18parse__func__types(payload) {
           return _bind$4;
         }
         const results = [];
-        const _start84 = 0;
-        const _end85 = result_count;
-        let _tmp$4 = _start84;
+        let _tmp$3 = 0;
         while (true) {
-          const _$2 = _tmp$4;
-          if (_$2 >>> 0 < _end85 >>> 0) {
+          const _$2 = _tmp$3;
+          if (_$2 >>> 0 < result_count >>> 0) {
             const _bind$5 = _M0MP36mizchi4wite8optimize6Cursor10read__byte(parser);
-            let _tmp$5;
+            let _tmp$4;
             if (_bind$5.$tag === 1) {
               const _ok = _bind$5;
-              _tmp$5 = _ok._0;
+              _tmp$4 = _ok._0;
             } else {
               return _bind$5;
             }
-            _M0MP311moonbitlang4core5array5Array4pushGsE(results, _M0FP36mizchi4wite12plugin_2dapi15val__type__name(_tmp$5));
-            _tmp$4 = (_$2 >>> 0) + (1 >>> 0) | 0;
+            _M0MP311moonbitlang4core5array5Array4pushGsE(results, _M0FP36mizchi4wite12plugin_2dapi15val__type__name(_tmp$4));
+            _tmp$3 = (_$2 >>> 0) + (1 >>> 0) | 0;
             continue;
           } else {
             break;
@@ -2188,12 +2145,10 @@ function _M0FP36mizchi4wite12plugin_2dapi30parse__function__type__indices(payloa
     return _bind;
   }
   const out = [];
-  const _start54 = 0;
-  const _end55 = count;
-  let _tmp = _start54;
+  let _tmp = 0;
   while (true) {
     const _ = _tmp;
-    if (_ >>> 0 < _end55 >>> 0) {
+    if (_ >>> 0 < count >>> 0) {
       const _bind$2 = _M0MP36mizchi4wite8optimize6Cursor17read__u32__leb128(parser);
       let _tmp$2;
       if (_bind$2.$tag === 1) {
@@ -2213,13 +2168,12 @@ function _M0FP36mizchi4wite12plugin_2dapi30parse__function__type__indices(payloa
 }
 function _M0FP36mizchi4wite12plugin_2dapi19json__string__array(arr) {
   const parts = [];
-  const _arr = arr;
-  const _len = _arr.length;
+  const _len = arr.length;
   let _tmp = 0;
   while (true) {
     const _i = _tmp;
     if (_i < _len) {
-      const item = _arr[_i];
+      const item = arr[_i];
       _M0MP311moonbitlang4core5array5Array4pushGsE(parts, `\"${_M0FP36mizchi4wite12plugin_2dapi20escape__json__string(item)}\"`);
       _tmp = _i + 1 | 0;
       continue;
@@ -2227,8 +2181,7 @@ function _M0FP36mizchi4wite12plugin_2dapi19json__string__array(arr) {
       break;
     }
   }
-  const _bind = ",";
-  return `[${_M0MP311moonbitlang4core5array5Array4joinGsE(parts, { str: _bind, start: 0, end: _bind.length })}]`;
+  return `[${_M0MP311moonbitlang4core5array5Array4joinGsE(parts, { str: _M0FP36mizchi4wite12plugin_2dapi35json__string__array_2e_2abind_7c209, start: 0, end: _M0FP36mizchi4wite12plugin_2dapi35json__string__array_2e_2abind_7c209.length })}]`;
 }
 function _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata(bytes) {
   if (_M0FP36mizchi4wite12plugin_2dapi21is__component__header(bytes)) {
@@ -2249,20 +2202,18 @@ function _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata(bytes) {
       }
       break _L;
     }
-    const err = _try_err;
-    return `{\"error\":\"${_M0FP36mizchi4wite12plugin_2dapi20escape__json__string(_M0FP36mizchi4wite5types17error__to__string(err))}\"}`;
+    return `{\"error\":\"${_M0FP36mizchi4wite12plugin_2dapi20escape__json__string(_M0FP36mizchi4wite5types17error__to__string(_try_err))}\"}`;
   }
-  const types = { val: [] };
-  const imports = { val: [] };
-  const exports = { val: [] };
-  const functions = { val: [] };
-  const _arr = sections;
-  const _len = _arr.length;
+  let types = [];
+  let imports = [];
+  let exports = [];
+  let functions = [];
+  const _len = sections.length;
   let _tmp = 0;
   while (true) {
     const _i = _tmp;
     if (_i < _len) {
-      const section = _arr[_i];
+      const section = sections[_i];
       const payload = _M0MP311moonbitlang4core5bytes9BytesView9to__bytes(_M0MP311moonbitlang4core5bytes5Bytes12view_2einner(bytes, section.payload_start, section.section_end));
       const _bind = section.section_id;
       switch (_bind) {
@@ -2280,7 +2231,7 @@ function _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata(bytes) {
                 _try_err$2 = _err._0;
                 break _L$3;
               }
-              types.val = _tmp$2;
+              types = _tmp$2;
               break _L$2;
             }
           }
@@ -2300,7 +2251,7 @@ function _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata(bytes) {
                 _try_err$3 = _err._0;
                 break _L$4;
               }
-              imports.val = _tmp$2;
+              imports = _tmp$2;
               break _L$3;
             }
           }
@@ -2320,7 +2271,7 @@ function _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata(bytes) {
                 _try_err$4 = _err._0;
                 break _L$5;
               }
-              functions.val = _tmp$2;
+              functions = _tmp$2;
               break _L$4;
             }
           }
@@ -2340,7 +2291,7 @@ function _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata(bytes) {
                 _try_err$5 = _err._0;
                 break _L$6;
               }
-              exports.val = _tmp$2;
+              exports = _tmp$2;
               break _L$5;
             }
           }
@@ -2356,13 +2307,13 @@ function _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata(bytes) {
   const out = [];
   _M0MP311moonbitlang4core5array5Array4pushGsE(out, "{\"isComponent\":false");
   const type_parts = [];
-  const _arr$2 = types.val;
-  const _len$2 = _arr$2.length;
+  const _arr = types;
+  const _len$2 = _arr.length;
   let _tmp$2 = 0;
   while (true) {
     const _i = _tmp$2;
     if (_i < _len$2) {
-      const t = _arr$2[_i];
+      const t = _arr[_i];
       _M0MP311moonbitlang4core5array5Array4pushGsE(type_parts, `{\"params\":${_M0FP36mizchi4wite12plugin_2dapi19json__string__array(t.params)},\"results\":${_M0FP36mizchi4wite12plugin_2dapi19json__string__array(t.results)}}`);
       _tmp$2 = _i + 1 | 0;
       continue;
@@ -2370,52 +2321,42 @@ function _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata(bytes) {
       break;
     }
   }
-  const _bind = ",";
-  _M0MP311moonbitlang4core5array5Array4pushGsE(out, `,\"types\":[${_M0MP311moonbitlang4core5array5Array4joinGsE(type_parts, { str: _bind, start: 0, end: _bind.length })}]`);
+  _M0MP311moonbitlang4core5array5Array4pushGsE(out, `,\"types\":[${_M0MP311moonbitlang4core5array5Array4joinGsE(type_parts, { str: _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c232, start: 0, end: _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c232.length })}]`);
   const import_parts = [];
-  const _arr$3 = imports.val;
-  const _len$3 = _arr$3.length;
+  const _arr$2 = imports;
+  const _len$3 = _arr$2.length;
   let _tmp$3 = 0;
   while (true) {
     const _i = _tmp$3;
     if (_i < _len$3) {
-      const imp = _arr$3[_i];
-      const s = { val: `{\"module\":\"${_M0FP36mizchi4wite12plugin_2dapi20escape__json__string(imp.mod_name)}\"` };
-      s.val = `${s.val},\"name\":\"${_M0FP36mizchi4wite12plugin_2dapi20escape__json__string(imp.name)}\"`;
-      s.val = `${s.val},\"kind\":\"${_M0FP36mizchi4wite12plugin_2dapi18import__kind__name(imp.kind)}\"`;
-      let idx;
-      _L$2: {
-        _L$3: {
-          const _bind$2 = imp.type_index;
-          if (_bind$2 === undefined) {
-          } else {
-            const _Some = _bind$2;
-            const _idx = _Some;
-            idx = _idx;
-            break _L$3;
-          }
-          break _L$2;
-        }
-        s.val = `${s.val},\"typeIndex\":${_M0MP311moonbitlang4core4uint4UInt18to__string_2einner(idx, 10)}`;
+      const imp = _arr$2[_i];
+      let s = `{\"module\":\"${_M0FP36mizchi4wite12plugin_2dapi20escape__json__string(imp.mod_name)}\"`;
+      s = `${s},\"name\":\"${_M0FP36mizchi4wite12plugin_2dapi20escape__json__string(imp.name)}\"`;
+      s = `${s},\"kind\":\"${_M0FP36mizchi4wite12plugin_2dapi18import__kind__name(imp.kind)}\"`;
+      const _bind = imp.type_index;
+      if (_bind === undefined) {
+      } else {
+        const _Some = _bind;
+        const _idx = _Some;
+        s = `${s},\"typeIndex\":${_M0MP311moonbitlang4core4uint4UInt18to__string_2einner(_idx, 10)}`;
       }
-      s.val = `${s.val}}`;
-      _M0MP311moonbitlang4core5array5Array4pushGsE(import_parts, s.val);
+      s = `${s}}`;
+      _M0MP311moonbitlang4core5array5Array4pushGsE(import_parts, s);
       _tmp$3 = _i + 1 | 0;
       continue;
     } else {
       break;
     }
   }
-  const _bind$2 = ",";
-  _M0MP311moonbitlang4core5array5Array4pushGsE(out, `,\"imports\":[${_M0MP311moonbitlang4core5array5Array4joinGsE(import_parts, { str: _bind$2, start: 0, end: _bind$2.length })}]`);
+  _M0MP311moonbitlang4core5array5Array4pushGsE(out, `,\"imports\":[${_M0MP311moonbitlang4core5array5Array4joinGsE(import_parts, { str: _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c240, start: 0, end: _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c240.length })}]`);
   const export_parts = [];
-  const _arr$4 = exports.val;
-  const _len$4 = _arr$4.length;
+  const _arr$3 = exports;
+  const _len$4 = _arr$3.length;
   let _tmp$4 = 0;
   while (true) {
     const _i = _tmp$4;
     if (_i < _len$4) {
-      const exp = _arr$4[_i];
+      const exp = _arr$3[_i];
       _M0MP311moonbitlang4core5array5Array4pushGsE(export_parts, `{\"name\":\"${_M0FP36mizchi4wite12plugin_2dapi20escape__json__string(exp.name)}\",\"kind\":\"${_M0FP36mizchi4wite12plugin_2dapi18export__kind__name(exp.kind)}\",\"index\":${_M0MP311moonbitlang4core4uint4UInt18to__string_2einner(exp.index, 10)}}`);
       _tmp$4 = _i + 1 | 0;
       continue;
@@ -2423,16 +2364,15 @@ function _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata(bytes) {
       break;
     }
   }
-  const _bind$3 = ",";
-  _M0MP311moonbitlang4core5array5Array4pushGsE(out, `,\"exports\":[${_M0MP311moonbitlang4core5array5Array4joinGsE(export_parts, { str: _bind$3, start: 0, end: _bind$3.length })}]`);
+  _M0MP311moonbitlang4core5array5Array4pushGsE(out, `,\"exports\":[${_M0MP311moonbitlang4core5array5Array4joinGsE(export_parts, { str: _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c243, start: 0, end: _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c243.length })}]`);
   const func_parts = [];
-  const _arr$5 = functions.val;
-  const _len$5 = _arr$5.length;
+  const _arr$4 = functions;
+  const _len$5 = _arr$4.length;
   let _tmp$5 = 0;
   while (true) {
     const _i = _tmp$5;
     if (_i < _len$5) {
-      const idx = _arr$5[_i];
+      const idx = _arr$4[_i];
       _M0MP311moonbitlang4core5array5Array4pushGsE(func_parts, _M0MP311moonbitlang4core4uint4UInt18to__string_2einner(idx, 10));
       _tmp$5 = _i + 1 | 0;
       continue;
@@ -2440,37 +2380,51 @@ function _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata(bytes) {
       break;
     }
   }
-  const _bind$4 = ",";
-  _M0MP311moonbitlang4core5array5Array4pushGsE(out, `,\"functions\":[${_M0MP311moonbitlang4core5array5Array4joinGsE(func_parts, { str: _bind$4, start: 0, end: _bind$4.length })}]`);
+  _M0MP311moonbitlang4core5array5Array4pushGsE(out, `,\"functions\":[${_M0MP311moonbitlang4core5array5Array4joinGsE(func_parts, { str: _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c246, start: 0, end: _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c246.length })}]`);
   _M0MP311moonbitlang4core5array5Array4pushGsE(out, "}");
-  const _bind$5 = "";
-  return _M0MP311moonbitlang4core5array5Array4joinGsE(out, { str: _bind$5, start: 0, end: _bind$5.length });
+  return _M0MP311moonbitlang4core5array5Array4joinGsE(out, { str: _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c247, start: 0, end: _M0FP36mizchi4wite12plugin_2dapi37parse__wasm__metadata_2e_2abind_7c247.length });
 }
 function _M0FP36mizchi4wite12plugin_2dapi24is__core__module__header(bytes) {
   if (bytes.length >= 8) {
     let _tmp;
     $bound_check(bytes, 0);
-    if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[0], 0)) {
+    const _p = bytes[0];
+    const _p$2 = 0;
+    if (_p === _p$2) {
       let _tmp$2;
       $bound_check(bytes, 1);
-      if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[1], 97)) {
+      const _p$3 = bytes[1];
+      const _p$4 = 97;
+      if (_p$3 === _p$4) {
         let _tmp$3;
         $bound_check(bytes, 2);
-        if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[2], 115)) {
+        const _p$5 = bytes[2];
+        const _p$6 = 115;
+        if (_p$5 === _p$6) {
           let _tmp$4;
           $bound_check(bytes, 3);
-          if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[3], 109)) {
+          const _p$7 = bytes[3];
+          const _p$8 = 109;
+          if (_p$7 === _p$8) {
             let _tmp$5;
             $bound_check(bytes, 4);
-            if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[4], 1)) {
+            const _p$9 = bytes[4];
+            const _p$10 = 1;
+            if (_p$9 === _p$10) {
               let _tmp$6;
               $bound_check(bytes, 5);
-              if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[5], 0)) {
+              const _p$11 = bytes[5];
+              const _p$12 = 0;
+              if (_p$11 === _p$12) {
                 let _tmp$7;
                 $bound_check(bytes, 6);
-                if (_M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[6], 0)) {
+                const _p$13 = bytes[6];
+                const _p$14 = 0;
+                if (_p$13 === _p$14) {
                   $bound_check(bytes, 7);
-                  _tmp$7 = _M0IP311moonbitlang4core4byte4ByteP311moonbitlang4core7builtin2Eq5equal(bytes[7], 0);
+                  const _p$15 = bytes[7];
+                  const _p$16 = 0;
+                  _tmp$7 = _p$15 === _p$16;
                 } else {
                   _tmp$7 = false;
                 }
@@ -2524,13 +2478,12 @@ function _M0FP36mizchi4wite12plugin_2dapi28extract__first__core__module(bytes) {
     }
     return _M0MP311moonbitlang4core5bytes5Bytes3new(0);
   }
-  const _arr = sections;
-  const _len = _arr.length;
+  const _len = sections.length;
   let _tmp = 0;
   while (true) {
     const _i = _tmp;
     if (_i < _len) {
-      const section = _arr[_i];
+      const section = sections[_i];
       if (section.section_id === 1) {
         const payload = _M0MP311moonbitlang4core5bytes9BytesView9to__bytes(_M0MP311moonbitlang4core5bytes5Bytes12view_2einner(bytes, section.payload_start, section.section_end));
         if (_M0FP36mizchi4wite12plugin_2dapi24is__core__module__header(payload)) {
@@ -2548,4 +2501,3 @@ function _M0FP36mizchi4wite12plugin_2dapi28extract__first__core__module(bytes) {
 (() => {
 })();
 export { _M0FP36mizchi4wite12plugin_2dapi21parse__wasm__metadata as parse_wasm_metadata, _M0FP36mizchi4wite12plugin_2dapi28extract__first__core__module as extract_first_core_module }
-//# sourceMappingURL=plugin-api.js.map

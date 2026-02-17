@@ -129,6 +129,11 @@ test-examples: example-minimal example-wat-moonbit-deps example-moonbit-rust exa
     wasmtime run examples/moonbit-wasi/dist/app.min.wasm | grep -q "hello from moonbit-wasi"
     @echo "all example tests passed"
 
+# Rebuild generated wasm-parser.js for vite-plugin-wite
+build-plugin-api:
+    moon build --target js --release src/plugin-api
+    cp _build/js/release/build/plugin-api/plugin-api.js packages/vite-plugin-wite/src/generated/wasm-parser.js
+
 # Build WAT deps for vite-plugin example
 example-vite-plugin-deps:
     wasm-tools parse examples/vite-plugin/src/add.wat -o examples/vite-plugin/src/add.wasm
