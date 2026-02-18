@@ -494,6 +494,19 @@ test "parse_server_config wagi executor" {
 }
 
 ///|
+test "parse_server_config workerd executor" {
+  let json : Json = { "executor": "workerd", "route": "/api/..." }
+  let result = @config.parse_server_config(json)
+  match result {
+    Ok(config) => {
+      assert_eq(config.executor, @config.ServerExecutor::Workerd)
+      inspect(config.route, content="/api/...")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
 test "parse_server_config defaults" {
   let json : Json = {}
   let result = @config.parse_server_config(json)
@@ -549,6 +562,190 @@ test "parse_wite_config_json without server section" {
   let result = @config.parse_wite_config_json(json)
   match result {
     Ok(config) => assert_true(config.server is None)
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_bindings simple kv format" {
+  let json : Json = { "kv_namespaces": ["MY_KV", "CACHE"] }
+  let result = @config.parse_server_bindings(json)
+  match result {
+    Ok(bindings) => {
+      assert_eq(bindings.kv_namespaces.length(), 2)
+      assert_eq(bindings.kv_namespaces[0].binding, "MY_KV")
+      assert_eq(bindings.kv_namespaces[0].id, "wite-dev-my_kv")
+      assert_eq(bindings.kv_namespaces[1].binding, "CACHE")
+      assert_eq(bindings.kv_namespaces[1].id, "wite-dev-cache")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_bindings explicit kv format" {
+  let json : Json = {
+    "kv_namespaces": [{ "binding": "MY_KV", "id": "custom-id-123" }],
+  }
+  let result = @config.parse_server_bindings(json)
+  match result {
+    Ok(bindings) => {
+      assert_eq(bindings.kv_namespaces.length(), 1)
+      assert_eq(bindings.kv_namespaces[0].binding, "MY_KV")
+      assert_eq(bindings.kv_namespaces[0].id, "custom-id-123")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_bindings simple r2 format" {
+  let json : Json = { "r2_buckets": ["MY_BUCKET"] }
+  let result = @config.parse_server_bindings(json)
+  match result {
+    Ok(bindings) => {
+      assert_eq(bindings.r2_buckets.length(), 1)
+      assert_eq(bindings.r2_buckets[0].binding, "MY_BUCKET")
+      assert_eq(bindings.r2_buckets[0].bucket_name, "wite-dev-my_bucket")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_bindings explicit r2 format" {
+  let json : Json = {
+    "r2_buckets": [{ "binding": "MY_R2", "bucket_name": "my-prod-bucket" }],
+  }
+  let result = @config.parse_server_bindings(json)
+  match result {
+    Ok(bindings) => {
+      assert_eq(bindings.r2_buckets.length(), 1)
+      assert_eq(bindings.r2_buckets[0].binding, "MY_R2")
+      assert_eq(bindings.r2_buckets[0].bucket_name, "my-prod-bucket")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_bindings simple d1 format" {
+  let json : Json = { "d1_databases": ["MY_DB"] }
+  let result = @config.parse_server_bindings(json)
+  match result {
+    Ok(bindings) => {
+      assert_eq(bindings.d1_databases.length(), 1)
+      assert_eq(bindings.d1_databases[0].binding, "MY_DB")
+      assert_eq(bindings.d1_databases[0].database_name, "wite-dev-my_db")
+      assert_eq(bindings.d1_databases[0].database_id, "wite-dev-my_db")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_bindings explicit d1 format" {
+  let json : Json = {
+    "d1_databases": [
+      {
+        "binding": "MY_DB",
+        "database_name": "prod-db",
+        "database_id": "abc-123",
+      },
+    ],
+  }
+  let result = @config.parse_server_bindings(json)
+  match result {
+    Ok(bindings) => {
+      assert_eq(bindings.d1_databases.length(), 1)
+      assert_eq(bindings.d1_databases[0].binding, "MY_DB")
+      assert_eq(bindings.d1_databases[0].database_name, "prod-db")
+      assert_eq(bindings.d1_databases[0].database_id, "abc-123")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_bindings empty object" {
+  let json : Json = {}
+  let result = @config.parse_server_bindings(json)
+  match result {
+    Ok(bindings) => {
+      assert_eq(bindings.kv_namespaces.length(), 0)
+      assert_eq(bindings.r2_buckets.length(), 0)
+      assert_eq(bindings.d1_databases.length(), 0)
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_bindings non-object error" {
+  let json : Json = "invalid"
+  let result = @config.parse_server_bindings(json)
+  match result {
+    Err(msg) => inspect(msg, content="bindings must be object")
+    Ok(_) => fail("expected error")
+  }
+}
+
+///|
+test "parse_server_bindings kv invalid element" {
+  let json : Json = { "kv_namespaces": [42] }
+  let result = @config.parse_server_bindings(json)
+  match result {
+    Err(msg) => inspect(msg, content="kv_namespaces[] must be string or object")
+    Ok(_) => fail("expected error")
+  }
+}
+
+///|
+test "parse_server_config with bindings" {
+  let json : Json = {
+    "executor": "workerd",
+    "bindings": { "kv_namespaces": ["MY_KV"] },
+  }
+  let result = @config.parse_server_config(json)
+  match result {
+    Ok(config) => {
+      assert_eq(config.executor, @config.ServerExecutor::Workerd)
+      assert_eq(config.bindings.kv_namespaces.length(), 1)
+      assert_eq(config.bindings.kv_namespaces[0].binding, "MY_KV")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_config without bindings defaults to empty" {
+  let json : Json = { "executor": "workerd" }
+  let result = @config.parse_server_config(json)
+  match result {
+    Ok(config) => {
+      assert_eq(config.bindings.kv_namespaces.length(), 0)
+      assert_eq(config.bindings.r2_buckets.length(), 0)
+      assert_eq(config.bindings.d1_databases.length(), 0)
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_bindings all types combined" {
+  let json : Json = {
+    "kv_namespaces": ["KV1"],
+    "r2_buckets": [{ "binding": "R2", "bucket_name": "my-bucket" }],
+    "d1_databases": ["DB1"],
+  }
+  let result = @config.parse_server_bindings(json)
+  match result {
+    Ok(bindings) => {
+      assert_eq(bindings.kv_namespaces.length(), 1)
+      assert_eq(bindings.r2_buckets.length(), 1)
+      assert_eq(bindings.d1_databases.length(), 1)
+      assert_eq(bindings.r2_buckets[0].bucket_name, "my-bucket")
+    }
     Err(msg) => fail("unexpected error: " + msg)
   }
 }

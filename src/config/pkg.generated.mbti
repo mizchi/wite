@@ -10,6 +10,8 @@ pub fn config_input_entries(ConfigInput) -> Array[(String, String)]
 
 pub fn config_input_single_path(ConfigInput) -> String?
 
+pub fn empty_server_bindings() -> ServerBindings
+
 pub fn empty_wite_config_file() -> WiteConfigFile
 
 pub fn is_ts_config(String) -> Bool
@@ -29,6 +31,8 @@ pub fn parse_config_output(Json) -> Result[ConfigOutput, String]
 pub fn parse_config_selection_flags(Array[String]) -> ConfigSelectionFlags
 
 pub fn parse_json_string_array(Json, String) -> Result[Array[String], String]
+
+pub fn parse_server_bindings(Json) -> Result[ServerBindings, String]
 
 pub fn parse_server_config(Json) -> Result[ServerConfig, String]
 
@@ -74,14 +78,46 @@ pub struct ConfigSelectionFlags {
   remaining_flags : Array[String]
 }
 
+pub(all) struct D1DatabaseBinding {
+  binding : String
+  database_name : String
+  database_id : String
+}
+pub impl Eq for D1DatabaseBinding
+pub impl Show for D1DatabaseBinding
+
+pub(all) struct KvNamespaceBinding {
+  binding : String
+  id : String
+}
+pub impl Eq for KvNamespaceBinding
+pub impl Show for KvNamespaceBinding
+
+pub(all) struct R2BucketBinding {
+  binding : String
+  bucket_name : String
+}
+pub impl Eq for R2BucketBinding
+pub impl Show for R2BucketBinding
+
+pub(all) struct ServerBindings {
+  kv_namespaces : Array[KvNamespaceBinding]
+  r2_buckets : Array[R2BucketBinding]
+  d1_databases : Array[D1DatabaseBinding]
+}
+pub impl Eq for ServerBindings
+pub impl Show for ServerBindings
+
 pub struct ServerConfig {
   executor : ServerExecutor
   route : String
+  bindings : ServerBindings
 }
 pub impl Show for ServerConfig
 
 pub(all) enum ServerExecutor {
   Wagi
+  Workerd
 }
 pub impl Eq for ServerExecutor
 pub impl Show for ServerExecutor

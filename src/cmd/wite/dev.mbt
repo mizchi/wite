@@ -164,6 +164,47 @@ async fn find_wasm_in_build_dirs(
 }
 
 ///|
+async fn find_js_files_recursive(dir : String) -> Array[String] {
+  let results : Array[String] = []
+  let queue : Array[String] = [dir]
+  while queue.length() > 0 {
+    let current = queue.pop().unwrap()
+    let entries = @xfs.readdir(current) catch { _ => continue }
+    for entry in entries {
+      let full = current + "/" + entry
+      if entry.has_suffix(".js") {
+        results.push(full)
+      } else {
+        queue.push(full)
+      }
+    }
+  }
+  results
+}
+
+///|
+async fn find_js_in_build_dirs(
+  project_dir : String,
+  release? : Bool = false,
+) -> String? {
+  let mode = if release { "release" } else { "debug" }
+  let candidates = [
+    project_dir + "/target/js/" + mode + "/build",
+    project_dir + "/_build/js/" + mode + "/build",
+  ]
+  for dir in candidates {
+    let exists = @xfs.exists(dir)
+    if exists {
+      let files = find_js_files_recursive(dir)
+      if files.length() > 0 {
+        return Some(files[0])
+      }
+    }
+  }
+  None
+}
+
+///|
 fn make_relative_path(base : String, full : String) -> String {
   let prefix = if base.has_suffix("/") { base } else { base + "/" }
   if full.has_prefix(prefix) {
@@ -549,13 +590,13 @@ async fn run_dev_command(args : Array[String]) -> Unit {
   let mut target = "wasm-gc"
   let mut build_cmd_str = ""
   let mut watch_path = ""
-  let mut server_mode = false
+  let mut server_mode = ""
   let mut i = 2
   while i < args.length() {
     let arg = args[i]
     if arg == "-h" || arg == "--help" {
       println(
-        "wite dev [dir] [--port=<n>] [--target=wasm-gc|wasm] [--build-cmd=<cmd>] [--watch=<path>] [--server]",
+        "wite dev [dir] [--port=<n>] [--target=wasm-gc|wasm] [--build-cmd=<cmd>] [--watch=<path>] [--server[=wagi|workerd]]",
       )
       println("")
       println("Start a dev server with file watching and live reload.")
@@ -570,12 +611,24 @@ async fn run_dev_command(args : Array[String]) -> Unit {
         "  --watch=<path>   File path to watch for changes (default: auto-detect from _build/)",
       )
       println(
-        "  --server         Enable WAGI server mode (execute wasm via wasmtime for each request)",
+        "  --server[=wagi|workerd] Enable server mode (wagi: wasmtime CGI, workerd: Cloudflare Workers)",
       )
       return
     }
     if arg == "--server" {
-      server_mode = true
+      server_mode = "wagi"
+      i += 1
+      continue
+    }
+    if arg.strip_prefix("--server=") is Some(v) {
+      let value = v.to_string()
+      if value != "wagi" && value != "workerd" {
+        println(
+          "invalid --server value: " + value + " (expected wagi or workerd)",
+        )
+        @sys.exit(1)
+      }
+      server_mode = value
       i += 1
       continue
     }
@@ -642,9 +695,12 @@ async fn run_dev_command(args : Array[String]) -> Unit {
     dir = arg
     i += 1
   }
-  // Server mode defaults to wasm target (for Component Model wasm)
-  if server_mode && target == "wasm-gc" {
+  // Server mode defaults: wagi → wasm target, workerd → js target
+  if server_mode == "wagi" && target == "wasm-gc" {
     target = "wasm"
+  }
+  if server_mode == "workerd" && target == "wasm-gc" {
+    target = "js"
   }
   let mod_path = if dir == "." {
     "moon.mod.json"
@@ -673,6 +729,40 @@ async fn run_dev_command(args : Array[String]) -> Unit {
     @sys.exit(1)
   }
   println("build succeeded")
+  // Workerd mode: delegate to workerd dev loop (no HTTP server needed)
+  if server_mode == "workerd" {
+    println("[wite] server mode enabled (workerd)")
+    // Load config for bindings
+    let bindings = {
+      let config_path = if dir == "." {
+        "wite.config.jsonc"
+      } else {
+        dir + "/wite.config.jsonc"
+      }
+      if @fs.path_exists(config_path) {
+        let config = @wite_config.load_wite_config_or_exit(config_path)
+        match config.server {
+          Some(server) => server.bindings
+          None => @wite_config.empty_server_bindings()
+        }
+      } else {
+        @wite_config.empty_server_bindings()
+      }
+    }
+    let js_path = find_js_in_build_dirs(dir, release=true)
+    match js_path {
+      None => {
+        println("error: no .js file found in build output")
+        @sys.exit(1)
+      }
+      Some(abs_js_path) => {
+        let rel_js = make_relative_path(dir, abs_js_path)
+        println("found: " + rel_js)
+        run_workerd_dev_loop(dir, build_cmd, build_args, port, bindings~)
+      }
+    }
+    return
+  }
   // Resolve watch path
   let resolved_wasm_path = if watch_path != "" {
     let full_path = if watch_path.has_prefix("/") {
@@ -739,7 +829,7 @@ async fn run_dev_command(args : Array[String]) -> Unit {
       )
       let root = dir
       let html = generated_html
-      let is_server = server_mode
+      let is_server = server_mode == "wagi"
       let wasm_for_wagi = abs_wasm_path
       if is_server {
         println("[wite] server mode enabled (WAGI)")

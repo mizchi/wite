@@ -1,13 +1,135 @@
 ///|
 pub(all) enum ServerExecutor {
   Wagi
+  Workerd
 } derive(Show, Eq)
+
+///|
+pub(all) struct KvNamespaceBinding {
+  binding : String
+  id : String
+} derive(Show, Eq)
+
+///|
+pub(all) struct R2BucketBinding {
+  binding : String
+  bucket_name : String
+} derive(Show, Eq)
+
+///|
+pub(all) struct D1DatabaseBinding {
+  binding : String
+  database_name : String
+  database_id : String
+} derive(Show, Eq)
+
+///|
+pub(all) struct ServerBindings {
+  kv_namespaces : Array[KvNamespaceBinding]
+  r2_buckets : Array[R2BucketBinding]
+  d1_databases : Array[D1DatabaseBinding]
+} derive(Show, Eq)
+
+///|
+pub fn empty_server_bindings() -> ServerBindings {
+  { kv_namespaces: [], r2_buckets: [], d1_databases: [] }
+}
 
 ///|
 pub struct ServerConfig {
   executor : ServerExecutor
   route : String
+  bindings : ServerBindings
 } derive(Show)
+
+///|
+pub fn parse_server_bindings(
+  json_value : Json,
+) -> Result[ServerBindings, String] {
+  match json_value {
+    Object(obj) => {
+      let kv_namespaces : Array[KvNamespaceBinding] = []
+      let r2_buckets : Array[R2BucketBinding] = []
+      let d1_databases : Array[D1DatabaseBinding] = []
+      if obj.get("kv_namespaces") is Some(Array(arr)) {
+        for item in arr {
+          match item {
+            String(name) =>
+              kv_namespaces.push({
+                binding: name,
+                id: "wite-dev-" + name.to_lower(),
+              })
+            Object(o) => {
+              let binding = match o.get("binding") {
+                Some(String(s)) => s
+                _ => return Err("kv_namespaces[].binding must be string")
+              }
+              let id = match o.get("id") {
+                Some(String(s)) => s
+                _ => return Err("kv_namespaces[].id must be string")
+              }
+              kv_namespaces.push({ binding, id })
+            }
+            _ => return Err("kv_namespaces[] must be string or object")
+          }
+        }
+      }
+      if obj.get("r2_buckets") is Some(Array(arr)) {
+        for item in arr {
+          match item {
+            String(name) =>
+              r2_buckets.push({
+                binding: name,
+                bucket_name: "wite-dev-" + name.to_lower(),
+              })
+            Object(o) => {
+              let binding = match o.get("binding") {
+                Some(String(s)) => s
+                _ => return Err("r2_buckets[].binding must be string")
+              }
+              let bucket_name = match o.get("bucket_name") {
+                Some(String(s)) => s
+                _ => return Err("r2_buckets[].bucket_name must be string")
+              }
+              r2_buckets.push({ binding, bucket_name })
+            }
+            _ => return Err("r2_buckets[] must be string or object")
+          }
+        }
+      }
+      if obj.get("d1_databases") is Some(Array(arr)) {
+        for item in arr {
+          match item {
+            String(name) =>
+              d1_databases.push({
+                binding: name,
+                database_name: "wite-dev-" + name.to_lower(),
+                database_id: "wite-dev-" + name.to_lower(),
+              })
+            Object(o) => {
+              let binding = match o.get("binding") {
+                Some(String(s)) => s
+                _ => return Err("d1_databases[].binding must be string")
+              }
+              let database_name = match o.get("database_name") {
+                Some(String(s)) => s
+                _ => return Err("d1_databases[].database_name must be string")
+              }
+              let database_id = match o.get("database_id") {
+                Some(String(s)) => s
+                _ => return Err("d1_databases[].database_id must be string")
+              }
+              d1_databases.push({ binding, database_name, database_id })
+            }
+            _ => return Err("d1_databases[] must be string or object")
+          }
+        }
+      }
+      Ok({ kv_namespaces, r2_buckets, d1_databases })
+    }
+    _ => Err("bindings must be object")
+  }
+}
 
 ///|
 pub fn parse_server_config(json_value : Json) -> Result[ServerConfig, String] {
@@ -15,10 +137,12 @@ pub fn parse_server_config(json_value : Json) -> Result[ServerConfig, String] {
     Object(obj) => {
       let mut executor = ServerExecutor::Wagi
       let mut route = "/..."
+      let mut bindings = empty_server_bindings()
       match obj.get("executor") {
         Some(String(e)) =>
           match e.to_lower() {
             "wagi" => executor = ServerExecutor::Wagi
+            "workerd" => executor = ServerExecutor::Workerd
             _ => return Err("invalid server.executor: " + e)
           }
         Some(_) => return Err("server.executor must be string")
@@ -29,7 +153,13 @@ pub fn parse_server_config(json_value : Json) -> Result[ServerConfig, String] {
         Some(_) => return Err("server.route must be string")
         None => ()
       }
-      Ok({ executor, route })
+      if obj.get("bindings") is Some(bindings_value) {
+        match parse_server_bindings(bindings_value) {
+          Ok(parsed) => bindings = parsed
+          Err(msg) => return Err(msg)
+        }
+      }
+      Ok({ executor, route, bindings })
     }
     _ => Err("server must be object")
   }

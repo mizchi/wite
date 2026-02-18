@@ -4,6 +4,7 @@ target/
 target
 .mooncakes/
 .moonagent/
+.wite/
 .jj/
 node_modules/
 packages/*/dist/

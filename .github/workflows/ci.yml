@@ -62,5 +62,11 @@ jobs:
         run: moon check --deny-warn --target js
       - name: Moon test
         run: moon test --target js
+      - name: Install wrangler
+        run: |
+          npm install -g wrangler
+          wrangler --version
+      - name: Workerd E2E test
+        run: moon test --target js -p mizchi/wite/cmd/wite -f workerd_e2e_wbtest.mbt
       - name: Test examples
         run: just test-examples
