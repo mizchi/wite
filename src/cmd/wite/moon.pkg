@@ -6,6 +6,7 @@ import {
   "mizchi/wite/analyze" @wite_analyze,
   "mizchi/wite/optimize" @wite_optimize,
   "mizchi/wite/core" @wite,
+  "mizchi/wit" @wit,
   "mizchi/x/http" @xhttp,
   "mizchi/x/process" @xprocess,
   "mizchi/x/fs" @xfs,

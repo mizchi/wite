@@ -15,7 +15,10 @@ fn print_usage() -> Unit {
   println("  diff <left.wasm> [right.wasm] [options]")
   println("  optimize <input.wasm> <output.wasm> [options]")
   println(
-    "  dev [dir] [--port=<n>] [--target=wasm-gc|wasm] [--build-cmd=<cmd>] [--watch=<path>]",
+    "  dev [dir] [--port=<n>] [--target=wasm-gc|wasm|js] [--build-cmd=<cmd>] [--watch=<path>] [--server[=wagi|workerd]]",
+  )
+  println(
+    "  test [dir] [--target=<t>] [--interface=<wit-dir>] [--world=<world>] [--watch]",
   )
   println("  deps verify|sync [options]")
   println("  analyze [subcommand] <file.wasm> [options]")

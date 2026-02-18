@@ -17,6 +17,7 @@ async fn main {
     "diff" => run_diff_command(args)
     "optimize" => run_optimize(args)
     "dev" => run_dev_command(args)
+    "test" => run_test_command(args)
     "doc" => run_doc_command(args)
     _ => {
       print_usage()
