@@ -36,6 +36,8 @@ wite add wasi:http@0.2.0     # 依存を追加
 wite build                   # 合成 & 最適化 => composed.wasm
 ```
 
+ステップバイステップの手順は [Quick Start Guide](docs/quick-start.md) を参照してください。
+
 `wite new --rust` は `guest/rust/` の cargo-component 雛形を生成します。
 
 入力を省略した場合、`build` は `main.wac`（なければ `main.wasm`）を使います。

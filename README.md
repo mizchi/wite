@@ -36,6 +36,8 @@ wite add wasi:http@0.2.0     # add dependency
 wite build                   # compose & optimize => composed.wasm
 ```
 
+See [Quick Start Guide](docs/quick-start.md) for a step-by-step walkthrough.
+
 `wite new --rust` generates a `guest/rust/` cargo-component scaffold instead.
 
 When no input is specified, `build` uses `main.wac` (or `main.wasm` as fallback).
