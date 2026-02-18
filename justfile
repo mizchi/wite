@@ -6,8 +6,12 @@ target := "js"
 # Default task: check and test
 default: check test
 
-# Install wite via moon install (native binary to ~/.moon/bin/wite)
+# Install wite from registry (~/.moon/bin/wite)
 install:
+    moon install mizchi/wite/cmd/wite
+
+# Install wite from local source (~/.moon/bin/wite)
+install-local:
     moon install ./src/cmd/wite
 
 # Format code

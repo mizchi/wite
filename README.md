@@ -8,14 +8,22 @@ Component Model 版の vite を目指す WebAssembly ビルドツール。MoonBi
 
 ## Installation
 
+Requires [MoonBit](https://www.moonbitlang.com/) toolchain.
+
 ```bash
-# CLI
+# Install MoonBit (if not installed)
+curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+
+# Install wite CLI (~/.moon/bin/wite)
 moon install mizchi/wite/cmd/wite
 
-# Local install (from source)
-just install
+# Or install from source
+git clone https://github.com/mizchi/wite.git
+cd wite && just install
+```
 
-# As a library
+```bash
+# As a library dependency
 moon add mizchi/wite
 ```
 
@@ -215,6 +223,8 @@ just               # check + test
 just fmt           # format code
 just check         # type check
 just test          # run tests
+just install       # install from registry
+just install-local # install from local source
 just bench         # run benchmark suite
 just kpi           # collect KPI report
 just run           # run CLI (src/cmd/wite)
