@@ -19,7 +19,7 @@ pub fn run_dce_report(path : String, limit : UInt) -> Unit {
       }
     }
     Err(e) => {
-      println("dce-report failed: " + @wite.error_to_string(e))
+      println("dce-report failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -29,10 +29,10 @@ pub fn run_dce_report(path : String, limit : UInt) -> Unit {
 pub fn run_runtime_profile(
   path : String,
   iterations : UInt,
-  scenarios : Array[@wite.RuntimeProfileScenario],
+  scenarios : Array[@wite_core.RuntimeProfileScenario],
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.profile_runtime_exports(bytes, iterations~, scenarios~) {
+  match @wite_core.profile_runtime_exports(bytes, iterations~, scenarios~) {
     Ok(profile) => {
       println("runtime profile:")
       println("  instantiate_ns: " + profile.instantiate_ns.to_string())
@@ -93,7 +93,7 @@ pub fn run_runtime_profile(
 
 ///|
 fn print_hotness_size_entries(
-  entries : Array[@wite.HotnessSizeEntry],
+  entries : Array[@wite_core.HotnessSizeEntry],
   limit : UInt,
 ) -> Unit {
   if entries.length() == 0 {
@@ -144,7 +144,9 @@ fn print_hotness_size_entries(
 }
 
 ///|
-fn print_hotness_size_buckets(buckets : Array[@wite.HotnessSizeBucket]) -> Unit {
+fn print_hotness_size_buckets(
+  buckets : Array[@wite_core.HotnessSizeBucket],
+) -> Unit {
   println("  buckets:")
   for bucket in buckets {
     println(
@@ -162,7 +164,7 @@ fn print_hotness_size_buckets(buckets : Array[@wite.HotnessSizeBucket]) -> Unit 
 
 ///|
 fn print_hotness_unresolved_reason_counts(
-  counts : Array[@wite.HotnessUnresolvedReasonCount],
+  counts : Array[@wite_core.HotnessUnresolvedReasonCount],
 ) -> Unit {
   if counts.length() == 0 {
     return
@@ -178,10 +180,10 @@ pub fn run_hot_size(
   path : String,
   iterations : UInt,
   limit : UInt,
-  scenarios : Array[@wite.RuntimeProfileScenario],
+  scenarios : Array[@wite_core.RuntimeProfileScenario],
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  match @wite.analyze_hotness_size_matrix(bytes, iterations~, scenarios~) {
+  match @wite_core.analyze_hotness_size_matrix(bytes, iterations~, scenarios~) {
     Ok(report) => {
       println("hot-size matrix:")
       println("  instantiate_ns: " + report.instantiate_ns.to_string())
@@ -211,7 +213,7 @@ pub fn run_hot_size(
 
 ///|
 fn print_function_sizes(
-  functions : Array[@wite.FunctionSize],
+  functions : Array[@wite_core.FunctionSize],
   limit : UInt,
 ) -> Unit {
   let mut printed = 0U
@@ -257,7 +259,9 @@ fn format_opt_name(value : String?) -> String {
 }
 
 ///|
-fn print_function_gap_entries(entries : Array[@wite.FunctionGapEntry]) -> Unit {
+fn print_function_gap_entries(
+  entries : Array[@wite_core.FunctionGapEntry],
+) -> Unit {
   match entries {
     [] => {
       println("  entries: (none)")
@@ -328,7 +332,7 @@ fn print_function_gap_entries(entries : Array[@wite.FunctionGapEntry]) -> Unit {
 
 ///|
 fn print_code_block_sizes(
-  blocks : Array[@wite.CodeBlockSize],
+  blocks : Array[@wite_core.CodeBlockSize],
   limit : UInt,
 ) -> Unit {
   let mut printed = 0U
@@ -387,7 +391,7 @@ pub fn run_block_sizes(path : String, limit : UInt) -> Unit {
       print_code_block_sizes(report.blocks, limit)
     }
     Err(e) => {
-      println("block-sizes failed: " + @wite.error_to_string(e))
+      println("block-sizes failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -403,7 +407,7 @@ pub fn run_top_functions(path : String, limit : UInt) -> Unit {
       print_function_sizes(functions, limit)
     }
     Err(e) => {
-      println("top-functions failed: " + @wite.error_to_string(e))
+      println("top-functions failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -448,7 +452,7 @@ pub fn run_function_gap(
       print_function_gap_entries(report.entries)
     }
     Err(e) => {
-      println("function-gap failed: " + @wite.error_to_string(e))
+      println("function-gap failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -503,8 +507,8 @@ fn compare_section_gap_entry(a : SectionGapEntry, b : SectionGapEntry) -> Int {
 
 ///|
 fn collect_section_gap_entries(
-  left_sections : Array[@wite.SectionSize],
-  right_sections : Array[@wite.SectionSize],
+  left_sections : Array[@wite_core.SectionSize],
+  right_sections : Array[@wite_core.SectionSize],
 ) -> Array[SectionGapEntry] {
   let left_map : Map[String, UInt] = {}
   for section in left_sections {
@@ -549,7 +553,7 @@ pub fn run_section_gap(
   let left_sections = match @wite_analyze.analyze_section_sizes(left_bytes) {
     Ok(v) => v
     Err(e) => {
-      println("section diff failed (left): " + @wite.error_to_string(e))
+      println("section diff failed (left): " + @wite_core.error_to_string(e))
       @sys.exit(1)
       []
     }
@@ -557,7 +561,7 @@ pub fn run_section_gap(
   let right_sections = match @wite_analyze.analyze_section_sizes(right_bytes) {
     Ok(v) => v
     Err(e) => {
-      println("section diff failed (right): " + @wite.error_to_string(e))
+      println("section diff failed (right): " + @wite_core.error_to_string(e))
       @sys.exit(1)
       []
     }
@@ -625,7 +629,7 @@ fn compare_block_gap_entry(a : BlockGapEntry, b : BlockGapEntry) -> Int {
 }
 
 ///|
-fn block_gap_key(block : @wite.CodeBlockSize) -> String {
+fn block_gap_key(block : @wite_core.CodeBlockSize) -> String {
   block.function_index.to_string() +
   ":" +
   block.block_index.to_string() +
@@ -637,14 +641,14 @@ fn block_gap_key(block : @wite.CodeBlockSize) -> String {
 
 ///|
 fn collect_block_gap_entries(
-  left_blocks : Array[@wite.CodeBlockSize],
-  right_blocks : Array[@wite.CodeBlockSize],
+  left_blocks : Array[@wite_core.CodeBlockSize],
+  right_blocks : Array[@wite_core.CodeBlockSize],
 ) -> Array[BlockGapEntry] {
-  let left_map : Map[String, @wite.CodeBlockSize] = {}
+  let left_map : Map[String, @wite_core.CodeBlockSize] = {}
   for block in left_blocks {
     left_map.set(block_gap_key(block), block)
   }
-  let right_map : Map[String, @wite.CodeBlockSize] = {}
+  let right_map : Map[String, @wite_core.CodeBlockSize] = {}
   for block in right_blocks {
     right_map.set(block_gap_key(block), block)
   }
@@ -703,7 +707,7 @@ pub fn run_block_gap(
   let left_report = match @wite_analyze.analyze_code_block_sizes(left_bytes) {
     Ok(v) => v
     Err(e) => {
-      println("block diff failed (left): " + @wite.error_to_string(e))
+      println("block diff failed (left): " + @wite_core.error_to_string(e))
       @sys.exit(1)
       panic()
     }
@@ -711,7 +715,7 @@ pub fn run_block_gap(
   let right_report = match @wite_analyze.analyze_code_block_sizes(right_bytes) {
     Ok(v) => v
     Err(e) => {
-      println("block diff failed (right): " + @wite.error_to_string(e))
+      println("block diff failed (right): " + @wite_core.error_to_string(e))
       @sys.exit(1)
       panic()
     }
@@ -775,7 +779,7 @@ pub fn run_block_gap(
 
 ///|
 fn print_call_graph_nodes(
-  nodes : Array[@wite.CallGraphNode],
+  nodes : Array[@wite_core.CallGraphNode],
   limit : UInt,
 ) -> Unit {
   let mut printed = 0U
@@ -836,7 +840,7 @@ pub fn run_callgraph(path : String, limit : UInt) -> Unit {
       print_call_graph_nodes(report.nodes, limit)
     }
     Err(e) => {
-      println("callgraph failed: " + @wite.error_to_string(e))
+      println("callgraph failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -850,7 +854,7 @@ fn run_keep_reasons_with_options(
   closed_world_root_exports : Array[String],
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  let config = @wite.make_optimize_config(
+  let config = @wite_core.make_optimize_config(
     closed_world~,
     closed_world_root_exports~,
     safe_mode~,
@@ -886,7 +890,7 @@ fn run_keep_reasons_with_options(
       }
     }
     Err(e) => {
-      println("keep-reasons failed: " + @wite.error_to_string(e))
+      println("keep-reasons failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -917,7 +921,7 @@ fn run_keep_reasons(args : Array[String]) -> Unit {
 
 ///|
 fn print_retain_path_entries(
-  entries : Array[@wite.RetainPathEntry],
+  entries : Array[@wite_core.RetainPathEntry],
   limit : UInt,
 ) -> Unit {
   if entries.length() == 0 {
@@ -972,7 +976,7 @@ fn run_retain_path_with_options(
   closed_world_root_exports : Array[String],
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
-  let config = @wite.make_optimize_config(
+  let config = @wite_core.make_optimize_config(
     closed_world~,
     closed_world_root_exports~,
     safe_mode~,
@@ -989,7 +993,7 @@ fn run_retain_path_with_options(
       print_retain_path_entries(report.entries, limit)
     }
     Err(e) => {
-      println("retain-path failed: " + @wite.error_to_string(e))
+      println("retain-path failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }

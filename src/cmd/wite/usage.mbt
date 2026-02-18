@@ -239,14 +239,14 @@ fn normalize_opt_level_token(token : String) -> String {
 }
 
 ///|
-fn parse_opt_level_or_exit(token : String) -> @wite.OptimizeConfig {
+fn parse_opt_level_or_exit(token : String) -> @wite_core.OptimizeConfig {
   let normalized = normalize_opt_level_token(token)
-  match @wite.optimize_config_from_opt_level(normalized) {
+  match @wite_core.optimize_config_from_opt_level(normalized) {
     Some(config) => config
     None => {
       println("invalid opt-level: " + token)
       @sys.exit(1)
-      @wite.OptimizeConfig::o1()
+      @wite_core.OptimizeConfig::o1()
     }
   }
 }

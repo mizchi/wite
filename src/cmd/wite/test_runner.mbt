@@ -64,7 +64,7 @@ async fn run_contract_tests(
       }
       let detail = match resolved {
         Ok(r) =>
-          match @wite.analyze_component_contract(bytes, r) {
+          match @wite_core.analyze_component_contract(bytes, r) {
             Ok(report) =>
               "exports: " +
               report.component_exports.length().to_string() +
@@ -95,7 +95,7 @@ async fn run_contract_tests(
   }
   match resolved {
     Ok(r) =>
-      match @wite.analyze_component_contract(bytes, r) {
+      match @wite_core.analyze_component_contract(bytes, r) {
         Ok(report) => {
           if report.missing_component_exports.length() > 0 {
             results.push({

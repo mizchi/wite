@@ -74,9 +74,9 @@ fn to_optimize_kind(kind : BinaryKind) -> @wite_optimize.OptimizeKind {
 fn optimize_with_kind(
   bytes : Bytes,
   kind : BinaryKind,
-  config : @wite.OptimizeConfig,
+  config : @wite_core.OptimizeConfig,
   excluded_roots : Array[String],
-) -> Result[@wite.OptimizeResult, String] {
+) -> Result[@wite_core.OptimizeResult, String] {
   @wite_optimize.optimize_with_kind(
     bytes,
     to_optimize_kind(kind),

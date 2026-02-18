@@ -77,10 +77,10 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
         print_analyze_usage()
         @sys.exit(1)
       }
-      let mut config = @wite.OptimizeConfig::o1()
+      let mut config = @wite_core.OptimizeConfig::o1()
       let mut diff_limit = 20U
       if shifted.length() >= 4 {
-        match @wite.optimize_config_from_opt_level(shifted[3]) {
+        match @wite_core.optimize_config_from_opt_level(shifted[3]) {
           Some(v) => {
             config = v
             if shifted.length() >= 5 {
@@ -288,7 +288,7 @@ async fn run_analyze_view_command(args : Array[String]) -> Unit {
   let mut kind = from_config_binary_kind(config_file.analyze_kind)
   let mut limit = 20U
   let mut diff_limit = 20U
-  let mut config = @wite.OptimizeConfig::o1()
+  let mut config = @wite_core.OptimizeConfig::o1()
   let mut closed_world = false
   let mut safe_mode = false
   let closed_world_root_exports : Array[String] = []
@@ -393,7 +393,7 @@ async fn run_analyze_view_command(args : Array[String]) -> Unit {
         match
           (positional[0]
           |> normalize_opt_level_token
-          |> @wite.optimize_config_from_opt_level) {
+          |> @wite_core.optimize_config_from_opt_level) {
           Some(v) => {
             config = v
             if positional.length() == 2 {

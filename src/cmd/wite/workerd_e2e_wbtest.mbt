@@ -97,9 +97,7 @@ async test "workerd e2e: kv put and get via wrangler dev" {
     return
   }
   // KV put
-  let (put_resp, put_body) = @xhttp.get(
-    base + "/kv/put?key=hello&value=world",
-  )
+  let (put_resp, put_body) = @xhttp.get(base + "/kv/put?key=hello&value=world")
   let put_text = put_body.text() catch { _ => "" }
   assert_eq(put_resp.code, 200)
   assert_eq(put_text, "ok")

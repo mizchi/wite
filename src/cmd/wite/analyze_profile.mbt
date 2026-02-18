@@ -33,14 +33,16 @@ pub fn run_analyze_host(path : String, limit : UInt) -> Unit {
       print_host_code_hints(report.hints, limit)
     }
     Err(e) => {
-      println("analyze-host failed: " + @wite.error_to_string(e))
+      println("analyze-host failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }
 }
 
 ///|
-fn print_optimize_metadata_stage(stage : @wite.OptimizeStageMetadata) -> Unit {
+fn print_optimize_metadata_stage(
+  stage : @wite_core.OptimizeStageMetadata,
+) -> Unit {
   println(
     "    " +
     stage.stage +
@@ -107,7 +109,7 @@ fn print_optimize_metadata_stage(stage : @wite.OptimizeStageMetadata) -> Unit {
 ///|
 pub fn run_analyze_opt(
   path : String,
-  config : @wite.OptimizeConfig,
+  config : @wite_core.OptimizeConfig,
   function_diff_limit : UInt,
 ) -> Unit {
   let bytes = read_bytes_or_exit(path)
@@ -135,7 +137,7 @@ pub fn run_analyze_opt(
       }
     }
     Err(e) => {
-      println("analyze-opt failed: " + @wite.error_to_string(e))
+      println("analyze-opt failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -154,13 +156,13 @@ pub fn run_analyze(path : String) -> Unit {
       match @wite_analyze.analyze_call_graph_summary(bytes) {
         Ok(summary) => print_call_graph_summary(summary)
         Err(e) => {
-          println("analyze failed: " + @wite.error_to_string(e))
+          println("analyze failed: " + @wite_core.error_to_string(e))
           @sys.exit(1)
         }
       }
     }
     Err(e) => {
-      println("analyze failed: " + @wite.error_to_string(e))
+      println("analyze failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -214,7 +216,7 @@ pub fn run_deep_analyze(path : String, limit : UInt) -> Unit {
       print_opcode_stats(report.opcodes, report.instruction_bytes, limit)
     }
     Err(e) => {
-      println("deep-analyze failed: " + @wite.error_to_string(e))
+      println("deep-analyze failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }
@@ -236,7 +238,7 @@ fn run_profile(path : String) -> Unit {
       print_section_sizes(profile.sections)
     }
     Err(e) => {
-      println("profile failed: " + @wite.error_to_string(e))
+      println("profile failed: " + @wite_core.error_to_string(e))
       @sys.exit(1)
     }
   }

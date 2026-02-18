@@ -178,8 +178,8 @@ fn parse_int_or_exit(text : String, name : String) -> Int {
 fn parse_runtime_profile_scenarios(
   args : Array[String],
   start : Int,
-) -> Array[@wite.RuntimeProfileScenario] {
-  let scenarios : Array[@wite.RuntimeProfileScenario] = []
+) -> Array[@wite_core.RuntimeProfileScenario] {
+  let scenarios : Array[@wite_core.RuntimeProfileScenario] = []
   for i in start..<args.length() {
     match args[i].strip_prefix("--scenario=") {
       Some(spec_text) => {
@@ -208,7 +208,10 @@ fn parse_runtime_profile_scenarios(
           }
         }
         scenarios.push(
-          @wite.make_runtime_profile_scenario(export_name, args=scenario_args),
+          @wite_core.make_runtime_profile_scenario(
+            export_name,
+            args=scenario_args,
+          ),
         )
       }
       None => ()
@@ -219,7 +222,7 @@ fn parse_runtime_profile_scenarios(
 
 ///|
 priv struct OptimizeCliOptions {
-  config : @wite.OptimizeConfig
+  config : @wite_core.OptimizeConfig
   excluded_roots : Array[String]
   verbose : Bool
 }
@@ -245,13 +248,15 @@ fn parse_wasm_opt_shrink_level_or_exit(text : String) -> UInt {
 }
 
 ///|
-fn wasm_opt_preset_from_optimize_level(level : UInt) -> @wite.OptimizeConfig {
+fn wasm_opt_preset_from_optimize_level(
+  level : UInt,
+) -> @wite_core.OptimizeConfig {
   match level {
-    0U => @wite.OptimizeConfig::o0()
-    1U => @wite.OptimizeConfig::o1()
-    2U => @wite.OptimizeConfig::o2()
-    3U => @wite.OptimizeConfig::o3()
-    _ => @wite.OptimizeConfig::aggressive()
+    0U => @wite_core.OptimizeConfig::o0()
+    1U => @wite_core.OptimizeConfig::o1()
+    2U => @wite_core.OptimizeConfig::o2()
+    3U => @wite_core.OptimizeConfig::o3()
+    _ => @wite_core.OptimizeConfig::aggressive()
   }
 }
 
@@ -259,13 +264,13 @@ fn wasm_opt_preset_from_optimize_level(level : UInt) -> @wite.OptimizeConfig {
 fn derive_preset_from_wasm_opt_levels(
   optimize_level : UInt?,
   shrink_level : UInt?,
-) -> @wite.OptimizeConfig? {
+) -> @wite_core.OptimizeConfig? {
   match shrink_level {
     Some(level) =>
       if level >= 2U {
-        Some(@wite.OptimizeConfig::oz())
+        Some(@wite_core.OptimizeConfig::oz())
       } else if level == 1U {
-        Some(@wite.OptimizeConfig::os())
+        Some(@wite_core.OptimizeConfig::os())
       } else {
         optimize_level.map(v => v |> wasm_opt_preset_from_optimize_level)
       }
@@ -300,7 +305,7 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
     let flag = flags[i]
     if (flag
       |> normalize_opt_level_token
-      |> @wite.optimize_config_from_opt_level)
+      |> @wite_core.optimize_config_from_opt_level)
       is Some(preset) {
       strip_all_custom = preset.strip_all_custom
       strip_name_section = preset.strip_name_section
@@ -608,7 +613,7 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
   let keep_custom_sections = parse_keep_custom(flags, 0)
   let closed_world_root_exports = parse_closed_world_roots(flags, 0)
   let excluded_roots = parse_excluded_roots(flags, 0)
-  let config = @wite.make_optimize_config(
+  let config = @wite_core.make_optimize_config(
     strip_all_custom~,
     strip_name_section~,
     strip_producers_section~,

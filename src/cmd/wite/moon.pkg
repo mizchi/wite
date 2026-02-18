@@ -5,7 +5,7 @@ import {
   "mizchi/wite/bundle" @wite_bundle,
   "mizchi/wite/analyze" @wite_analyze,
   "mizchi/wite/optimize" @wite_optimize,
-  "mizchi/wite/core" @wite,
+  "mizchi/wite/core" @wite_core,
   "mizchi/wit" @wit,
   "mizchi/x/http" @xhttp,
   "mizchi/x/process" @xprocess,

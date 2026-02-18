@@ -76,14 +76,14 @@ test "derive preset from wasm-opt levels prioritizes shrink level" {
     is Some(oz_preset) else {
     fail("expected oz preset from shrink-level=2")
   }
-  let expected_oz = @wite.OptimizeConfig::oz()
+  let expected_oz = @wite_core.OptimizeConfig::oz()
   assert_eq(oz_preset.pass_rounds, expected_oz.pass_rounds)
   assert_eq(oz_preset.enable_dce, expected_oz.enable_dce)
   guard derive_preset_from_wasm_opt_levels(Some(3U), Some(0U))
     is Some(o3_preset) else {
     fail("expected o3 preset from optimize-level=3")
   }
-  let expected_o3 = @wite.OptimizeConfig::o3()
+  let expected_o3 = @wite_core.OptimizeConfig::o3()
   assert_eq(o3_preset.pass_rounds, expected_o3.pass_rounds)
   assert_eq(o3_preset.enable_dce, expected_o3.enable_dce)
 }
@@ -103,7 +103,7 @@ test "parse optimize cli options accepts wasm-opt style aliases" {
   assert_true(parsed.config.closed_world)
   assert_true(parsed.verbose)
   let parsed_short = parse_optimize_cli_options(["-ol", "1", "-s", "0"])
-  let expected_o1 = @wite.OptimizeConfig::o1()
+  let expected_o1 = @wite_core.OptimizeConfig::o1()
   assert_eq(parsed_short.config.pass_rounds, expected_o1.pass_rounds)
   assert_eq(parsed_short.config.enable_dce, expected_o1.enable_dce)
 }
@@ -949,7 +949,7 @@ async test "build command composes local fixture deps and keeps implicit output 
     js_remove_dir_recursive(parsed.temp_dir)
     fail("implicit and explicit build outputs diverged")
   }
-  guard @wite.profile_component(composed) is Ok(profile) else {
+  guard @wite_core.profile_component(composed) is Ok(profile) else {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("composed output is not parseable component wasm")
   }
@@ -957,7 +957,7 @@ async test "build command composes local fixture deps and keeps implicit output 
     js_remove_dir_recursive(parsed.temp_dir)
     fail("composed component has no exports")
   }
-  guard @wite.analyze_component_root_policy(composed) is Ok(policy) else {
+  guard @wite_core.analyze_component_root_policy(composed) is Ok(policy) else {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("failed to inspect composed component root policy")
   }
@@ -1027,7 +1027,7 @@ async test "new --moonbit workspace can bundle sample app fixture" {
       b""
     }
   }
-  guard @wite.profile_component(output) is Ok(profile) else {
+  guard @wite_core.profile_component(output) is Ok(profile) else {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("sample app output is not parseable component wasm")
   }
@@ -1035,7 +1035,7 @@ async test "new --moonbit workspace can bundle sample app fixture" {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("sample app component has no exports")
   }
-  guard @wite.analyze_component_root_policy(output) is Ok(policy) else {
+  guard @wite_core.analyze_component_root_policy(output) is Ok(policy) else {
     js_remove_dir_recursive(parsed.temp_dir)
     fail("failed to inspect sample app root policy")
   }

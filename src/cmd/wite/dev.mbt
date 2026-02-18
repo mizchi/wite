@@ -306,7 +306,7 @@ fn uint_to_json(v : UInt) -> Json {
 }
 
 ///|
-fn module_profile_to_json(p : @wite.ModuleProfile) -> Json {
+fn module_profile_to_json(p : @wite_core.ModuleProfile) -> Json {
   let sections_json : Array[Json] = []
   for s in p.sections {
     sections_json.push(
@@ -329,7 +329,7 @@ fn module_profile_to_json(p : @wite.ModuleProfile) -> Json {
 }
 
 ///|
-fn function_size_to_json(f : @wite.FunctionSize) -> Json {
+fn function_size_to_json(f : @wite_core.FunctionSize) -> Json {
   let export_names_json : Array[Json] = []
   for name in f.export_names {
     export_names_json.push(Json::string(name))
@@ -357,7 +357,7 @@ async fn build_analyze_json(wasm_path : String) -> Json {
     Ok(p) => module_profile_to_json(p)
     Err(e) =>
       Json::object({
-        "error": Json::string("profile: " + @wite.error_to_string(e)),
+        "error": Json::string("profile: " + @wite_core.error_to_string(e)),
       })
   }
   let functions_json : Json = match
@@ -371,7 +371,7 @@ async fn build_analyze_json(wasm_path : String) -> Json {
     }
     Err(e) =>
       Json::object({
-        "error": Json::string("functions: " + @wite.error_to_string(e)),
+        "error": Json::string("functions: " + @wite_core.error_to_string(e)),
       })
   }
   Json::object({ "profile": profile_json, "functions": functions_json })

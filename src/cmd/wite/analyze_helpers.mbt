@@ -76,7 +76,7 @@ fn read_bytes_or_exit(path : String) -> Bytes {
 }
 
 ///|
-fn print_section_sizes(sections : Array[@wite.SectionSize]) -> Unit {
+fn print_section_sizes(sections : Array[@wite_core.SectionSize]) -> Unit {
   for section in sections {
     println(
       "  " + section.key + ": " + section.total_bytes.to_string() + " bytes",
@@ -106,7 +106,7 @@ fn format_percent(numerator : UInt, denominator : UInt) -> String {
 
 ///|
 fn print_section_sizes_with_share(
-  sections : Array[@wite.SectionSize],
+  sections : Array[@wite_core.SectionSize],
   total_bytes : UInt,
 ) -> Unit {
   for section in sections {
@@ -124,7 +124,7 @@ fn print_section_sizes_with_share(
 
 ///|
 fn print_custom_section_breakdown(
-  sections : Array[@wite.CustomSectionBreakdown],
+  sections : Array[@wite_core.CustomSectionBreakdown],
   total_bytes : UInt,
   limit : UInt,
 ) -> Unit {
@@ -158,7 +158,7 @@ fn print_custom_section_breakdown(
 
 ///|
 fn print_opcode_stats(
-  stats : Array[@wite.OpcodeStat],
+  stats : Array[@wite_core.OpcodeStat],
   total_instruction_bytes : UInt,
   limit : UInt,
 ) -> Unit {
@@ -214,7 +214,7 @@ fn format_root_preview(roots : Array[UInt], limit : UInt) -> String {
 }
 
 ///|
-fn print_call_graph_summary(summary : @wite.CallGraphSummary) -> Unit {
+fn print_call_graph_summary(summary : @wite_core.CallGraphSummary) -> Unit {
   println("call graph summary:")
   println(
     "  functions: imported=" +
@@ -249,7 +249,7 @@ fn print_call_graph_summary(summary : @wite.CallGraphSummary) -> Unit {
 
 ///|
 fn print_host_code_hints(
-  hints : Array[@wite.HostCodeHint],
+  hints : Array[@wite_core.HostCodeHint],
   limit : UInt,
 ) -> Unit {
   if hints.length() == 0 {
