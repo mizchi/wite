@@ -2,18 +2,28 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-[MoonBit](https://docs.moonbitlang.com) で実装された、コンポーネントモデル対応の WebAssembly アナライザ・オプティマイザ・プロファイラです。
+Component Model 版の vite を目指す WebAssembly ビルドツール。MoonBit で実装。
+
+コンポーネントの依存管理・結合 (WAC composition) と DCE (Dead Code Elimination) による最適化を中心に、解析・プロファイリング・開発サーバーを提供する。
 
 ## インストール
 
+[MoonBit](https://www.moonbitlang.com/) ツールチェインが必要です。
+
 ```bash
-# CLI
+# MoonBit のインストール（未インストールの場合）
+curl -fsSL https://cli.moonbitlang.com/install/unix.sh | bash
+
+# wite CLI のインストール (~/.moon/bin/wite)
 moon install mizchi/wite/cmd/wite
 
-# ローカルインストール（ソースから）
-just install
+# ソースからインストール
+git clone https://github.com/mizchi/wite.git
+cd wite && just install
+```
 
-# ライブラリとして
+```bash
+# ライブラリ依存として追加
 moon add mizchi/wite
 ```
 
@@ -42,6 +52,22 @@ wite build -Oz               # フラグのみ（暗黙の入力）
 ```
 
 入力ヘッダから core/component を自動判定します。component の場合、`--converge` で固定点最適化を適用します。
+`--interface` を指定すると、最終コンポーネントを指定された WIT ディレクトリに対して検証します。
+`--world` で WIT パッケージ内の特定の world 名を選択できます。
+
+### dev
+
+```bash
+wite dev                       # :8080 で開発サーバーを起動
+wite dev --port=3000           # カスタムポート
+wite dev --build-cmd="moon build --target wasm-gc --release"
+```
+
+ファイル変更を検知して自動リビルド + SSE によるブラウザのライブリロードを行います。プロジェクトに `index.html` があればそれを配信し、なければ wasm をロードする HTML を自動生成します。
+
+`http://localhost:8080/__wite/` でデバッグ UI（モジュール解析・プロファイリング）にアクセスできます。
+
+> **Note**: 静的サイト配信機能はまだ開発中です。現時点では wasm の開発サーバーとしての利用が主です。
 
 ### analyze
 
@@ -159,6 +185,36 @@ wite new --rust              # init + guest/rust/ 雛形
 
 依存方向: `wite -> wac` のみ。パイプライン: wac が wasm bytes を出力し、wite がそれを最適化します。
 
+## Vite 連携
+
+既存の Vite プロジェクトから `.wasm` ファイルを直接 import するための Vite プラグイン [`vite-plugin-wite`](./packages/vite-plugin-wite/) を提供しています。
+
+```bash
+npm install vite-plugin-wite
+```
+
+```typescript
+// vite.config.ts
+import { defineConfig } from "vite";
+import wite from "vite-plugin-wite";
+
+export default defineConfig({
+  plugins: [wite()],
+  build: { target: "esnext" },
+});
+```
+
+```typescript
+// app.ts
+import { add } from "./math.wasm";
+console.log(add(1, 2)); // 3
+```
+
+- `.wasm` の import に対して JS ラッパーと `.d.ts` 型定義を自動生成
+- Component Model wasm は自動的に core module に lowering して読み込む
+- HMR 対応（dev モードで `.wasm` 変更時に自動リロード）
+- 詳細は [vite-plugin-wite README](./packages/vite-plugin-wite/README.md) を参照
+
 ## 開発
 
 ```bash
@@ -166,6 +222,8 @@ just               # check + test
 just fmt           # コードフォーマット
 just check         # 型チェック
 just test          # テスト実行
+just install       # レジストリからインストール
+just install-local # ローカルソースからインストール
 just bench         # ベンチマーク実行
 just kpi           # KPI レポート収集
 just run           # CLI 実行（src/cmd/wite）

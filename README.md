@@ -2,9 +2,9 @@
 
 [English](README.md) | [日本語](README.ja.md)
 
-Component Model 版の vite を目指す WebAssembly ビルドツール。MoonBit で実装。
+A WebAssembly build tool aiming to be a Component Model counterpart of Vite. Implemented in MoonBit.
 
-コンポーネントの依存管理・結合 (WAC composition) と DCE (Dead Code Elimination) による最適化を中心に、解析・プロファイリング・開発サーバーを提供する。
+Provides component dependency management and composition (WAC composition), optimization via DCE (Dead Code Elimination), analysis, profiling, and a dev server.
 
 ## Installation
 
@@ -64,11 +64,11 @@ wite dev --port=3000           # custom port
 wite dev --build-cmd="moon build --target wasm-gc --release"
 ```
 
-ファイル変更を検知して自動リビルド + SSE によるブラウザのライブリロードを行う。プロジェクトに `index.html` があればそれを配信し、なければ wasm をロードする HTML を自動生成する。
+Watches for file changes and auto-rebuilds with live reload via SSE. If `index.html` exists in the project, it serves that file; otherwise, it auto-generates an HTML page that loads the wasm module.
 
-`http://localhost:8080/__wite/` でデバッグ UI（モジュール解析・プロファイリング）にアクセスできる。
+Access the debug UI (module analysis & profiling) at `http://localhost:8080/__wite/`.
 
-> **Note**: 静的サイト配信機能はまだ開発中。現時点では wasm の開発サーバーとしての利用が主。
+> **Note**: Static site serving is still under development. Currently primarily useful as a wasm dev server.
 
 ### analyze
 
@@ -188,7 +188,7 @@ Dependency direction: `wite -> wac` only. The pipeline is: wac produces wasm byt
 
 ## Vite Integration
 
-既存の Vite プロジェクトから `.wasm` ファイルを直接 import するための Vite プラグイン [`vite-plugin-wite`](./packages/vite-plugin-wite/) を提供している。
+A Vite plugin [`vite-plugin-wite`](./packages/vite-plugin-wite/) for directly importing `.wasm` files from existing Vite projects.
 
 ```bash
 npm install vite-plugin-wite
@@ -211,10 +211,10 @@ import { add } from "./math.wasm";
 console.log(add(1, 2)); // 3
 ```
 
-- `.wasm` の import に対して JS ラッパーと `.d.ts` 型定義を自動生成
-- Component Model wasm は自動的に core module に lowering して読み込む
-- HMR 対応（dev モードで `.wasm` 変更時に自動リロード）
-- 詳細は [vite-plugin-wite README](./packages/vite-plugin-wite/README.md) を参照
+- Auto-generates JS wrappers and `.d.ts` type definitions for `.wasm` imports
+- Component Model wasm is automatically lowered to a core module for loading
+- HMR support (auto-reloads when `.wasm` files change in dev mode)
+- See [vite-plugin-wite README](./packages/vite-plugin-wite/README.md) for details
 
 ## Development
 
