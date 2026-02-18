@@ -131,9 +131,7 @@ fn read_name(parser : @wite_optimize.Cursor) -> String raise @wite.WiteError {
 }
 
 ///|
-fn skip_limits(
-  parser : @wite_optimize.Cursor,
-) -> Unit raise @wite.WiteError {
+fn skip_limits(parser : @wite_optimize.Cursor) -> Unit raise @wite.WiteError {
   let flags = parser.read_u32_leb128()
   ignore(parser.read_u32_leb128())
   if (flags & 0x01U) != 0U {
@@ -142,9 +140,7 @@ fn skip_limits(
 }
 
 ///|
-fn skip_heap_type(
-  parser : @wite_optimize.Cursor,
-) -> Unit raise @wite.WiteError {
+fn skip_heap_type(parser : @wite_optimize.Cursor) -> Unit raise @wite.WiteError {
   let first = parser.read_byte()
   match first.to_uint() {
     0x70U | 0x6fU => ()
@@ -200,11 +196,10 @@ fn parse_imports_full(
         ignore(parser.read_u32_leb128())
         None
       }
-      _ => {
+      _ =>
         raise @wite.WiteError::InvalidFormat(
           "unsupported import kind: " + kind.to_string(),
         )
-      }
     }
     out.push({ mod_name, name, kind, type_index })
   }
@@ -218,9 +213,7 @@ struct FuncSig {
 }
 
 ///|
-fn parse_func_types(
-  payload : Bytes,
-) -> Array[FuncSig] raise @wite.WiteError {
+fn parse_func_types(payload : Bytes) -> Array[FuncSig] raise @wite.WiteError {
   let parser = @wite_optimize.Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[FuncSig] = []
@@ -293,10 +286,11 @@ pub fn parse_wasm_metadata(bytes : Bytes) -> String {
     return "{\"isComponent\":true,\"types\":[],\"imports\":[],\"exports\":[],\"functions\":[]}"
   }
   // Parse core module
-  let sections = try {
-    @wite_optimize.parse_core_sections_raise(bytes)
-  } catch {
-    err => return "{\"error\":\"" + escape_json_string(@wite.error_to_string(err)) + "\"}"
+  let sections = @wite_optimize.parse_core_sections_raise(bytes) catch {
+    err =>
+      return "{\"error\":\"" +
+        escape_json_string(@wite.error_to_string(err)) +
+        "\"}"
   }
   let mut types : Array[FuncSig] = []
   let mut imports : Array[ImportEntry] = []
@@ -339,9 +333,11 @@ pub fn parse_wasm_metadata(bytes : Bytes) -> String {
   let type_parts : Array[String] = []
   for t in types {
     type_parts.push(
-      "{\"params\":" + json_string_array(t.params) + ",\"results\":" + json_string_array(
-        t.results,
-      ) + "}",
+      "{\"params\":" +
+      json_string_array(t.params) +
+      ",\"results\":" +
+      json_string_array(t.results) +
+      "}",
     )
   }
   out.push(",\"types\":[" + type_parts.join(",") + "]")
@@ -363,9 +359,13 @@ pub fn parse_wasm_metadata(bytes : Bytes) -> String {
   let export_parts : Array[String] = []
   for exp in exports {
     export_parts.push(
-      "{\"name\":\"" + escape_json_string(exp.name) + "\",\"kind\":\"" + export_kind_name(
-        exp.kind,
-      ) + "\",\"index\":" + exp.index.to_string() + "}",
+      "{\"name\":\"" +
+      escape_json_string(exp.name) +
+      "\",\"kind\":\"" +
+      export_kind_name(exp.kind) +
+      "\",\"index\":" +
+      exp.index.to_string() +
+      "}",
     )
   }
   out.push(",\"exports\":[" + export_parts.join(",") + "]")
@@ -397,9 +397,7 @@ pub fn extract_first_core_module(bytes : Bytes) -> Bytes {
   if !is_component_header(bytes) {
     return Bytes::new(0)
   }
-  let sections = try {
-    @wite_optimize.parse_component_sections_raise(bytes)
-  } catch {
+  let sections = @wite_optimize.parse_component_sections_raise(bytes) catch {
     _ => return Bytes::new(0)
   }
   for section in sections {

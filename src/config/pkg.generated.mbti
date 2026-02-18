@@ -6,6 +6,8 @@ pub fn binary_kind_name(BinaryKind) -> String
 
 pub fn build_auto_sync_deps_command_args(String) -> Array[String]
 
+pub fn config_input_entries(ConfigInput) -> Array[(String, String)]
+
 pub fn config_input_single_path(ConfigInput) -> String?
 
 pub fn empty_wite_config_file() -> WiteConfigFile

@@ -122,6 +122,21 @@ pub fn parse_config_output(json_value : Json) -> Result[ConfigOutput, String] {
 }
 
 ///|
+pub fn config_input_entries(input : ConfigInput) -> Array[(String, String)] {
+  match input {
+    ConfigInput::None => []
+    ConfigInput::Single(s) => [("default", s)]
+    ConfigInput::Named(map) => {
+      let out : Array[(String, String)] = []
+      for entry in map {
+        out.push((entry.0, entry.1))
+      }
+      out
+    }
+  }
+}
+
+///|
 pub fn config_input_single_path(input : ConfigInput) -> String? {
   match input {
     ConfigInput::None => None

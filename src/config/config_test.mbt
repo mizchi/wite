@@ -359,6 +359,128 @@ test "is_ts_config detects typescript config files" {
 }
 
 ///|
+test "config_input_entries None" {
+  let entries = @config.config_input_entries(@config.ConfigInput::new_none())
+  inspect(entries.length(), content="0")
+}
+
+///|
+test "config_input_entries Single" {
+  let entries = @config.config_input_entries(
+    @config.ConfigInput::new_single("app.wasm"),
+  )
+  inspect(entries.length(), content="1")
+  inspect(entries[0].0, content="default")
+  inspect(entries[0].1, content="app.wasm")
+}
+
+///|
+test "config_input_entries Named" {
+  let map : Map[String, String] = { "app": "app.wac", "worker": "worker.wac" }
+  let entries = @config.config_input_entries(
+    @config.ConfigInput::new_named(map),
+  )
+  inspect(entries.length(), content="2")
+}
+
+///|
+test "config_input_entries Named preserves key-value pairs" {
+  let map : Map[String, String] = {
+    "app": "app.wac",
+    "worker": "worker.wac",
+    "admin": "admin.wac",
+  }
+  let entries = @config.config_input_entries(
+    @config.ConfigInput::new_named(map),
+  )
+  inspect(entries.length(), content="3")
+  // Verify each entry has correct key-value pair
+  let keys : Array[String] = []
+  let vals : Array[String] = []
+  for entry in entries {
+    keys.push(entry.0)
+    vals.push(entry.1)
+  }
+  assert_true(keys.contains("app"))
+  assert_true(keys.contains("worker"))
+  assert_true(keys.contains("admin"))
+  assert_true(vals.contains("app.wac"))
+  assert_true(vals.contains("worker.wac"))
+  assert_true(vals.contains("admin.wac"))
+}
+
+///|
+test "config_input_entries Named empty map" {
+  let map : Map[String, String] = {}
+  let entries = @config.config_input_entries(
+    @config.ConfigInput::new_named(map),
+  )
+  inspect(entries.length(), content="0")
+}
+
+///|
+test "config_input_entries Named single entry" {
+  let map : Map[String, String] = { "only": "only.wasm" }
+  let entries = @config.config_input_entries(
+    @config.ConfigInput::new_named(map),
+  )
+  inspect(entries.length(), content="1")
+  inspect(entries[0].0, content="only")
+  inspect(entries[0].1, content="only.wasm")
+}
+
+///|
+test "parse_config_input Named multi-entry roundtrip" {
+  let json : Json = { "app": "app.wac", "worker": "worker.wac" }
+  let result = @config.parse_config_input(json)
+  match result {
+    Ok(input) => {
+      let entries = @config.config_input_entries(input)
+      inspect(entries.length(), content="2")
+    }
+    Err(_) => fail("expected Ok")
+  }
+}
+
+///|
+test "parse_wite_config_json with named input and output" {
+  let json : Json = {
+    "input": { "app": "app.wac", "worker": "worker.wac" },
+    "output": { "dir": "out" },
+    "build": ["-Oz"],
+  }
+  let result = @config.parse_wite_config_json(json)
+  match result {
+    Ok(config) => {
+      let entries = @config.config_input_entries(config.input)
+      inspect(entries.length(), content="2")
+      inspect(config.output.dir, content="out")
+      inspect(config.build_flags, content="[\"-Oz\"]")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_config_input Named rejects non-string values" {
+  let json : Json = { "app": "app.wac", "worker": 42 }
+  let result = @config.parse_config_input(json)
+  match result {
+    Err(msg) => inspect(msg, content="config input.worker must be string")
+    Ok(_) => fail("expected error")
+  }
+}
+
+///|
+test "config_input_single_path Named returns first entry" {
+  let map : Map[String, String] = { "app": "app.wac", "worker": "worker.wac" }
+  let path = @config.config_input_single_path(
+    @config.ConfigInput::new_named(map),
+  )
+  assert_true(path is Some(_))
+}
+
+///|
 test "config_input_single_path" {
   inspect(
     @config.config_input_single_path(@config.ConfigInput::new_none()),

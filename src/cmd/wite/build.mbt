@@ -268,97 +268,12 @@ fn is_component_wasm(bytes : Bytes) -> Bool {
 }
 
 ///|
-async fn run_build(args : Array[String]) -> Unit {
-  let default_input = pick_default_build_input_path(
-    @fs.path_exists("main.wac"),
-    @fs.path_exists("main.wasm"),
-  )
-  let resolved = match resolve_build_input_from_args(args, default_input) {
-    Ok(value) => value
-    Err(_) => {
-      // defer error until after config check — config.input may resolve it
-      // extract flags from args[2:] (skipping "wite" "build")
-      let fallback_flags : Array[String] = []
-      for i in 2..<args.length() {
-        fallback_flags.push(args[i])
-      }
-      { input_path: "", raw_flags: fallback_flags, explicit_input: false }
-    }
-  }
-  let raw_flags = resolved.raw_flags
-  let config_selection = @wite_config.parse_config_selection_flags(raw_flags)
-  let config_file = resolve_config_or_default(config_selection)
-  // Resolve input: CLI > config.input > filesystem default
-  let config_dir = path_dirname(config_selection.config_path)
-  let input_path = if resolved.explicit_input {
-    resolved.input_path
-  } else {
-    match @wite_config.config_input_single_path(config_file.input) {
-      Some(config_input) =>
-        resolve_path_from_config_dir(config_dir, config_input)
-      None =>
-        match default_input {
-          Some(_) => resolved.input_path
-          None => {
-            println(
-              "build requires entry.(wac|wasm), config input, or main.wac/main.wasm in cwd",
-            )
-            print_usage()
-            @sys.exit(1)
-            ""
-          }
-        }
-    }
-  }
-  let has_config_input = !(config_file.input is @wite_config.ConfigInput::None)
+fn build_single_entry(
+  input_path : String,
+  out : String,
+  parsed_flags : BuildFlagParseResult,
+) -> Unit {
   let is_wac_input = input_path.has_suffix(".wac")
-  if !is_wac_input {
-    auto_sync_deps_from_config_if_needed(config_selection)
-  }
-  let merged_flags = @wite_config.merge_command_flags(
-    config_file.build_flags,
-    config_selection.remaining_flags,
-  )
-  let parsed_flags = parse_build_flags(
-    merged_flags,
-    from_config_binary_kind(config_file.build_kind),
-  )
-  let out = match parsed_flags.output_path {
-    Some(path) => path
-    None =>
-      if has_config_input {
-        // config に input がある場合: config_dir/output.dir + basename
-        let basename = input_path |> path_basename |> derive_build_output_path
-        let output_dir = resolve_path_from_config_dir(
-          config_dir,
-          config_file.output.dir,
-        )
-        output_dir + "/" + basename
-      } else if resolved.explicit_input {
-        derive_build_output_path(input_path)
-      } else {
-        derive_implicit_build_output_path(input_path)
-      }
-  }
-  if is_wac_input &&
-    config_selection.use_config &&
-    @fs.path_exists(config_selection.config_path) {
-    match
-      @wite_deps.materialize_wac_dependencies_from_config(
-        config_selection.config_path,
-        input_path,
-        parsed_flags.best_effort,
-      ) {
-      Ok(synced) =>
-        if synced > 0U {
-          println("materialized wac deps: " + synced.to_string() + " entries")
-        }
-      Err(msg) => {
-        println("build failed: " + msg)
-        @sys.exit(1)
-      }
-    }
-  }
   let built = if is_wac_input {
     match
       @wite_bundle.compose_wac_file(
@@ -439,4 +354,137 @@ async fn run_build(args : Array[String]) -> Unit {
       @sys.exit(1)
     }
   }
+}
+
+///|
+fn materialize_wac_deps_if_needed(
+  config_path : String,
+  use_config : Bool,
+  input_path : String,
+  best_effort : Bool,
+) -> Unit {
+  if input_path.has_suffix(".wac") && use_config && @fs.path_exists(config_path) {
+    match
+      @wite_deps.materialize_wac_dependencies_from_config(
+        config_path, input_path, best_effort,
+      ) {
+      Ok(synced) =>
+        if synced > 0U {
+          println("materialized wac deps: " + synced.to_string() + " entries")
+        }
+      Err(msg) => {
+        println("build failed: " + msg)
+        @sys.exit(1)
+      }
+    }
+  }
+}
+
+///|
+async fn run_build(args : Array[String]) -> Unit {
+  let default_input = pick_default_build_input_path(
+    @fs.path_exists("main.wac"),
+    @fs.path_exists("main.wasm"),
+  )
+  let resolved = match resolve_build_input_from_args(args, default_input) {
+    Ok(value) => value
+    Err(_) => {
+      // defer error until after config check — config.input may resolve it
+      // extract flags from args[2:] (skipping "wite" "build")
+      let fallback_flags : Array[String] = []
+      for i in 2..<args.length() {
+        fallback_flags.push(args[i])
+      }
+      { input_path: "", raw_flags: fallback_flags, explicit_input: false }
+    }
+  }
+  let raw_flags = resolved.raw_flags
+  let config_selection = @wite_config.parse_config_selection_flags(raw_flags)
+  let config_file = resolve_config_or_default(config_selection)
+  let config_dir = path_dirname(config_selection.config_path)
+  let merged_flags = @wite_config.merge_command_flags(
+    config_file.build_flags,
+    config_selection.remaining_flags,
+  )
+  let parsed_flags = parse_build_flags(
+    merged_flags,
+    from_config_binary_kind(config_file.build_kind),
+  )
+  // Multi-entry: Named input with multiple entries and no explicit CLI input
+  let entries = @wite_config.config_input_entries(config_file.input)
+  if entries.length() > 1 && !resolved.explicit_input {
+    let output_dir = resolve_path_from_config_dir(
+      config_dir,
+      config_file.output.dir,
+    )
+    // Materialize wac deps for all entries first
+    for entry in entries {
+      let (_, input_rel) = entry
+      let entry_input = resolve_path_from_config_dir(config_dir, input_rel)
+      materialize_wac_deps_if_needed(
+        config_selection.config_path,
+        config_selection.use_config,
+        entry_input,
+        parsed_flags.best_effort,
+      )
+    }
+    // Build each entry
+    for entry in entries {
+      let (name, input_rel) = entry
+      let entry_input = resolve_path_from_config_dir(config_dir, input_rel)
+      let entry_output = output_dir + "/" + name + ".wasm"
+      build_single_entry(entry_input, entry_output, parsed_flags)
+    }
+    return
+  }
+  // Single-entry path
+  // Resolve input: CLI > config.input > filesystem default
+  let input_path = if resolved.explicit_input {
+    resolved.input_path
+  } else {
+    match @wite_config.config_input_single_path(config_file.input) {
+      Some(config_input) =>
+        resolve_path_from_config_dir(config_dir, config_input)
+      None =>
+        match default_input {
+          Some(_) => resolved.input_path
+          None => {
+            println(
+              "build requires entry.(wac|wasm), config input, or main.wac/main.wasm in cwd",
+            )
+            print_usage()
+            @sys.exit(1)
+            ""
+          }
+        }
+    }
+  }
+  let has_config_input = !(config_file.input is @wite_config.ConfigInput::None)
+  let is_wac_input = input_path.has_suffix(".wac")
+  if !is_wac_input {
+    auto_sync_deps_from_config_if_needed(config_selection)
+  }
+  let out = match parsed_flags.output_path {
+    Some(path) => path
+    None =>
+      if has_config_input {
+        let basename = input_path |> path_basename |> derive_build_output_path
+        let output_dir = resolve_path_from_config_dir(
+          config_dir,
+          config_file.output.dir,
+        )
+        output_dir + "/" + basename
+      } else if resolved.explicit_input {
+        derive_build_output_path(input_path)
+      } else {
+        derive_implicit_build_output_path(input_path)
+      }
+  }
+  materialize_wac_deps_if_needed(
+    config_selection.config_path,
+    config_selection.use_config,
+    input_path,
+    parsed_flags.best_effort,
+  )
+  build_single_entry(input_path, out, parsed_flags)
 }

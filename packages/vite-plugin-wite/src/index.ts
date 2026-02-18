@@ -1,9 +1,11 @@
+import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname, relative } from "node:path";
 import type { Plugin, ResolvedConfig } from "vite";
 import { parseWasm } from "./wasm-parser.js";
 import { generateJsWrapper, generateDts } from "./codegen.js";
 import { lowerComponent } from "./component.js";
+import { RUNTIME_MODULE_ID, RUNTIME_MODULE_CODE } from "./runtime.js";
 
 export interface WitePluginOptions {
   /**
@@ -27,6 +29,9 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
   let config: ResolvedConfig;
   let isBuild = false;
 
+  // Content-hash dedup: maps hash -> first virtual module ID
+  const contentHashMap = new Map<string, string>();
+
   return {
     name: "vite-plugin-wite",
     enforce: "pre",
@@ -37,6 +42,8 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
     },
 
     resolveId(source, importer) {
+      if (source === RUNTIME_MODULE_ID) return source;
+
       if (!source.endsWith(".wasm")) return;
       if (source.startsWith("\0")) return;
 
@@ -47,6 +54,8 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
     },
 
     load(id) {
+      if (id === RUNTIME_MODULE_ID) return RUNTIME_MODULE_CODE;
+
       if (!id.startsWith(VIRTUAL_PREFIX)) return;
 
       const wasmPath = id.slice(VIRTUAL_PREFIX.length);
@@ -81,6 +90,17 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
           return;
         }
       }
+
+      // Content-hash dedup: if identical wasm was already processed, re-export
+      const hash = createHash("sha256")
+        .update(bytes)
+        .digest("hex")
+        .slice(0, 16);
+      const canonicalId = contentHashMap.get(hash);
+      if (canonicalId && canonicalId !== id) {
+        return `export * from ${JSON.stringify(canonicalId)};`;
+      }
+      contentHashMap.set(hash, id);
 
       // Generate .d.ts if enabled
       if (dts) {
@@ -121,16 +141,16 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
         wasmUrlCode = `const wasmUrl = import.meta.ROLLUP_FILE_URL_${fileRef};`;
       } else {
         // Dev mode: serve the original file via Vite's static file serving
+        // Add timestamp for cache busting when wasm files change
         const relPath = relative(config.root, wasmPath);
-        wasmUrlCode = `const wasmUrl = ${JSON.stringify("/" + relPath.split("\\").join("/"))};`;
+        const normalizedPath = "/" + relPath.split("\\").join("/");
+        wasmUrlCode = `const wasmUrl = ${JSON.stringify(normalizedPath)} + "?t=" + ${JSON.stringify(String(Date.now()))};`;
       }
 
-      return `${shimCode}
+      return `import { __witeGetInstance } from ${JSON.stringify(RUNTIME_MODULE_ID)};
+${shimCode}
 ${wasmUrlCode}
-const { instance } = await WebAssembly.instantiateStreaming(
-  fetch(wasmUrl),
-  ${importObject}
-);
+const { instance } = await __witeGetInstance(wasmUrl, ${importObject});
 ${exports}
 `;
     },
@@ -139,6 +159,14 @@ ${exports}
       // Watch .wasm files for HMR
       server.watcher.on("change", (file) => {
         if (file.endsWith(".wasm")) {
+          // Invalidate content-hash cache so re-load uses fresh bytes
+          for (const [hash, cachedId] of contentHashMap) {
+            if (cachedId === VIRTUAL_PREFIX + file) {
+              contentHashMap.delete(hash);
+              break;
+            }
+          }
+
           const mod = server.moduleGraph.getModuleById(
             VIRTUAL_PREFIX + file,
           );
