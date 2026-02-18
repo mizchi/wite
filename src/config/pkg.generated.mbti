@@ -30,6 +30,8 @@ pub fn parse_config_selection_flags(Array[String]) -> ConfigSelectionFlags
 
 pub fn parse_json_string_array(Json, String) -> Result[Array[String], String]
 
+pub fn parse_server_config(Json) -> Result[ServerConfig, String]
+
 pub fn parse_wite_config_json(Json) -> Result[WiteConfigFile, String]
 
 pub fn parse_wite_config_section(Json, String) -> Result[(Array[String], BinaryKind), String]
@@ -72,6 +74,18 @@ pub struct ConfigSelectionFlags {
   remaining_flags : Array[String]
 }
 
+pub struct ServerConfig {
+  executor : ServerExecutor
+  route : String
+}
+pub impl Show for ServerConfig
+
+pub(all) enum ServerExecutor {
+  Wagi
+}
+pub impl Eq for ServerExecutor
+pub impl Show for ServerExecutor
+
 pub struct WiteConfigFile {
   build_flags : Array[String]
   analyze_flags : Array[String]
@@ -81,6 +95,7 @@ pub struct WiteConfigFile {
   profile_kind : BinaryKind
   input : ConfigInput
   output : ConfigOutput
+  server : ServerConfig?
 }
 
 // Type aliases

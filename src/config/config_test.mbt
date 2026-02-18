@@ -481,6 +481,79 @@ test "config_input_single_path Named returns first entry" {
 }
 
 ///|
+test "parse_server_config wagi executor" {
+  let json : Json = { "executor": "wagi", "route": "/api/..." }
+  let result = @config.parse_server_config(json)
+  match result {
+    Ok(config) => {
+      assert_eq(config.executor, @config.ServerExecutor::Wagi)
+      inspect(config.route, content="/api/...")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_config defaults" {
+  let json : Json = {}
+  let result = @config.parse_server_config(json)
+  match result {
+    Ok(config) => {
+      assert_eq(config.executor, @config.ServerExecutor::Wagi)
+      inspect(config.route, content="/...")
+    }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_server_config invalid executor" {
+  let json : Json = { "executor": "unknown" }
+  let result = @config.parse_server_config(json)
+  match result {
+    Err(msg) => inspect(msg, content="invalid server.executor: unknown")
+    Ok(_) => fail("expected error")
+  }
+}
+
+///|
+test "parse_server_config non-object" {
+  let json : Json = "invalid"
+  let result = @config.parse_server_config(json)
+  match result {
+    Err(msg) => inspect(msg, content="server must be object")
+    Ok(_) => fail("expected error")
+  }
+}
+
+///|
+test "parse_wite_config_json with server section" {
+  let json : Json = { "server": { "executor": "wagi", "route": "/..." } }
+  let result = @config.parse_wite_config_json(json)
+  match result {
+    Ok(config) =>
+      match config.server {
+        Some(server) => {
+          assert_eq(server.executor, @config.ServerExecutor::Wagi)
+          inspect(server.route, content="/...")
+        }
+        None => fail("expected server config")
+      }
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
+test "parse_wite_config_json without server section" {
+  let json : Json = {}
+  let result = @config.parse_wite_config_json(json)
+  match result {
+    Ok(config) => assert_true(config.server is None)
+    Err(msg) => fail("unexpected error: " + msg)
+  }
+}
+
+///|
 test "config_input_single_path" {
   inspect(
     @config.config_input_single_path(@config.ConfigInput::new_none()),

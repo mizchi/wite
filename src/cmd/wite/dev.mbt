@@ -16,27 +16,6 @@ fn simple_bytes_hash(bytes : Bytes) -> Int {
 }
 
 ///|
-fn split_command(cmd_str : String) -> (String, Array[String]) {
-  let parts : Array[String] = []
-  for part in cmd_str.split(" ") {
-    let s = part.to_string()
-    if s != "" {
-      parts.push(s)
-    }
-  }
-  if parts.length() == 0 {
-    ("", [])
-  } else {
-    let cmd = parts[0]
-    let args : Array[String] = []
-    for i = 1; i < parts.length(); i = i + 1 {
-      args.push(parts[i])
-    }
-    (cmd, args)
-  }
-}
-
-///|
 fn livereload_script_tag() -> String {
   let s =
     #|<script>
@@ -570,12 +549,13 @@ async fn run_dev_command(args : Array[String]) -> Unit {
   let mut target = "wasm-gc"
   let mut build_cmd_str = ""
   let mut watch_path = ""
+  let mut server_mode = false
   let mut i = 2
   while i < args.length() {
     let arg = args[i]
     if arg == "-h" || arg == "--help" {
       println(
-        "wite dev [dir] [--port=<n>] [--target=wasm-gc|wasm] [--build-cmd=<cmd>] [--watch=<path>]",
+        "wite dev [dir] [--port=<n>] [--target=wasm-gc|wasm] [--build-cmd=<cmd>] [--watch=<path>] [--server]",
       )
       println("")
       println("Start a dev server with file watching and live reload.")
@@ -589,7 +569,15 @@ async fn run_dev_command(args : Array[String]) -> Unit {
       println(
         "  --watch=<path>   File path to watch for changes (default: auto-detect from _build/)",
       )
+      println(
+        "  --server         Enable WAGI server mode (execute wasm via wasmtime for each request)",
+      )
       return
+    }
+    if arg == "--server" {
+      server_mode = true
+      i += 1
+      continue
     }
     if arg.strip_prefix("--port=") is Some(v) {
       port = parse_int_or_exit(v.to_string(), "port")
@@ -654,6 +642,10 @@ async fn run_dev_command(args : Array[String]) -> Unit {
     dir = arg
     i += 1
   }
+  // Server mode defaults to wasm target (for Component Model wasm)
+  if server_mode && target == "wasm-gc" {
+    target = "wasm"
+  }
   let mod_path = if dir == "." {
     "moon.mod.json"
   } else {
@@ -665,10 +657,10 @@ async fn run_dev_command(args : Array[String]) -> Unit {
     @sys.exit(1)
   }
   // Resolve build command
+  // Use sh -c for custom commands to support shell syntax (&&, |, etc.)
   let (build_cmd, build_args) = if build_cmd_str != "" {
-    let (cmd, args) = split_command(build_cmd_str)
     println("building with " + build_cmd_str + " ...")
-    (cmd, args)
+    ("sh", ["-c", build_cmd_str])
   } else {
     println("building with moon build --target " + target + " --release ...")
     ("moon", ["build", "--target", target, "--release"])
@@ -747,6 +739,11 @@ async fn run_dev_command(args : Array[String]) -> Unit {
       )
       let root = dir
       let html = generated_html
+      let is_server = server_mode
+      let wasm_for_wagi = abs_wasm_path
+      if is_server {
+        println("[wite] server mode enabled (WAGI)")
+      }
       @async.with_task_group(group => {
         // HTTP server in background
         group.spawn_bg(no_wait=true, allow_failure=true, async fn() {
@@ -756,6 +753,8 @@ async fn run_dev_command(args : Array[String]) -> Unit {
                 handle_sse(state, conn)
               } else if req.path.has_prefix("/__wite") {
                 handle_wite_api(state, req.path, conn)
+              } else if is_server {
+                handle_wagi_request(wasm_for_wagi, req, body, conn)
               } else {
                 handle_request(root, html, req, body, conn)
               }

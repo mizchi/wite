@@ -1,4 +1,41 @@
 ///|
+pub(all) enum ServerExecutor {
+  Wagi
+} derive(Show, Eq)
+
+///|
+pub struct ServerConfig {
+  executor : ServerExecutor
+  route : String
+} derive(Show)
+
+///|
+pub fn parse_server_config(json_value : Json) -> Result[ServerConfig, String] {
+  match json_value {
+    Object(obj) => {
+      let mut executor = ServerExecutor::Wagi
+      let mut route = "/..."
+      match obj.get("executor") {
+        Some(String(e)) =>
+          match e.to_lower() {
+            "wagi" => executor = ServerExecutor::Wagi
+            _ => return Err("invalid server.executor: " + e)
+          }
+        Some(_) => return Err("server.executor must be string")
+        None => ()
+      }
+      match obj.get("route") {
+        Some(String(r)) => route = r
+        Some(_) => return Err("server.route must be string")
+        None => ()
+      }
+      Ok({ executor, route })
+    }
+    _ => Err("server must be object")
+  }
+}
+
+///|
 pub enum BinaryKind {
   Auto
   Core
@@ -73,6 +110,7 @@ pub struct WiteConfigFile {
   profile_kind : BinaryKind
   input : ConfigInput
   output : ConfigOutput
+  server : ServerConfig?
 }
 
 ///|
@@ -86,6 +124,7 @@ pub fn empty_wite_config_file() -> WiteConfigFile {
     profile_kind: BinaryKind::Auto,
     input: ConfigInput::None,
     output: { dir: "dist" },
+    server: None,
   }
 }
 
@@ -261,6 +300,13 @@ pub fn parse_wite_config_json(
           Err(msg) => return Err(msg)
         }
       }
+      let mut server : ServerConfig? = None
+      if object.get("server") is Some(value) {
+        match parse_server_config(value) {
+          Ok(parsed) => server = Some(parsed)
+          Err(msg) => return Err(msg)
+        }
+      }
       Ok({
         build_flags,
         analyze_flags,
@@ -270,6 +316,7 @@ pub fn parse_wite_config_json(
         profile_kind,
         input,
         output,
+        server,
       })
     }
     _ => Err("config root must be object")

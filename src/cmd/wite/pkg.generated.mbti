@@ -47,6 +47,8 @@ pub enum BinaryKind {
   Component
 }
 
+type WagiResponse
+
 // Type aliases
 
 // Traits
