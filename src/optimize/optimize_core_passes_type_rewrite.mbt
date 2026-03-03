@@ -275,31 +275,40 @@ pub(all) struct FunctionTypeEntry {
 }
 
 ///|
-fn parse_function_type_entries_raise(
+fn parse_function_type_entry_map_for_function_indices_raise(
   payload : Bytes,
+  function_type_indices : Array[UInt],
   context : String,
-) -> Array[FunctionTypeEntry] raise WiteError {
-  let parser = Cursor::new(payload)
-  let count = parser.read_u32_leb128()
-  let out : Array[FunctionTypeEntry] = []
-  for _ in 0U..<count {
-    let form = parser.read_byte().to_uint()
-    if form != 0x60U {
+) -> Map[UInt, FunctionTypeEntry] raise WiteError {
+  let parsed_type_entries = parse_type_section_entries_with_refs_raise(
+    payload, context,
+  )
+  let parsed_type_count = parsed_type_entries.length()
+  let out : Map[UInt, FunctionTypeEntry] = {}
+  for type_index in function_type_indices {
+    match out.get(type_index) {
+      Some(_) => continue
+      None => ()
+    }
+    let type_pos = UInt::reinterpret_as_int(type_index)
+    if type_pos < 0 || type_pos >= parsed_type_count {
       raise WiteError::InvalidFormat(
-        "unsupported type form in " + context + ": " + form.to_string(),
+        "type index out of range in " + context + ": " + type_index.to_string(),
       )
     }
-    let param_count = parser.read_u32_leb128()
-    let params : Array[Bytes] = []
-    for _ in 0U..<param_count {
-      params.push(read_val_type_bytes_raise(parser))
+    let type_entry = parsed_type_entries[type_pos]
+    if type_entry.form != 0x60U {
+      raise WiteError::InvalidFormat(
+        "non-function type index in " + context + ": " + type_index.to_string(),
+      )
     }
-    let result_count = parser.read_u32_leb128()
-    let results : Array[Bytes] = []
-    for _ in 0U..<result_count {
-      results.push(read_val_type_bytes_raise(parser))
-    }
-    out.push({ params, results })
+    out.set(
+      type_index,
+      parse_function_type_entry_from_raw_raise(
+        type_entry.raw,
+        context + " type index " + type_index.to_string(),
+      ),
+    )
   }
   out
 }
@@ -1279,7 +1288,6 @@ fn apply_inlining_optimizing_raise(
     Some(v) => v
     None => return { bytes, inlined_call_count: 0U }
   }
-  let type_entries = parse_function_type_entries_raise(type_payload, "inlining")
   let function_type_indices = parse_function_type_indices(function_payload)
   let code_bodies = parse_code_bodies(code_payload)
   if function_type_indices.length() != code_bodies.length() {
@@ -1290,27 +1298,20 @@ fn apply_inlining_optimizing_raise(
       code_bodies.length().to_string(),
     )
   }
-  let type_count_u = type_entries.length().reinterpret_as_uint()
+  let function_type_entry_map = parse_function_type_entry_map_for_function_indices_raise(
+    type_payload, function_type_indices, "inlining",
+  )
   let replacement_by_function_index : Map[UInt, Bytes] = {}
   for i in 0..<code_bodies.length() {
     let type_index = function_type_indices[i]
-    if type_index >= type_count_u {
-      raise WiteError::InvalidFormat(
-        "type index out of range in inlining: " + type_index.to_string(),
-      )
+    let type_entry = match function_type_entry_map.get(type_index) {
+      Some(v) => v
+      None =>
+        raise WiteError::InvalidFormat(
+          "missing function type entry in inlining: " + type_index.to_string(),
+        )
     }
-    let type_pos = UInt::reinterpret_as_int(type_index)
-    if type_pos < 0 || type_pos >= type_entries.length() {
-      raise WiteError::InvalidFormat(
-        "type index position out of range in inlining: " +
-        type_index.to_string(),
-      )
-    }
-    match
-      extract_inlining_replacement_instr_raise(
-        code_bodies[i],
-        type_entries[type_pos],
-      ) {
+    match extract_inlining_replacement_instr_raise(code_bodies[i], type_entry) {
       Some(replacement) =>
         replacement_by_function_index.set(
           imported_function_count + i.reinterpret_as_uint(),

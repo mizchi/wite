@@ -2194,22 +2194,22 @@ fn apply_coalesce_locals_raise(
       code_bodies.length().to_string(),
     )
   }
-  let type_entries = parse_function_type_entries_raise(
-    type_payload, "coalesce-locals",
+  let function_type_entry_map = parse_function_type_entry_map_for_function_indices_raise(
+    type_payload, function_type_indices, "coalesce-locals",
   )
   let rewritten_code_bodies = code_bodies.copy()
   let mut removed_local_count = 0U
   for i in 0..<code_bodies.length() {
     let type_index = function_type_indices[i]
-    let type_pos = UInt::reinterpret_as_int(type_index)
-    if type_pos < 0 || type_pos >= type_entries.length() {
-      raise WiteError::InvalidFormat(
-        "type index out of range in coalesce-locals: " + type_index.to_string(),
-      )
+    let type_entry = match function_type_entry_map.get(type_index) {
+      Some(v) => v
+      None =>
+        raise WiteError::InvalidFormat(
+          "missing function type entry in coalesce-locals: " +
+          type_index.to_string(),
+        )
     }
-    let param_count = type_entries[type_pos].params
-      .length()
-      .reinterpret_as_uint()
+    let param_count = type_entry.params.length().reinterpret_as_uint()
     let body = code_bodies[i]
     let prefix = parse_local_decl_prefix_raise(body)
     if prefix.local_types.length() == 0 {
