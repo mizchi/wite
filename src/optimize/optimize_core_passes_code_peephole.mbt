@@ -1,4 +1,30 @@
 ///|
+fn append_bytes_range(
+  out : Array[Byte],
+  bytes : Bytes,
+  start : Int,
+  end_ : Int,
+) -> Unit {
+  for i in start..<end_ {
+    out.push(bytes[i])
+  }
+}
+
+///|
+fn append_bytes(out : Array[Byte], bytes : Bytes) -> Unit {
+  for i in 0..<bytes.length() {
+    out.push(bytes[i])
+  }
+}
+
+///|
+fn append_bytes_view(out : Array[Byte], view : BytesView) -> Unit {
+  for i in 0..<view.length() {
+    out.push(view[i])
+  }
+}
+
+///|
 fn is_dae_pure_producer_opcode(opcode : UInt) -> Bool {
   is_drop_elidable_producer_opcode(opcode)
 }
@@ -109,7 +135,7 @@ fn rewrite_instruction_for_dae_raise(
       i += 2
       continue
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   (Bytes::from_array(out[:]), removed_instr_count)
@@ -190,12 +216,13 @@ fn apply_dae_optimizing_raise(bytes : Bytes) -> DaeApplyResult raise WiteError {
   let rewritten_code_payload = encode_code_section_payload_from_bodies(
     rewritten_bodies,
   )
-  let out : Array[Byte] = bytes[0:8].to_array()
+  let out : Array[Byte] = []
+  append_bytes_range(out, bytes, 0, 8)
   for section in sections {
     if section.section_id == 10U {
       append_encoded_section(out, 10U, rewritten_code_payload)
     } else {
-      out.append(bytes[section.section_start:section.section_end].to_array())
+      append_bytes_range(out, bytes, section.section_start, section.section_end)
     }
   }
   { bytes: Bytes::from_array(out[:]), removed_instr_count }
@@ -373,7 +400,9 @@ fn decode_local_index_immediate_from_span(
 fn instr_spans_to_bytes(instr_bytes : Bytes, spans : Array[InstrSpan]) -> Bytes {
   let out : Array[Byte] = []
   for span in spans {
-    out.append(instr_bytes[span.start:span.end_].to_array())
+    for j in span.start..<span.end_ {
+      out.push(instr_bytes[j])
+    }
   }
   Bytes::from_array(out[:])
 }
@@ -450,7 +479,7 @@ fn apply_optimize_instructions_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
         None => ()
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -493,13 +522,13 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
               continue
             }
             0x46U | 0x4dU => { // i32.eq / i32.le_u => i32.eqz
-              out.append(lhs.to_array())
+              append_bytes_view(out, lhs)
               out.push(0x45U.to_byte())
               i += 3
               continue
             }
             0x47U | 0x4bU => { // i32.ne / i32.gt_u => i32.eqz; i32.eqz
-              out.append(lhs.to_array())
+              append_bytes_view(out, lhs)
               out.push(0x45U.to_byte())
               out.push(0x45U.to_byte())
               i += 3
@@ -513,7 +542,7 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
         Some(-1) =>
           if spans[i + 2].opcode == 0x71U {
             // x & -1 => x
-            out.append(lhs.to_array())
+            append_bytes_view(out, lhs)
             i += 3
             continue
           }
@@ -547,18 +576,18 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
             }
             0x6aU | 0x72U | 0x73U => {
               // 0 + x / 0 | x / 0 ^ x => x
-              out.append(rhs.to_array())
+              append_bytes_view(out, rhs)
               i += 3
               continue
             }
             0x46U => { // 0 == x => x.eqz
-              out.append(rhs.to_array())
+              append_bytes_view(out, rhs)
               out.push(0x45U.to_byte())
               i += 3
               continue
             }
             0x47U => { // 0 != x => x.eqz; i32.eqz
-              out.append(rhs.to_array())
+              append_bytes_view(out, rhs)
               out.push(0x45U.to_byte())
               out.push(0x45U.to_byte())
               i += 3
@@ -569,7 +598,7 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
         Some(1U) =>
           if spans[i + 2].opcode == 0x6cU {
             // 1 * x => x
-            out.append(rhs.to_array())
+            append_bytes_view(out, rhs)
             i += 3
             continue
           }
@@ -580,13 +609,13 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
           match spans[i + 2].opcode {
             0x71U => {
               // -1 & x => x
-              out.append(rhs.to_array())
+              append_bytes_view(out, rhs)
               i += 3
               continue
             }
             0x72U => {
               // -1 | x => -1
-              out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+              append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
               i += 3
               continue
             }
@@ -595,7 +624,7 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
         _ => ()
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -623,7 +652,7 @@ fn apply_optimize_instructions_same_local_get_pair(
             match spans[i + 2].opcode {
               0x71U | 0x72U => {
                 // local.get x; local.get x; i32.and/or => local.get x
-                out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+                append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
                 i += 3
                 continue
               }
@@ -645,7 +674,7 @@ fn apply_optimize_instructions_same_local_get_pair(
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -682,7 +711,7 @@ fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -742,7 +771,7 @@ fn apply_precompute_i32_binary_ops(instr_bytes : Bytes) -> Bytes {
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -800,7 +829,7 @@ fn apply_precompute_i32_const_cmp(instr_bytes : Bytes) -> Bytes {
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -927,7 +956,7 @@ fn apply_precompute_i32_add_into_load_offset(
               (spans[i + 3].end_ - spans[i + 3].start) +
               rewritten_store_len
             if rewritten_len < original_len {
-              out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+              append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
               out.append(
                 instr_bytes[spans[i + 3].start:spans[i + 3].end_].to_array(),
               )
@@ -962,7 +991,7 @@ fn apply_precompute_i32_add_into_load_offset(
               spans[i].start +
               rewritten_memarg_len
             if rewritten_len < original_len {
-              out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+              append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
               append_memory_memarg(out, spans[i + 3].opcode, align, new_offset)
               i += 4
               continue
@@ -971,7 +1000,7 @@ fn apply_precompute_i32_add_into_load_offset(
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1009,7 +1038,7 @@ fn apply_precompute_i32_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
         _ => ()
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1050,7 +1079,7 @@ fn apply_precompute_i64_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
         _ => ()
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1082,7 +1111,7 @@ fn apply_precompute_i32_eqz_const(instr_bytes : Bytes) -> Bytes {
         None => ()
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1116,11 +1145,11 @@ fn apply_precompute_i32_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
       is_i32_bool_producer_opcode(spans[i].opcode) &&
       spans[i + 1].opcode == 0x45U &&
       spans[i + 2].opcode == 0x45U {
-      out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+      append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
       i += 3
       continue
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1150,7 +1179,7 @@ fn apply_precompute_local_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
       if decode_local_index_immediate_from_span(instr_bytes, spans[i])
         is Some(local_index) {
         if known_local_bool.get(local_index) is Some(true) {
-          out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+          append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
           i += 3
           continue
         }
@@ -1158,7 +1187,7 @@ fn apply_precompute_local_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
     }
 
     let span = spans[i]
-    out.append(instr_bytes[span.start:span.end_].to_array())
+    append_bytes_range(out, instr_bytes, span.start, span.end_)
 
     if span.opcode == 0x21U || span.opcode == 0x22U {
       match decode_local_index_immediate_from_span(instr_bytes, span) {
@@ -1205,11 +1234,11 @@ fn apply_precompute_i32_double_eqz_br_if(instr_bytes : Bytes) -> Bytes {
       spans[i].opcode == 0x45U &&
       spans[i + 1].opcode == 0x45U &&
       spans[i + 2].opcode == 0x0dU {
-      out.append(instr_bytes[spans[i + 2].start:spans[i + 2].end_].to_array())
+      append_bytes_range(out, instr_bytes, spans[i + 2].start, spans[i + 2].end_)
       i += 3
       continue
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1311,7 +1340,7 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
         None => ()
       }
     }
-    out.append(instr_bytes[span.start:span.end_].to_array())
+    append_bytes_range(out, instr_bytes, span.start, span.end_)
     if is_local_const_propagation_barrier(span.opcode) {
       known_local_consts = {}
       known_local_unknown = {}
@@ -1371,7 +1400,7 @@ fn apply_precompute_local_dead_set_overwrite(instr_bytes : Bytes) -> Bytes {
   for i in 0..<spans.length() {
     match replacements.get(i) {
       Some(true) => out.push(0x1aU.to_byte())
-      _ => out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+      _ => append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     }
   }
   Bytes::from_array(out[:])
@@ -1406,7 +1435,7 @@ fn apply_precompute_br_if_const(instr_bytes : Bytes) -> Bytes {
         None => ()
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1438,7 +1467,7 @@ fn apply_precompute_br_if_zero_before_end_to_drop(instr_bytes : Bytes) -> Bytes 
       }
     }
     if !rewritten {
-      out.append(instr_bytes[span.start:span.end_].to_array())
+      append_bytes_range(out, instr_bytes, span.start, span.end_)
     }
     match span.opcode {
       0x02U => label_stack.push(1)
@@ -1469,14 +1498,14 @@ fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
           is Some(get_index) {
           if set_index == get_index && spans[i].end_ > spans[i].start + 1 {
             out.push(0x22U.to_byte())
-            out.append(instr_bytes[spans[i].start + 1:spans[i].end_].to_array())
+            append_bytes_range(out, instr_bytes, spans[i].start + 1, spans[i].end_)
             i += 2
             continue
           }
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1505,7 +1534,7 @@ fn apply_simplify_local_get_set_noop(instr_bytes : Bytes) -> Bytes {
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1528,14 +1557,14 @@ fn apply_simplify_local_get_tee_to_get(instr_bytes : Bytes) -> Bytes {
         if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
           is Some(tee_index) {
           if get_index == tee_index {
-            out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+            append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
             i += 2
             continue
           }
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1560,7 +1589,7 @@ fn apply_local_cse_get_set_get(instr_bytes : Bytes) -> Bytes {
           is Some(second_get_index) {
           if first_get_index == second_get_index &&
             spans[i + 1].end_ > spans[i + 1].start + 1 {
-            out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+            append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
             out.push(0x22U.to_byte())
             out.append(
               instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_array(),
@@ -1571,7 +1600,7 @@ fn apply_local_cse_get_set_get(instr_bytes : Bytes) -> Bytes {
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1591,11 +1620,11 @@ fn apply_simplify_local_tee_drop_to_set(instr_bytes : Bytes) -> Bytes {
       spans[i + 1].opcode == 0x1aU &&
       spans[i].end_ > spans[i].start + 1 {
       out.push(0x21U.to_byte())
-      out.append(instr_bytes[spans[i].start + 1:spans[i].end_].to_array())
+      append_bytes_range(out, instr_bytes, spans[i].start + 1, spans[i].end_)
       i += 2
       continue
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1619,14 +1648,14 @@ fn apply_rse_local_tee_set_same(instr_bytes : Bytes) -> Bytes {
           is Some(set_index) {
           if tee_index == set_index && spans[i].end_ > spans[i].start + 1 {
             out.push(0x21U.to_byte())
-            out.append(instr_bytes[spans[i].start + 1:spans[i].end_].to_array())
+            append_bytes_range(out, instr_bytes, spans[i].start + 1, spans[i].end_)
             i += 2
             continue
           }
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -1847,7 +1876,7 @@ fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
             // block(prefix ... br_if 0 body end) => prefix ... eqz if body end
             let mut k = i + 1
             while k < br_if_index {
-              out.append(instr_bytes[spans[k].start:spans[k].end_].to_array())
+              append_bytes_range(out, instr_bytes, spans[k].start, spans[k].end_)
               k += 1
             }
             out.push(0x45U.to_byte())
@@ -1855,7 +1884,7 @@ fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
             out.push(0x40U.to_byte())
             k = br_if_index + 1
             while k < end_index {
-              out.append(instr_bytes[spans[k].start:spans[k].end_].to_array())
+              append_bytes_range(out, instr_bytes, spans[k].start, spans[k].end_)
               k += 1
             }
             out.push(0x0bU.to_byte())
@@ -1865,7 +1894,7 @@ fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
         }
       }
     }
-    out.append(instr_bytes[spans[i].start:spans[i].end_].to_array())
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
   Bytes::from_array(out[:])
@@ -2036,8 +2065,13 @@ fn optimize_code_body_bytes(
   if optimized_instr.length() >= instr_bytes.length() {
     return body_bytes
   }
-  let out : Array[Byte] = body_bytes[0:prefix_end].to_array()
-  out.append(optimized_instr[:].to_array())
+  let out : Array[Byte] = []
+  for i in 0..<prefix_end {
+    out.push(body_bytes[i])
+  }
+  for i in 0..<optimized_instr.length() {
+    out.push(optimized_instr[i])
+  }
   Bytes::from_array(out[:])
 }
 
@@ -2066,7 +2100,9 @@ fn optimize_code_section_payload_raise(
     out.append(
       encode_u32_leb128(optimized_body.length().reinterpret_as_uint())[:],
     )
-    out.append(optimized_body[:].to_array())
+    for j in 0..<optimized_body.length() {
+      out.push(optimized_body[j])
+    }
     parser.set_pos(end_)
   }
   Bytes::from_array(out[:])
@@ -2143,7 +2179,7 @@ fn rewrite_instruction_local_indices_for_coalesce_raise(
         ..append(encode_u32_leb128(new_index)[:]),
       )
     } else {
-      out.append(instr_bytes[span.start:span.end_].to_array())
+      append_bytes_range(out, instr_bytes, span.start, span.end_)
     }
   }
   Bytes::from_array(out[:])
@@ -2253,12 +2289,13 @@ fn apply_coalesce_locals_raise(
   let rewritten_code_payload = encode_code_section_payload_from_bodies(
     rewritten_code_bodies,
   )
-  let out : Array[Byte] = bytes[0:8].to_array()
+  let out : Array[Byte] = []
+  append_bytes_range(out, bytes, 0, 8)
   for section in sections {
     if section.section_id == 10U {
       append_encoded_section(out, 10U, rewritten_code_payload)
     } else {
-      out.append(bytes[section.section_start:section.section_end].to_array())
+      append_bytes_range(out, bytes, section.section_start, section.section_end)
     }
   }
   { bytes: Bytes::from_array(out[:]), removed_local_count }

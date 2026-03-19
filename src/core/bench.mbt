@@ -128,23 +128,21 @@ test "bench: core deep analyze binaryen zlib (top20)" (b : @bench.T) {
   b.bench(() => b.keep(must_analyze_wasm_breakdown_score(bytes, 20U)))
 }
 
-///|
-test "bench: core analyze summary pglite" (b : @bench.T) {
-  let bytes = read_fixture_or_fail("bench/corpus/core/pglite/pglite.wasm")
-  b.bench(() => b.keep(must_analyze_call_graph_summary_score(bytes)))
-}
+// pglite (8.8MB) skipped: too slow for regular bench runs
+// test "bench: core analyze summary pglite" (b : @bench.T) {
+//   let bytes = read_fixture_or_fail("bench/corpus/core/pglite/pglite.wasm")
+//   b.bench(() => b.keep(must_analyze_call_graph_summary_score(bytes)))
+// }
+// test "bench: core optimize -O1 pglite" (b : @bench.T) {
+//   let bytes = read_fixture_or_fail("bench/corpus/core/pglite/pglite.wasm")
+//   let config = OptimizeConfig::o1()
+//   b.bench(() => b.keep(must_optimize_after_size(bytes, config)))
+// }
 
-///|
-test "bench: core optimize -O1 pglite" (b : @bench.T) {
-  let bytes = read_fixture_or_fail("bench/corpus/core/pglite/pglite.wasm")
-  let config = OptimizeConfig::o1()
-  b.bench(() => b.keep(must_optimize_after_size(bytes, config)))
-}
-
-///|
-test "bench: core analyze summary duckdb-mvp" (b : @bench.T) {
-  let bytes = read_fixture_or_fail(
-    "bench/corpus/core-analyze/duckdb/duckdb-mvp.wasm",
-  )
-  b.bench(() => b.keep(must_analyze_call_graph_summary_score(bytes)))
-}
+// duckdb-mvp (39MB) skipped: too slow for regular bench runs
+// test "bench: core analyze summary duckdb-mvp" (b : @bench.T) {
+//   let bytes = read_fixture_or_fail(
+//     "bench/corpus/core-analyze/duckdb/duckdb-mvp.wasm",
+//   )
+//   b.bench(() => b.keep(must_analyze_call_graph_summary_score(bytes)))
+// }
