@@ -49,15 +49,15 @@ fn parse_wagi_response(raw : String) -> WagiResponse {
   let header_end = raw.find("\r\n\r\n")
   let (header_section, body) = match header_end {
     Some(i) => {
-      let h = raw[:i].to_string() catch { _ => "" }
-      let b = raw[i + 4:].to_string() catch { _ => "" }
+      let h = raw[:i].to_string()
+      let b = raw[i + 4:].to_string()
       (h, b)
     }
     None =>
       match raw.find("\n\n") {
         Some(i) => {
-          let h = raw[:i].to_string() catch { _ => "" }
-          let b = raw[i + 2:].to_string() catch { _ => "" }
+          let h = raw[:i].to_string()
+          let b = raw[i + 2:].to_string()
           (h, b)
         }
         None => (raw, "")
@@ -72,10 +72,9 @@ fn parse_wagi_response(raw : String) -> WagiResponse {
     }
     match line_str.find(":") {
       Some(colon_idx) => {
-        let key = line_str[:colon_idx].to_string() catch { _ => continue }
-        let value = (line_str[colon_idx + 1:].to_string() catch {
-            _ => continue
-          })
+        let key = line_str[:colon_idx].to_string()
+        let value = line_str[colon_idx + 1:]
+          .to_string()
           .trim_start(chars=" ")
           .to_string()
         if key.to_lower() == "status" {

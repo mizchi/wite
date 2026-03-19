@@ -65,15 +65,7 @@ async fn load_ts_config_or_exit(path : String) -> @wite_config.WiteConfigFile {
   let raw = evaluate_ts_config(path)
   let tab_index = raw.find("\t")
   let (tag, payload) = match tab_index {
-    Some(i) =>
-      (
-        raw[:i].to_string() catch {
-          _ => raw
-        },
-        raw[i + 1:].to_string() catch {
-          _ => ""
-        },
-      )
+    Some(i) => (raw[:i].to_string(), raw[i + 1:].to_string())
     None => (raw, "")
   }
   if tag != "ok" {

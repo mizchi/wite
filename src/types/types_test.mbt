@@ -153,7 +153,10 @@ test "optimize_config_from_opt_level -O4 aliases -O3" {
   assert_eq(o4.pass_rounds, o3.pass_rounds)
   assert_eq(o4.enable_dce, o3.enable_dce)
   assert_eq(o4.enable_dfe, o3.enable_dfe)
-  assert_eq(o4.enable_merge_similar_functions, o3.enable_merge_similar_functions)
+  assert_eq(
+    o4.enable_merge_similar_functions,
+    o3.enable_merge_similar_functions,
+  )
 }
 
 ///|

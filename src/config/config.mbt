@@ -191,7 +191,6 @@ pub fn binary_kind_name(kind : BinaryKind) -> String {
   }
 }
 
-
 ///|
 pub enum ConfigInput {
   None
@@ -528,4 +527,3 @@ pub fn build_auto_sync_deps_command_args(config_path : String) -> Array[String] 
 pub fn is_ts_config(path : String) -> Bool {
   path.has_suffix(".ts")
 }
-

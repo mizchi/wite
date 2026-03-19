@@ -23,9 +23,9 @@ fn encode_leb128(value : UInt) -> Array[Byte] {
 
 ///|
 fn append_section(out : Array[Byte], id : UInt, payload : Array[Byte]) -> Unit {
-  out..push(id.to_byte()).append(
-    encode_leb128(payload.length().reinterpret_as_uint())[:],
-  )
+  out
+  ..push(id.to_byte())
+  .append(encode_leb128(payload.length().reinterpret_as_uint())[:])
   out.append(payload[:])
 }
 
@@ -40,31 +40,31 @@ fn minimal_core_wasm() -> Bytes {
   // Type section (id=1): 1 type, func () -> ()
   let type_payload : Array[Byte] = [
     b'\x01', // count=1
-    b'\x60', // func
-    b'\x00', // 0 params
-    b'\x00', // 0 results
+     b'\x60', // func
+     b'\x00', // 0 params
+     b'\x00', // 0 results
   ]
   append_section(out, 1U, type_payload)
   // Function section (id=3): 1 func, type index 0
   let func_payload : Array[Byte] = [
     b'\x01', // count=1
-    b'\x00', // type index 0
+     b'\x00', // type index 0
   ]
   append_section(out, 3U, func_payload)
   // Export section (id=7): export "run" as func 0
   let export_payload : Array[Byte] = [
     b'\x01', // count=1
-    b'\x03', // name length=3
-    b'\x72', b'\x75', b'\x6E', // "run"
-    b'\x00', // kind=func
-    b'\x00', // index=0
+     b'\x03', // name length=3
+     b'\x72', b'\x75', b'\x6E', // "run"
+     b'\x00', // kind=func
+     b'\x00', // index=0
   ]
   append_section(out, 7U, export_payload)
   // Code section (id=10): 1 body
   let body : Array[Byte] = [
     b'\x02', // body size=2
-    b'\x00', // 0 locals
-    b'\x0B', // end
+     b'\x00', // 0 locals
+     b'\x0B', // end
   ]
   let code_payload : Array[Byte] = [b'\x01'] // count=1
   code_payload.append(body[:])
@@ -90,8 +90,8 @@ fn core_wasm_with_call() -> Bytes {
   // body1: call 0; end (exported)
   let code_payload : Array[Byte] = [
     b'\x02', // count=2
-    b'\x02', b'\x00', b'\x0B', // body0: size=2, 0 locals, end
-    b'\x04', b'\x00', b'\x10', b'\x00', b'\x0B', // body1: size=4, 0 locals, call 0, end
+     b'\x02', b'\x00', b'\x0B', // body0: size=2, 0 locals, end
+     b'\x04', b'\x00', b'\x10', b'\x00', b'\x0B', // body1: size=4, 0 locals, call 0, end
   ]
   append_section(out, 10U, code_payload)
   Bytes::from_array(out)
@@ -212,9 +212,9 @@ test "analyze_keep_reasons shows export roots" {
   let report = @analyze.analyze_keep_reasons(bytes).unwrap()
   assert_true(report.entries.length() > 0)
   // The exported function should have a keep reason
-  let has_export_reason = report.entries.iter().any(
-    fn(e) { e.reasons.iter().any(fn(r) { r.contains("export") }) },
-  )
+  let has_export_reason = report.entries
+    .iter()
+    .any(fn(e) { e.reasons.iter().any(fn(r) { r.contains("export") }) })
   assert_true(has_export_reason)
 }
 
@@ -346,8 +346,8 @@ fn complex_core_wasm() -> Bytes {
   // type 1: (i32) -> (i32)
   let type_payload : Array[Byte] = [
     b'\x02', // count=2
-    b'\x60', b'\x00', b'\x00', // func () -> ()
-    b'\x60', b'\x01', b'\x7F', b'\x01', b'\x7F', // func (i32) -> (i32)
+     b'\x60', b'\x00', b'\x00', // func () -> ()
+     b'\x60', b'\x01', b'\x7F', b'\x01', b'\x7F', // func (i32) -> (i32)
   ]
   append_section(out, 1U, type_payload)
   // Import section (id=2): 1 import (func type 0)
@@ -372,22 +372,22 @@ fn complex_core_wasm() -> Bytes {
   // body content: 12 bytes (0 locals + 11 instruction bytes)
   let body0 : Array[Byte] = [
     b'\x0C', // body size=12
-    b'\x00', // 0 locals
-    b'\x20', b'\x00', // local.get 0
-    b'\x04', b'\x7F', // if (result i32)
-    b'\x41', b'\x01', // i32.const 1
-    b'\x05', // else
-    b'\x41', b'\x00', // i32.const 0
-    b'\x0B', // end (if)
-    b'\x0B', // end (func)
+     b'\x00', // 0 locals
+     b'\x20', b'\x00', // local.get 0
+     b'\x04', b'\x7F', // if (result i32)
+     b'\x41', b'\x01', // i32.const 1
+     b'\x05', // else
+     b'\x41', b'\x00', // i32.const 0
+     b'\x0B', // end (if)
+     b'\x0B', // end (func)
   ]
   // body1 (func idx 2, type 0): () -> ()
   //   nop; end (dead code - exported but never called from compute)
   let body1 : Array[Byte] = [
     b'\x02', // body size=2
-    b'\x00', // 0 locals
-    b'\x0B', // end
-  ]
+     b'\x00', // 0 locals
+     b'\x0B',
+  ] // end
   let code_payload : Array[Byte] = [b'\x02'] // count=2
   code_payload.append(body0[:])
   code_payload.append(body1[:])
@@ -435,13 +435,13 @@ fn wasm_with_block_loop() -> Bytes {
   // content: 0 locals + 9 instr bytes = 10 bytes
   let body : Array[Byte] = [
     b'\x0A', // body size=10
-    b'\x00', // 0 locals
-    b'\x02', b'\x40', // block void
-    b'\x03', b'\x40', // loop void
-    b'\x0C', b'\x01', // br 1
-    b'\x0B', // end (loop)
-    b'\x0B', // end (block)
-    b'\x0B', // end (func)
+     b'\x00', // 0 locals
+     b'\x02', b'\x40', // block void
+     b'\x03', b'\x40', // loop void
+     b'\x0C', b'\x01', // br 1
+     b'\x0B', // end (loop)
+     b'\x0B', // end (block)
+     b'\x0B', // end (func)
   ]
   let code_p : Array[Byte] = [b'\x01']
   code_p.append(body[:])
@@ -464,9 +464,9 @@ fn wasm_with_dead_code() -> Bytes {
   // Code: func0 calls func1, func1 is nop, func2 is dead
   let code_p : Array[Byte] = [
     b'\x03', // count=3
-    b'\x04', b'\x00', b'\x10', b'\x01', b'\x0B', // body0: call 1; end
-    b'\x02', b'\x00', b'\x0B', // body1: end
-    b'\x02', b'\x00', b'\x0B', // body2 (dead): end
+     b'\x04', b'\x00', b'\x10', b'\x01', b'\x0B', // body0: call 1; end
+     b'\x02', b'\x00', b'\x0B', // body1: end
+     b'\x02', b'\x00', b'\x0B', // body2 (dead): end
   ]
   append_section(out, 10U, code_p)
   Bytes::from_array(out)
@@ -572,10 +572,9 @@ test "analyze_wasm_breakdown with block/loop opcodes" {
 ///|
 test "analyze_keep_reasons with closed_world" {
   let bytes = wasm_with_dead_code()
-  let config = @analyze.make_optimize_config(
-    closed_world=true,
-    closed_world_root_exports=["main"],
-  )
+  let config = @analyze.make_optimize_config(closed_world=true, closed_world_root_exports=[
+    "main",
+  ])
   let report = @analyze.analyze_keep_reasons(bytes, config~).unwrap()
   assert_true(report.entries.length() > 0)
 }
@@ -589,17 +588,18 @@ test "analyze_retain_paths with dead code" {
   // Dead function should have empty path
   let dead_entries = report.entries.filter(fn(e) { e.path.length() == 0 })
   // At least some entries should have paths
-  let rooted_entries = report.entries.filter(fn(e) { e.root_reasons.length() > 0 })
+  let rooted_entries = report.entries.filter(fn(e) {
+    e.root_reasons.length() > 0
+  })
   assert_true(rooted_entries.length() > 0 || dead_entries.length() > 0)
 }
 
 ///|
 test "analyze_retain_paths with closed_world config" {
   let bytes = wasm_with_dead_code()
-  let config = @analyze.make_optimize_config(
-    closed_world=true,
-    closed_world_root_exports=["main"],
-  )
+  let config = @analyze.make_optimize_config(closed_world=true, closed_world_root_exports=[
+    "main",
+  ])
   let report = @analyze.analyze_retain_paths(bytes, config~).unwrap()
   assert_true(report.entries.length() > 0)
 }
@@ -622,7 +622,9 @@ test "analyze_optimize_metadata with o1 config" {
   let bytes = wasm_with_dead_code()
   let config = @analyze.optimize_config_from_opt_level("-O1").unwrap()
   let report = @analyze.analyze_optimize_metadata(
-    bytes, config~, function_diff_limit=5U,
+    bytes,
+    config~,
+    function_diff_limit=5U,
   ).unwrap()
   assert_true(report.stages.length() > 0)
   assert_true(report.total_gain_bytes > 0U)

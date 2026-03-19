@@ -54,12 +54,12 @@ fn parse_dependency_protocol(name : String) -> DependencyProtocol? {
 fn normalize_dependency_host(raw : String) -> String {
   let mut host = raw.trim().to_string()
   if host.has_prefix("https://") {
-    host = host[8:].to_string() catch { _ => host }
+    host = host[8:].to_string()
   } else if host.has_prefix("http://") {
-    host = host[7:].to_string() catch { _ => host }
+    host = host[7:].to_string()
   }
   if host.has_suffix("/") {
-    host = host[:host.length() - 1].to_string() catch { _ => host }
+    host = host[:host.length() - 1].to_string()
   }
   host
 }
@@ -74,8 +74,8 @@ fn parse_versioned_segment(raw : String) -> (String, String) {
   let text = raw.trim().to_string()
   match text.rev_find("@") {
     Some(index) if index > 0 && index + 1 < text.length() => {
-      let base = text[:index].to_string() catch { _ => text }
-      let version = text[index + 1:].to_string() catch { _ => "latest" }
+      let base = text[:index].to_string()
+      let version = text[index + 1:].to_string()
       (base, version)
     }
     _ => (text, "latest")
@@ -95,8 +95,8 @@ fn parse_wasm_dependency_spec(raw : String) -> WasmDependencySpec? {
       (Some(first), Some(last)) if first == last &&
         first > 0 &&
         first + 1 < base.length() => {
-        let ns = base[:first].to_string() catch { _ => "" }
-        let name = base[first + 1:].to_string() catch { _ => "" }
+        let ns = base[:first].to_string()
+        let name = base[first + 1:].to_string()
         if ns.contains(":") || name.contains(":") {
           return None
         }
@@ -130,13 +130,9 @@ pub fn is_local_dep_url(url : String) -> Bool {
 fn parse_https_dependency_url(raw : String) -> (String, WasmDependencySpec)? {
   let text = raw.trim().to_string()
   let rest = if text.has_prefix("https://") {
-    text[8:].to_string() catch {
-      _ => ""
-    }
+    text[8:].to_string()
   } else if text.has_prefix("http://") {
-    text[7:].to_string() catch {
-      _ => ""
-    }
+    text[7:].to_string()
   } else {
     return None
   }
@@ -147,20 +143,16 @@ fn parse_https_dependency_url(raw : String) -> (String, WasmDependencySpec)? {
     Some(i) if i > 0 && i + 1 < rest.length() => i
     _ => return None
   }
-  let host = normalize_dependency_host(
-    rest[:slash].to_string() catch {
-      _ => ""
-    },
-  )
+  let host = normalize_dependency_host(rest[:slash].to_string())
   if host.is_empty() {
     return None
   }
-  let mut spec_text = rest[slash + 1:].to_string() catch { _ => "" }
+  let mut spec_text = rest[slash + 1:].to_string()
   if spec_text.find("?") is Some(i) {
-    spec_text = spec_text[:i].to_string() catch { _ => spec_text }
+    spec_text = spec_text[:i].to_string()
   }
   if spec_text.find("#") is Some(i) {
-    spec_text = spec_text[:i].to_string() catch { _ => spec_text }
+    spec_text = spec_text[:i].to_string()
   }
   parse_wasm_dependency_spec(spec_text).map(spec => (host, spec))
 }
@@ -180,10 +172,10 @@ fn parse_dependency_input(
   let first_colon = text.find(":")
   match first_colon {
     Some(i) if i > 0 && i + 1 < text.length() => {
-      let candidate = text[:i].to_string() catch { _ => "" }
+      let candidate = text[:i].to_string()
       match parse_dependency_protocol(candidate) {
         Some(protocol) => {
-          let body = text[i + 1:].to_string() catch { _ => "" }
+          let body = text[i + 1:].to_string()
           parse_wasm_dependency_spec(body).map(spec => {
             protocol,
             spec,
@@ -287,9 +279,7 @@ fn normalize_dep_sync_output_dir(raw : String) -> String {
   if text.is_empty() {
     "deps"
   } else if text.has_suffix("/") {
-    text[:text.length() - 1].to_string() catch {
-      _ => text.to_string()
-    }
+    text[:text.length() - 1].to_string()
   } else {
     text.to_string()
   }
@@ -906,7 +896,7 @@ fn path_dirname(path : String) -> String {
     (None, None) => None
   }
   match index {
-    Some(i) if i > 0 => path[:i].to_string() catch { _ => "." }
+    Some(i) if i > 0 => path[:i].to_string()
     Some(_) => "."
     None => "."
   }

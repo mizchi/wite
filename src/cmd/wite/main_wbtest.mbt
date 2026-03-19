@@ -1243,8 +1243,8 @@ async test "evaluate_ts_config parses valid ts config file" {
   guard tab_index is Some(i) else {
     fail("expected tab-separated result from evaluate_ts_config: " + raw)
   }
-  let tag = raw[:i].to_string() catch { _ => raw }
-  let payload = raw[i + 1:].to_string() catch { _ => "" }
+  let tag = raw[:i].to_string()
+  let payload = raw[i + 1:].to_string()
   assert_eq(tag, "ok")
   guard @wite_config.parse_wite_config_text(payload) is Ok(config) else {
     fail("failed to parse ts config output: " + payload)

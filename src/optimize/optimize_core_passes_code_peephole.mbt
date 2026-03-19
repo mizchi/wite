@@ -11,13 +11,6 @@ fn append_bytes_range(
 }
 
 ///|
-fn append_bytes(out : Array[Byte], bytes : Bytes) -> Unit {
-  for i in 0..<bytes.length() {
-    out.push(bytes[i])
-  }
-}
-
-///|
 fn append_bytes_view(out : Array[Byte], view : BytesView) -> Unit {
   for i in 0..<view.length() {
     out.push(view[i])
@@ -615,7 +608,12 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
             }
             0x72U => {
               // -1 | x => -1
-              append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[i].start,
+                spans[i].end_,
+              )
               i += 3
               continue
             }
@@ -652,7 +650,12 @@ fn apply_optimize_instructions_same_local_get_pair(
             match spans[i + 2].opcode {
               0x71U | 0x72U => {
                 // local.get x; local.get x; i32.and/or => local.get x
-                append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
+                append_bytes_range(
+                  out,
+                  instr_bytes,
+                  spans[i].start,
+                  spans[i].end_,
+                )
                 i += 3
                 continue
               }
@@ -956,7 +959,12 @@ fn apply_precompute_i32_add_into_load_offset(
               (spans[i + 3].end_ - spans[i + 3].start) +
               rewritten_store_len
             if rewritten_len < original_len {
-              append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[i].start,
+                spans[i].end_,
+              )
               out.append(
                 instr_bytes[spans[i + 3].start:spans[i + 3].end_].to_array(),
               )
@@ -991,7 +999,12 @@ fn apply_precompute_i32_add_into_load_offset(
               spans[i].start +
               rewritten_memarg_len
             if rewritten_len < original_len {
-              append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[i].start,
+                spans[i].end_,
+              )
               append_memory_memarg(out, spans[i + 3].opcode, align, new_offset)
               i += 4
               continue
@@ -1234,7 +1247,12 @@ fn apply_precompute_i32_double_eqz_br_if(instr_bytes : Bytes) -> Bytes {
       spans[i].opcode == 0x45U &&
       spans[i + 1].opcode == 0x45U &&
       spans[i + 2].opcode == 0x0dU {
-      append_bytes_range(out, instr_bytes, spans[i + 2].start, spans[i + 2].end_)
+      append_bytes_range(
+        out,
+        instr_bytes,
+        spans[i + 2].start,
+        spans[i + 2].end_,
+      )
       i += 3
       continue
     }
@@ -1498,7 +1516,12 @@ fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
           is Some(get_index) {
           if set_index == get_index && spans[i].end_ > spans[i].start + 1 {
             out.push(0x22U.to_byte())
-            append_bytes_range(out, instr_bytes, spans[i].start + 1, spans[i].end_)
+            append_bytes_range(
+              out,
+              instr_bytes,
+              spans[i].start + 1,
+              spans[i].end_,
+            )
             i += 2
             continue
           }
@@ -1648,7 +1671,12 @@ fn apply_rse_local_tee_set_same(instr_bytes : Bytes) -> Bytes {
           is Some(set_index) {
           if tee_index == set_index && spans[i].end_ > spans[i].start + 1 {
             out.push(0x21U.to_byte())
-            append_bytes_range(out, instr_bytes, spans[i].start + 1, spans[i].end_)
+            append_bytes_range(
+              out,
+              instr_bytes,
+              spans[i].start + 1,
+              spans[i].end_,
+            )
             i += 2
             continue
           }
@@ -1876,7 +1904,12 @@ fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
             // block(prefix ... br_if 0 body end) => prefix ... eqz if body end
             let mut k = i + 1
             while k < br_if_index {
-              append_bytes_range(out, instr_bytes, spans[k].start, spans[k].end_)
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[k].start,
+                spans[k].end_,
+              )
               k += 1
             }
             out.push(0x45U.to_byte())
@@ -1884,7 +1917,12 @@ fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
             out.push(0x40U.to_byte())
             k = br_if_index + 1
             while k < end_index {
-              append_bytes_range(out, instr_bytes, spans[k].start, spans[k].end_)
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[k].start,
+                spans[k].end_,
+              )
               k += 1
             }
             out.push(0x0bU.to_byte())

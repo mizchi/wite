@@ -3,9 +3,7 @@ fn replace_suffix(text : String, from : String, to : String) -> String {
   if !text.has_suffix(from) {
     return text + to
   }
-  let prefix = text[:text.length() - from.length()].to_string() catch {
-    _ => text.to_string()
-  }
+  let prefix = text[:text.length() - from.length()].to_string()
   prefix + to
 }
 
@@ -32,7 +30,7 @@ fn derive_implicit_build_output_path(input_path : String) -> String {
 ///|
 fn path_basename(path : String) -> String {
   match path.rev_find("/") {
-    Some(index) => path[index + 1:].to_string() catch { _ => path }
+    Some(index) => path[index + 1:].to_string()
     None => path
   }
 }
@@ -56,9 +54,7 @@ fn path_dirname(path : String) -> String {
           "/"
         }
       } else {
-        path[:i].to_string() catch {
-          _ => "."
-        }
+        path[:i].to_string()
       }
     None => "."
   }
@@ -71,7 +67,7 @@ fn is_absolute_path(path : String) -> Bool {
   }
   match path.find(":") {
     Some(i) if i == 1 && path.length() >= 3 => {
-      let sep = path[2:3].to_string() catch { _ => "" }
+      let sep = path[2:3].to_string()
       sep == "/" || sep == "\\"
     }
     _ => false

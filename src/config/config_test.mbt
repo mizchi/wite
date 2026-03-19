@@ -827,9 +827,9 @@ test "parse_wite_config_text with server config" {
 
 ///|
 test "parse_config_selection_flags --config with value" {
-  let result = @config.parse_config_selection_flags(
-    ["--config", "custom.jsonc", "--other"],
-  )
+  let result = @config.parse_config_selection_flags([
+    "--config", "custom.jsonc", "--other",
+  ])
   let parsed = result.unwrap()
   assert_eq(parsed.config_path, "custom.jsonc")
   assert_true(parsed.explicit_config_path)
@@ -839,9 +839,7 @@ test "parse_config_selection_flags --config with value" {
 
 ///|
 test "parse_config_selection_flags --config= form" {
-  let result = @config.parse_config_selection_flags(
-    ["--config=my.jsonc"],
-  )
+  let result = @config.parse_config_selection_flags(["--config=my.jsonc"])
   let parsed = result.unwrap()
   assert_eq(parsed.config_path, "my.jsonc")
   assert_true(parsed.explicit_config_path)

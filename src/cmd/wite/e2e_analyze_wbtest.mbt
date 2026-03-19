@@ -27,9 +27,9 @@ fn e2e_append_section(
   id : UInt,
   payload : Array[Byte],
 ) -> Unit {
-  out..push(id.to_byte()).append(
-    e2e_encode_leb128(payload.length().reinterpret_as_uint())[:],
-  )
+  out
+  ..push(id.to_byte())
+  .append(e2e_encode_leb128(payload.length().reinterpret_as_uint())[:])
   out.append(payload[:])
 }
 
@@ -42,11 +42,9 @@ fn e2e_minimal_core_wasm() -> Bytes {
   // Function section: 1 func, type 0
   e2e_append_section(out, 3U, [b'\x01', b'\x00'])
   // Export section: "run" func 0
-  e2e_append_section(
-    out,
-    7U,
-    [b'\x01', b'\x03', b'\x72', b'\x75', b'\x6E', b'\x00', b'\x00'],
-  )
+  e2e_append_section(out, 7U, [
+    b'\x01', b'\x03', b'\x72', b'\x75', b'\x6E', b'\x00', b'\x00',
+  ])
   // Code section: 1 body (nop; end)
   e2e_append_section(out, 10U, [b'\x01', b'\x02', b'\x00', b'\x0B'])
   Bytes::from_array(out)
@@ -59,20 +57,13 @@ fn e2e_core_wasm_with_call() -> Bytes {
   e2e_append_section(out, 1U, [b'\x01', b'\x60', b'\x00', b'\x00'])
   e2e_append_section(out, 3U, [b'\x02', b'\x00', b'\x00'])
   // Export "main" -> func 1
-  e2e_append_section(
-    out,
-    7U,
-    [b'\x01', b'\x04', b'\x6D', b'\x61', b'\x69', b'\x6E', b'\x00', b'\x01'],
-  )
+  e2e_append_section(out, 7U, [
+    b'\x01', b'\x04', b'\x6D', b'\x61', b'\x69', b'\x6E', b'\x00', b'\x01',
+  ])
   // Code: body0 (nop;end), body1 (call 0;end)
-  e2e_append_section(
-    out,
-    10U,
-    [
-      b'\x02', b'\x02', b'\x00', b'\x0B', b'\x04', b'\x00', b'\x10', b'\x00',
-      b'\x0B',
-    ],
-  )
+  e2e_append_section(out, 10U, [
+    b'\x02', b'\x02', b'\x00', b'\x0B', b'\x04', b'\x00', b'\x10', b'\x00', b'\x0B',
+  ])
   Bytes::from_array(out)
 }
 
@@ -573,8 +564,8 @@ async test "e2e: run_analyze_view_command pipeline with opt-level" {
   let dir = js_make_temp_dir("wite-e2e-")
   let path = e2e_write_wasm_file(dir, "test.wasm", e2e_core_wasm_with_call())
   run_analyze_view_command([
-    "wite", "analyze", path, "--view=pipeline", "--opt-level=-O2",
-    "--diff-limit=5", "--no-config",
+    "wite", "analyze", path, "--view=pipeline", "--opt-level=-O2", "--diff-limit=5",
+    "--no-config",
   ])
   js_remove_dir_recursive(dir)
 }
@@ -584,8 +575,8 @@ async test "e2e: run_analyze_view_command keep with closed-world" {
   let dir = js_make_temp_dir("wite-e2e-")
   let path = e2e_write_wasm_file(dir, "test.wasm", e2e_core_wasm_with_call())
   run_analyze_view_command([
-    "wite", "analyze", path, "--view=keep", "--closed-world",
-    "--closed-world-root=main", "--no-config",
+    "wite", "analyze", path, "--view=keep", "--closed-world", "--closed-world-root=main",
+    "--no-config",
   ])
   js_remove_dir_recursive(dir)
 }
@@ -595,8 +586,7 @@ async test "e2e: run_analyze_view_command retain with safe-mode and limit" {
   let dir = js_make_temp_dir("wite-e2e-")
   let path = e2e_write_wasm_file(dir, "test.wasm", e2e_core_wasm_with_call())
   run_analyze_view_command([
-    "wite", "analyze", path, "--view=retain", "--safe-mode", "--limit=5",
-    "--no-config",
+    "wite", "analyze", path, "--view=retain", "--safe-mode", "--limit=5", "--no-config",
   ])
   js_remove_dir_recursive(dir)
 }
@@ -637,9 +627,7 @@ async test "e2e: run_analyze_view_command pipeline with positional opt-level" {
 test "e2e: run_runtime_profile with scenarios" {
   let dir = js_make_temp_dir("wite-e2e-")
   let path = e2e_write_wasm_file(dir, "test.wasm", e2e_minimal_core_wasm())
-  let scenarios = [
-    @wite_core.make_runtime_profile_scenario("run"),
-  ]
+  let scenarios = [@wite_core.make_runtime_profile_scenario("run")]
   run_runtime_profile(path, 2U, scenarios)
   js_remove_dir_recursive(dir)
 }
@@ -648,9 +636,7 @@ test "e2e: run_runtime_profile with scenarios" {
 test "e2e: run_hot_size with scenarios" {
   let dir = js_make_temp_dir("wite-e2e-")
   let path = e2e_write_wasm_file(dir, "test.wasm", e2e_minimal_core_wasm())
-  let scenarios = [
-    @wite_core.make_runtime_profile_scenario("run"),
-  ]
+  let scenarios = [@wite_core.make_runtime_profile_scenario("run")]
   run_hot_size(path, 2U, 5U, scenarios)
   js_remove_dir_recursive(dir)
 }
@@ -686,9 +672,7 @@ test "e2e: run_optimize with verbose" {
   let dir = js_make_temp_dir("wite-e2e-")
   let input = e2e_write_wasm_file(dir, "input.wasm", e2e_core_wasm_with_call())
   let output = dir + "/output.wasm"
-  run_optimize([
-    "wite", "optimize", input, output, "-O0", "--verbose",
-  ])
+  run_optimize(["wite", "optimize", input, output, "-O0", "--verbose"])
   assert_true(@fs.path_exists(output))
   js_remove_dir_recursive(dir)
 }
@@ -748,10 +732,7 @@ async test "e2e: run_analyze_subcommand host with limit" {
 async test "e2e: run_analyze_subcommand opt with level and diff-limit" {
   let dir = js_make_temp_dir("wite-e2e-")
   let path = e2e_write_wasm_file(dir, "test.wasm", e2e_core_wasm_with_call())
-  run_analyze_subcommand(
-    ["wite", "analyze", "opt", path, "-O2", "3"],
-    "opt",
-  )
+  run_analyze_subcommand(["wite", "analyze", "opt", path, "-O2", "3"], "opt")
   js_remove_dir_recursive(dir)
 }
 
@@ -822,11 +803,7 @@ test "e2e: run_root_policy_command with excludes" {
   if !e2e_component_fixture_exists() {
     return
   }
-  run_root_policy_command(
-    e2e_component_fixture_path(),
-    None,
-    ["cabi_realloc"],
-  )
+  run_root_policy_command(e2e_component_fixture_path(), None, ["cabi_realloc"])
 }
 
 // ---- analyze subcommand dispatch ----
@@ -850,11 +827,7 @@ async test "e2e: run_analyze_subcommand deep" {
 ///|
 async test "e2e: run_analyze_subcommand top-functions" {
   let dir = js_make_temp_dir("wite-e2e-")
-  let path = e2e_write_wasm_file(
-    dir,
-    "test.wasm",
-    e2e_core_wasm_with_call(),
-  )
+  let path = e2e_write_wasm_file(dir, "test.wasm", e2e_core_wasm_with_call())
   run_analyze_subcommand(
     ["wite", "analyze", "top-functions", path],
     "top-functions",
@@ -885,10 +858,7 @@ async test "e2e: run_analyze_subcommand callgraph" {
 async test "e2e: run_analyze_subcommand dce-report" {
   let dir = js_make_temp_dir("wite-e2e-")
   let path = e2e_write_wasm_file(dir, "test.wasm", e2e_core_wasm_with_call())
-  run_analyze_subcommand(
-    ["wite", "analyze", "dce-report", path],
-    "dce-report",
-  )
+  run_analyze_subcommand(["wite", "analyze", "dce-report", path], "dce-report")
   js_remove_dir_recursive(dir)
 }
 
@@ -999,7 +969,12 @@ test "e2e: print_component_section_sizes prints items" {
 ///|
 test "e2e: print_component_function_sizes respects limit" {
   let functions : Array[@wite_core.FunctionSize] = [
-    { function_index: 0U, body_bytes: 50U, name: Some("foo"), export_names: ["bar"] },
+    {
+      function_index: 0U,
+      body_bytes: 50U,
+      name: Some("foo"),
+      export_names: ["bar"],
+    },
     { function_index: 1U, body_bytes: 30U, name: None, export_names: [] },
     { function_index: 2U, body_bytes: 10U, name: Some("baz"), export_names: [] },
   ]
@@ -1087,8 +1062,7 @@ async test "e2e: run_analyze_view_command component functions" {
   }
   let path = e2e_component_fixture_path()
   run_analyze_view_command([
-    "wite", "analyze", path, "--view=functions", "--kind=component",
-    "--no-config",
+    "wite", "analyze", path, "--view=functions", "--kind=component", "--no-config",
   ])
 }
 
@@ -1099,8 +1073,7 @@ async test "e2e: run_analyze_view_command component callgraph" {
   }
   let path = e2e_component_fixture_path()
   run_analyze_view_command([
-    "wite", "analyze", path, "--view=callgraph", "--kind=component",
-    "--no-config",
+    "wite", "analyze", path, "--view=callgraph", "--kind=component", "--no-config",
   ])
 }
 
