@@ -21,6 +21,7 @@ options(
   "is-main": true,
   targets: {
     "dev_e2e_wbtest.mbt": [ "js" ],
+    "e2e_analyze_wbtest.mbt": [ "js" ],
     "main_wbtest.mbt": [ "js" ],
     "workerd_e2e_wbtest.mbt": [ "js" ],
     "workerd_wbtest.mbt": [ "js" ],

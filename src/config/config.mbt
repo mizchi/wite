@@ -191,17 +191,6 @@ pub fn binary_kind_name(kind : BinaryKind) -> String {
   }
 }
 
-///|
-pub fn parse_binary_kind_or_exit(value : String, label : String) -> BinaryKind {
-  match parse_binary_kind(value) {
-    Some(kind) => kind
-    None => {
-      println("invalid " + label + ": " + value)
-      @sys.exit(1)
-      BinaryKind::Auto
-    }
-  }
-}
 
 ///|
 pub enum ConfigInput {
@@ -472,7 +461,7 @@ pub struct ConfigSelectionFlags {
 ///|
 pub fn parse_config_selection_flags(
   flags : Array[String],
-) -> ConfigSelectionFlags {
+) -> Result[ConfigSelectionFlags, String] {
   let mut config_path = "wite.config.jsonc"
   let mut explicit_config_path = false
   let mut use_config = true
@@ -487,13 +476,11 @@ pub fn parse_config_selection_flags(
     }
     if flag == "--config" {
       if i + 1 >= flags.length() {
-        println("missing config path after --config")
-        @sys.exit(1)
+        return Err("missing config path after --config")
       }
       let path = flags[i + 1]
       if path.is_empty() {
-        println("config path must not be empty")
-        @sys.exit(1)
+        return Err("config path must not be empty")
       }
       config_path = path
       explicit_config_path = true
@@ -503,8 +490,7 @@ pub fn parse_config_selection_flags(
     }
     if flag.strip_prefix("--config=") is Some(path) {
       if path.is_empty() {
-        println("config path must not be empty")
-        @sys.exit(1)
+        return Err("config path must not be empty")
       }
       config_path = path.to_string()
       explicit_config_path = true
@@ -515,7 +501,7 @@ pub fn parse_config_selection_flags(
     remaining_flags.push(flag)
     i += 1
   }
-  { config_path, explicit_config_path, use_config, remaining_flags }
+  Ok({ config_path, explicit_config_path, use_config, remaining_flags })
 }
 
 ///|
@@ -543,57 +529,3 @@ pub fn is_ts_config(path : String) -> Bool {
   path.has_suffix(".ts")
 }
 
-///|
-pub fn resolve_config_file_path(selection : ConfigSelectionFlags) -> String? {
-  if !selection.use_config {
-    return None
-  }
-  if selection.explicit_config_path {
-    return Some(selection.config_path)
-  }
-  if @fs.path_exists("wite.config.ts") {
-    return Some("wite.config.ts")
-  }
-  if @fs.path_exists("wite.config.jsonc") {
-    return Some("wite.config.jsonc")
-  }
-  None
-}
-
-///|
-pub fn load_wite_config_or_exit(path : String) -> WiteConfigFile {
-  let text = @fs.read_file_to_string(path) catch {
-    e => {
-      println(
-        "failed to read config file: " + path + " (" + e.to_string() + ")",
-      )
-      @sys.exit(1)
-      ""
-    }
-  }
-  match parse_wite_config_text(text) {
-    Ok(config) => config
-    Err(msg) => {
-      println("failed to parse config file: " + path + " (" + msg + ")")
-      @sys.exit(1)
-      empty_wite_config_file()
-    }
-  }
-}
-
-///|
-pub fn resolve_wite_config_or_default(
-  selection : ConfigSelectionFlags,
-) -> WiteConfigFile {
-  if !selection.use_config {
-    return empty_wite_config_file()
-  }
-  if !@fs.path_exists(selection.config_path) {
-    if selection.explicit_config_path {
-      println("config file not found: " + selection.config_path)
-      @sys.exit(1)
-    }
-    return empty_wite_config_file()
-  }
-  load_wite_config_or_exit(selection.config_path)
-}

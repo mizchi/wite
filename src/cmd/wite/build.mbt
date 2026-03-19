@@ -399,7 +399,7 @@ async fn run_build(args : Array[String]) -> Unit {
     }
   }
   let raw_flags = resolved.raw_flags
-  let config_selection = @wite_config.parse_config_selection_flags(raw_flags)
+  let config_selection = parse_config_selection_flags_or_exit(raw_flags)
   let config_file = resolve_config_or_default(config_selection)
   let config_dir = path_dirname(config_selection.config_path)
   let merged_flags = @wite_config.merge_command_flags(

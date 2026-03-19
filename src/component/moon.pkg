@@ -1,7 +1,5 @@
 import {
-  "mizchi/wite/core" @wite,
   "mizchi/mwac/component" @mwac_component,
   "mizchi/wit" @wit,
   "moonbitlang/x/fs" @fs,
-  "moonbitlang/x/sys" @sys,
 }

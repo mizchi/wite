@@ -1180,6 +1180,7 @@ test "parse config selection strips config flags and preserves command flags" {
   let parsed = @wite_config.parse_config_selection_flags([
     "--config=./custom.jsonc", "-Oz", "--no-config", "--closed-world",
   ])
+  let parsed = parsed.unwrap()
   assert_eq(parsed.config_path, "./custom.jsonc")
   assert_true(parsed.explicit_config_path)
   assert_true(!parsed.use_config)
@@ -1189,6 +1190,7 @@ test "parse config selection strips config flags and preserves command flags" {
 ///|
 test "parse config selection uses default path when unspecified" {
   let parsed = @wite_config.parse_config_selection_flags(["--view=summary"])
+  let parsed = parsed.unwrap()
   assert_eq(parsed.config_path, "wite.config.jsonc")
   assert_true(!parsed.explicit_config_path)
   assert_true(parsed.use_config)

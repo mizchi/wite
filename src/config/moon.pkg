@@ -1,5 +1,3 @@
 import {
-  "moonbitlang/x/fs" @fs,
   "moonbitlang/x/json5" @json5,
-  "moonbitlang/x/sys" @sys,
 }

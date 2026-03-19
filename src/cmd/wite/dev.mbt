@@ -740,7 +740,7 @@ async fn run_dev_command(args : Array[String]) -> Unit {
         dir + "/wite.config.jsonc"
       }
       if @fs.path_exists(config_path) {
-        let config = @wite_config.load_wite_config_or_exit(config_path)
+        let config = load_wite_config_or_exit(config_path)
         match config.server {
           Some(server) => server.bindings
           None => @wite_config.empty_server_bindings()

@@ -227,7 +227,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
         print_analyze_usage()
         @sys.exit(1)
       }
-      @wite_component.run_component_profile(shifted[2])
+      run_component_profile_command(shifted[2])
     }
     "component-top-functions" => {
       if shifted.length() < 3 {
@@ -239,7 +239,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
       } else {
         20U
       }
-      @wite_component.run_component_top_functions(shifted[2], limit)
+      run_component_top_functions_command(shifted[2], limit)
     }
     "component-callgraph" => {
       if shifted.length() < 3 {
@@ -251,7 +251,7 @@ async fn run_analyze_subcommand(args : Array[String], subcmd : String) -> Unit {
       } else {
         20U
       }
-      @wite_component.run_component_callgraph(shifted[2], limit)
+      run_component_callgraph_command(shifted[2], limit)
     }
     "component-dce-kpi" => run_component_dce_kpi(shifted)
     "contract" => {
@@ -277,7 +277,7 @@ async fn run_analyze_view_command(args : Array[String]) -> Unit {
   for i in 3..<args.length() {
     raw_flags.push(args[i])
   }
-  let config_selection = @wite_config.parse_config_selection_flags(raw_flags)
+  let config_selection = parse_config_selection_flags_or_exit(raw_flags)
   auto_sync_deps_from_config_if_needed(config_selection)
   let config_file = resolve_config_or_default(config_selection)
   let merged_flags = @wite_config.merge_command_flags(
@@ -428,11 +428,10 @@ async fn run_analyze_view_command(args : Array[String]) -> Unit {
   match kind {
     BinaryKind::Component =>
       match view {
-        AnalyzeView::Summary => @wite_component.run_component_profile(path)
+        AnalyzeView::Summary => run_component_profile_command(path)
         AnalyzeView::Functions =>
-          @wite_component.run_component_top_functions(path, limit)
-        AnalyzeView::Callgraph =>
-          @wite_component.run_component_callgraph(path, limit)
+          run_component_top_functions_command(path, limit)
+        AnalyzeView::Callgraph => run_component_callgraph_command(path, limit)
         _ => {
           println(
             "analyze view '" +

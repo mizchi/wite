@@ -239,7 +239,7 @@ test "build_auto_sync_deps_command_args" {
 ///|
 test "parse_config_selection_flags no flags" {
   let flags : Array[String] = []
-  let result = @config.parse_config_selection_flags(flags)
+  let result = @config.parse_config_selection_flags(flags).unwrap()
   inspect(result.config_path, content="wite.config.jsonc")
   inspect(result.explicit_config_path, content="false")
   inspect(result.use_config, content="true")
@@ -249,14 +249,14 @@ test "parse_config_selection_flags no flags" {
 ///|
 test "parse_config_selection_flags no-config" {
   let flags : Array[String] = ["--no-config"]
-  let result = @config.parse_config_selection_flags(flags)
+  let result = @config.parse_config_selection_flags(flags).unwrap()
   inspect(result.use_config, content="false")
 }
 
 ///|
 test "parse_config_selection_flags remaining flags preserved" {
   let flags : Array[String] = ["--no-config", "--other", "value"]
-  let result = @config.parse_config_selection_flags(flags)
+  let result = @config.parse_config_selection_flags(flags).unwrap()
   inspect(result.remaining_flags, content="[\"--other\", \"value\"]")
 }
 
@@ -765,4 +765,102 @@ test "config_input_single_path" {
     @config.config_input_single_path(@config.ConfigInput::new_named(map)),
     content="Some(\"b.wasm\")",
   )
+}
+
+///|
+test "parse_wite_config_text valid json5" {
+  let text =
+    #|{
+    #|  // comment allowed in json5
+    #|  "build": ["--kind", "core"],
+    #|  "input": "app.wasm"
+    #|}
+  let result = @config.parse_wite_config_text(text)
+  assert_true(result is Ok(_))
+  let config = result.unwrap()
+  assert_eq(config.build_flags, ["--kind", "core"])
+  match config.input {
+    @config.ConfigInput::Single(s) => assert_eq(s, "app.wasm")
+    _ => fail("expected Single input")
+  }
+}
+
+///|
+test "parse_wite_config_text empty object" {
+  let result = @config.parse_wite_config_text("{}")
+  assert_true(result is Ok(_))
+  let config = result.unwrap()
+  assert_eq(config.build_flags, [])
+  assert_true(config.input is @config.ConfigInput::None)
+}
+
+///|
+test "parse_wite_config_text invalid json returns Err" {
+  let result = @config.parse_wite_config_text("not json at all {{{")
+  assert_true(result is Err(_))
+}
+
+///|
+test "parse_wite_config_text non-object root returns Err" {
+  let result = @config.parse_wite_config_text("[1,2,3]")
+  assert_true(result is Err(_))
+}
+
+///|
+test "parse_wite_config_text with server config" {
+  let text =
+    #|{
+    #|  "server": {
+    #|    "executor": "workerd",
+    #|    "route": "/api/..."
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  match config.server {
+    Some(s) => {
+      assert_true(s.executor is @config.ServerExecutor::Workerd)
+      assert_eq(s.route, "/api/...")
+    }
+    None => fail("expected server config")
+  }
+}
+
+///|
+test "parse_config_selection_flags --config with value" {
+  let result = @config.parse_config_selection_flags(
+    ["--config", "custom.jsonc", "--other"],
+  )
+  let parsed = result.unwrap()
+  assert_eq(parsed.config_path, "custom.jsonc")
+  assert_true(parsed.explicit_config_path)
+  assert_true(parsed.use_config)
+  assert_eq(parsed.remaining_flags, ["--other"])
+}
+
+///|
+test "parse_config_selection_flags --config= form" {
+  let result = @config.parse_config_selection_flags(
+    ["--config=my.jsonc"],
+  )
+  let parsed = result.unwrap()
+  assert_eq(parsed.config_path, "my.jsonc")
+  assert_true(parsed.explicit_config_path)
+}
+
+///|
+test "parse_config_selection_flags --config missing value returns Err" {
+  let result = @config.parse_config_selection_flags(["--config"])
+  assert_true(result is Err(_))
+}
+
+///|
+test "parse_config_selection_flags --config= empty returns Err" {
+  let result = @config.parse_config_selection_flags(["--config="])
+  assert_true(result is Err(_))
+}
+
+///|
+test "parse_config_selection_flags --config empty value returns Err" {
+  let result = @config.parse_config_selection_flags(["--config", ""])
+  assert_true(result is Err(_))
 }

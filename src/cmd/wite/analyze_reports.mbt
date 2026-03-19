@@ -1032,17 +1032,17 @@ fn run_retain_path(args : Array[String]) -> Unit {
 
 ///|
 pub fn run_component_profile(path : String) -> Unit {
-  @wite_component.run_component_profile(path)
+  run_component_profile_command(path)
 }
 
 ///|
 pub fn run_component_top_functions(path : String, limit : UInt) -> Unit {
-  @wite_component.run_component_top_functions(path, limit)
+  run_component_top_functions_command(path, limit)
 }
 
 ///|
 pub fn run_component_callgraph(path : String, limit : UInt) -> Unit {
-  @wite_component.run_component_callgraph(path, limit)
+  run_component_callgraph_command(path, limit)
 }
 
 ///|
@@ -1065,7 +1065,7 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
       wit_path = Some(args[i])
     }
   }
-  @wite_component.run_component_dce_kpi_with_options(
+  run_component_dce_kpi_command(
     component_path,
     wit_path,
     excludes,
@@ -1077,7 +1077,7 @@ fn run_component_dce_kpi(args : Array[String]) -> Unit {
 
 ///|
 fn run_contract(component_path : String, wit_path : String) -> Unit {
-  @wite_component.run_contract(component_path, wit_path)
+  run_contract_command(component_path, wit_path)
 }
 
 ///|
@@ -1150,7 +1150,7 @@ fn run_interface(args : Array[String]) -> Unit {
       return
     }
   }
-  @wite_component.run_interface_with_options(
+  run_interface_command(
     options.component_path,
     options.wit_path,
     options.world,
@@ -1172,7 +1172,5 @@ fn run_root_policy(args : Array[String]) -> Unit {
       wit_path = Some(args[i])
     }
   }
-  @wite_component.run_root_policy_with_options(
-    component_path, wit_path, excludes,
-  )
+  run_root_policy_command(component_path, wit_path, excludes)
 }

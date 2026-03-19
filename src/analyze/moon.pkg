@@ -1,6 +1,4 @@
 import {
   "mizchi/wite/optimize" @wite_optimize,
   "mizchi/wite/types" @wite,
-  "moonbitlang/x/fs" @fs,
-  "moonbitlang/x/sys" @sys,
 }

@@ -248,7 +248,7 @@ fn run_profile(path : String) -> Unit {
 fn run_profile_with_kind(path : String, kind : BinaryKind) -> Unit {
   match kind {
     BinaryKind::Auto | BinaryKind::Core => run_profile(path)
-    BinaryKind::Component => @wite_component.run_component_profile(path)
+    BinaryKind::Component => run_component_profile_command(path)
   }
 }
 
@@ -263,7 +263,7 @@ async fn run_profile_command(args : Array[String]) -> Unit {
   for i in 3..<args.length() {
     raw_flags.push(args[i])
   }
-  let config_selection = @wite_config.parse_config_selection_flags(raw_flags)
+  let config_selection = parse_config_selection_flags_or_exit(raw_flags)
   auto_sync_deps_from_config_if_needed(config_selection)
   let config_file = resolve_config_or_default(config_selection)
   let merged_flags = @wite_config.merge_command_flags(

@@ -113,41 +113,7 @@ pub fn parse_type_section_entries_with_refs_raise(Bytes, String) -> Array[@optim
 
 pub fn parse_vec_count(Bytes) -> UInt raise @types.WiteError
 
-pub fn print_call_graph_nodes(Array[@types.CallGraphNode], UInt) -> Unit
-
-pub fn print_function_sizes(Array[@types.FunctionSize], UInt) -> Unit
-
-pub fn print_section_sizes(Array[@types.SectionSize]) -> Unit
-
 pub fn profile_module(Bytes) -> Result[@types.ModuleProfile, @types.WiteError]
-
-pub fn run_analyze(String) -> Unit
-
-pub fn run_analyze_host(String, UInt) -> Unit
-
-pub fn run_analyze_opt(String, @types.OptimizeConfig, UInt) -> Unit
-
-pub fn run_block_gap(String, String, UInt) -> Unit
-
-pub fn run_block_sizes(String, UInt) -> Unit
-
-pub fn run_callgraph(String, UInt) -> Unit
-
-pub fn run_dce_report(String, UInt) -> Unit
-
-pub fn run_deep_analyze(String, UInt) -> Unit
-
-pub fn run_function_gap(String, String, UInt) -> Unit
-
-pub fn run_keep_reasons_with_options(String, Bool, Bool, Array[String]) -> Unit
-
-pub fn run_profile(String) -> Unit
-
-pub fn run_retain_path_with_options(String, UInt, Bool, Bool, Array[String]) -> Unit
-
-pub fn run_section_gap(String, String, UInt) -> Unit
-
-pub fn run_top_functions(String, UInt) -> Unit
 
 pub fn section_total_bytes(@optimize.RawSection) -> UInt
 

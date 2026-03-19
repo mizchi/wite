@@ -1,9 +1,62 @@
 ///|
+fn resolve_config_file_path(
+  selection : @wite_config.ConfigSelectionFlags,
+) -> String? {
+  if !selection.use_config {
+    return None
+  }
+  if selection.explicit_config_path {
+    return Some(selection.config_path)
+  }
+  if @fs.path_exists("wite.config.ts") {
+    return Some("wite.config.ts")
+  }
+  if @fs.path_exists("wite.config.jsonc") {
+    return Some("wite.config.jsonc")
+  }
+  None
+}
+
+///|
+fn load_wite_config_or_exit(path : String) -> @wite_config.WiteConfigFile {
+  let text = @fs.read_file_to_string(path) catch {
+    e => {
+      println(
+        "failed to read config file: " + path + " (" + e.to_string() + ")",
+      )
+      @sys.exit(1)
+      ""
+    }
+  }
+  match @wite_config.parse_wite_config_text(text) {
+    Ok(config) => config
+    Err(msg) => {
+      println("failed to parse config file: " + path + " (" + msg + ")")
+      @sys.exit(1)
+      @wite_config.empty_wite_config_file()
+    }
+  }
+}
+
+///|
+fn parse_config_selection_flags_or_exit(
+  flags : Array[String],
+) -> @wite_config.ConfigSelectionFlags {
+  match @wite_config.parse_config_selection_flags(flags) {
+    Ok(selection) => selection
+    Err(msg) => {
+      println(msg)
+      @sys.exit(1)
+      panic()
+    }
+  }
+}
+
+///|
 async fn auto_sync_deps_from_config_if_needed(
   selection : @wite_config.ConfigSelectionFlags,
 ) -> Unit {
-  let config_exists = @wite_config.resolve_config_file_path(selection)
-    is Some(_)
+  let config_exists = resolve_config_file_path(selection) is Some(_)
   if !@wite_config.should_auto_sync_deps(selection.use_config, config_exists) {
     return
   }

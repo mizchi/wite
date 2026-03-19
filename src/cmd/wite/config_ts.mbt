@@ -95,7 +95,7 @@ async fn load_ts_config_or_exit(path : String) -> @wite_config.WiteConfigFile {
 async fn resolve_config_or_default(
   selection : @wite_config.ConfigSelectionFlags,
 ) -> @wite_config.WiteConfigFile {
-  match @wite_config.resolve_config_file_path(selection) {
+  match resolve_config_file_path(selection) {
     None =>
       if selection.explicit_config_path {
         println("config file not found: " + selection.config_path)
@@ -108,7 +108,7 @@ async fn resolve_config_or_default(
       if @wite_config.is_ts_config(path) {
         load_ts_config_or_exit(path)
       } else {
-        @wite_config.load_wite_config_or_exit(path)
+        load_wite_config_or_exit(path)
       }
   }
 }
