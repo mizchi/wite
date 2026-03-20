@@ -1203,16 +1203,28 @@ test "parse_wite_config_text chunks combined with environments" {
 
 ///|
 test "parse_runtime_target known targets" {
-  assert_true(@config.parse_runtime_target("browser") is @config.RuntimeTarget::Browser)
-  assert_true(@config.parse_runtime_target("wasmtime") is @config.RuntimeTarget::Wasmtime)
-  assert_true(@config.parse_runtime_target("workerd") is @config.RuntimeTarget::Workerd)
-  assert_true(@config.parse_runtime_target("wagi") is @config.RuntimeTarget::Wagi)
-  assert_true(@config.parse_runtime_target("Browser") is @config.RuntimeTarget::Browser)
+  assert_true(
+    @config.parse_runtime_target("browser") is @config.RuntimeTarget::Browser,
+  )
+  assert_true(
+    @config.parse_runtime_target("wasmtime") is @config.RuntimeTarget::Wasmtime,
+  )
+  assert_true(
+    @config.parse_runtime_target("workerd") is @config.RuntimeTarget::Workerd,
+  )
+  assert_true(
+    @config.parse_runtime_target("wagi") is @config.RuntimeTarget::Wagi,
+  )
+  assert_true(
+    @config.parse_runtime_target("Browser") is @config.RuntimeTarget::Browser,
+  )
 }
 
 ///|
 test "parse_runtime_target custom" {
-  assert_true(@config.parse_runtime_target("deno") is @config.RuntimeTarget::Custom(_))
+  assert_true(
+    @config.parse_runtime_target("deno") is @config.RuntimeTarget::Custom(_),
+  )
 }
 
 ///|
@@ -1306,17 +1318,13 @@ test "resolve_environment_def returns EnvironmentDef" {
 
 ///|
 test "parse_config_selection_flags --all-envs" {
-  let result = @config.parse_config_selection_flags(
-    ["--all-envs", "-Oz"],
-  ).unwrap()
+  let result = @config.parse_config_selection_flags(["--all-envs", "-Oz"]).unwrap()
   assert_true(result.all_envs)
   assert_eq(result.remaining_flags, ["-Oz"])
 }
 
 ///|
 test "parse_config_selection_flags no --all-envs" {
-  let result = @config.parse_config_selection_flags(
-    ["-Oz"],
-  ).unwrap()
+  let result = @config.parse_config_selection_flags(["-Oz"]).unwrap()
   assert_false(result.all_envs)
 }

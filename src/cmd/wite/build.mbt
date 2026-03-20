@@ -602,9 +602,7 @@ async fn run_build(args : Array[String]) -> Unit {
           match default_input {
             Some(_) => resolved.input_path
             None => {
-              println(
-                "environment '" + env_def.name + "' has no input",
-              )
+              println("environment '" + env_def.name + "' has no input")
               continue
             }
           }
@@ -613,9 +611,7 @@ async fn run_build(args : Array[String]) -> Unit {
         config_dir,
         env_def.output.dir,
       )
-      let basename = input_path
-        |> path_basename
-        |> derive_build_output_path
+      let basename = input_path |> path_basename |> derive_build_output_path
       let out = output_dir + "/" + basename
       materialize_wac_deps_if_needed(
         config_selection.config_path,

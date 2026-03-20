@@ -16,6 +16,7 @@ async fn main {
     "deps" => @wite_deps.run_deps_command(args, print_usage)
     "diff" => run_diff_command(args)
     "optimize" => run_optimize(args)
+    "treeshake" => run_treeshake(args)
     "dev" => run_dev_command(args)
     "test" => run_test_command(args)
     "doc" => run_doc_command(args)

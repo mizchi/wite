@@ -1318,3 +1318,60 @@ test "fixture: compose then optimize pipeline" {
   )
   js_remove_dir_recursive(dir)
 }
+
+// ---- treeshake command tests ----
+
+///|
+test "e2e: run_treeshake with core wasm" {
+  let dir = js_make_temp_dir("wite-e2e-treeshake-")
+  let input = e2e_write_wasm_file(
+    dir,
+    "input.wasm",
+    e2e_core_wasm_with_call(),
+  )
+  let output = dir + "/output.wasm"
+  run_treeshake([
+    "wite", "treeshake", input, "--exports=main", "-o", output, "-O1",
+  ])
+  assert_true(@fs.path_exists(output))
+  let output_bytes = @fs.read_file_to_bytes(output) catch { _ => panic() }
+  assert_true(output_bytes.length() > 0)
+  let input_bytes = @fs.read_file_to_bytes(input) catch { _ => panic() }
+  assert_true(
+    output_bytes.length().reinterpret_as_uint() <=
+    input_bytes.length().reinterpret_as_uint(),
+  )
+  js_remove_dir_recursive(dir)
+}
+
+///|
+test "e2e: run_treeshake with zlib keeps only memory" {
+  if !@fs.path_exists("bench/corpus/core/binaryen/zlib.wasm") {
+    return
+  }
+  let dir = js_make_temp_dir("wite-e2e-treeshake-")
+  let output = dir + "/zlib.treeshake.wasm"
+  run_treeshake([
+    "wite", "treeshake", "bench/corpus/core/binaryen/zlib.wasm",
+    "--exports=memory", "-o", output, "-O1",
+  ])
+  assert_true(@fs.path_exists(output))
+  let output_bytes = @fs.read_file_to_bytes(output) catch { _ => panic() }
+  assert_true(output_bytes.length().reinterpret_as_uint() < 100000U)
+  js_remove_dir_recursive(dir)
+}
+
+///|
+test "e2e: run_treeshake default output path" {
+  let dir = js_make_temp_dir("wite-e2e-treeshake-")
+  let input = e2e_write_wasm_file(
+    dir,
+    "app.wasm",
+    e2e_minimal_core_wasm(),
+  )
+  run_treeshake([
+    "wite", "treeshake", input, "--exports=run",
+  ])
+  assert_true(@fs.path_exists(dir + "/app.treeshake.wasm"))
+  js_remove_dir_recursive(dir)
+}

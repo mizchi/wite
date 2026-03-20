@@ -15,6 +15,9 @@ fn print_usage() -> Unit {
   println("  diff <left.wasm> [right.wasm] [options]")
   println("  optimize <input.wasm> <output.wasm> [options]")
   println(
+    "  treeshake <input.wasm> --exports=a,b,c [-o <output.wasm>] [-O1|-Os|-Oz]",
+  )
+  println(
     "  dev [dir] [--port=<n>] [--target=wasm-gc|wasm|js] [--build-cmd=<cmd>] [--watch=<path>] [--server[=wagi|workerd]]",
   )
   println(
