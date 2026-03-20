@@ -76,3 +76,34 @@ pub using @analyze {
   optimize_for_size,
   profile_module,
 }
+
+///|
+pub using @bundle {
+  compose_wac_source,
+  compose_wac_file,
+  collect_wac_new_package_names,
+  parse_wac_package_name,
+}
+
+///|
+pub using @config {
+  parse_wite_config_text,
+  parse_wite_config_json,
+  parse_binary_kind,
+  binary_kind_name,
+  resolve_environment,
+  environment_names,
+  chunk_names,
+  empty_wite_config_file,
+  empty_environment_config,
+  empty_chunk_config,
+  is_ts_config,
+  type BinaryKind,
+  type ConfigInput,
+  type ConfigOutput,
+  type WiteConfigFile,
+  type EnvironmentConfig,
+  type ChunkConfig,
+  type ServerConfig,
+  type ServerExecutor,
+}
