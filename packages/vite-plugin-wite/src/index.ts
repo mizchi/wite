@@ -1,12 +1,16 @@
 import { createHash } from "node:crypto";
-import { readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { resolve, dirname, relative } from "node:path";
 import type { Plugin, ResolvedConfig } from "vite";
 import { parseWasm } from "./wasm-parser.js";
 import { generateJsWrapper, generateDts } from "./codegen.js";
 import { lowerComponent } from "./component.js";
 import { RUNTIME_MODULE_ID, RUNTIME_MODULE_CODE } from "./runtime.js";
-import { jcoTranspile, isJcoAvailable } from "./jco.js";
+import {
+  jcoTranspile,
+  jcoTranspileWithTypes,
+  isJcoAvailable,
+} from "./jco.js";
 
 /**
  * Runtime target for wasm loading strategy.
@@ -217,11 +221,15 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
         if (useJco && runtime === "browser") {
           const result = jcoTranspile(wasmPath);
           if (result) {
+            // Generate .d.ts from jco output (look for .d.ts in jco output files)
+            if (resolved.dts) {
+              generateComponentDts(wasmPath, result.files);
+            }
             return result.js;
           }
         }
 
-        // Fallback: extract first core module
+        // Fallback: extract first core module and use its signatures
         const lowered = lowerComponent(bytes);
         if (!lowered) {
           this.error(
@@ -235,6 +243,7 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
           this.error(`Failed to parse lowered wasm: ${metadata.error}`);
           return;
         }
+        // metadata now has core module types — .d.ts will be generated below
       }
 
       // Content-hash dedup
@@ -296,12 +305,11 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
           if (dts && file.endsWith(".wasm")) {
             try {
               const bytes = new Uint8Array(readFileSync(file));
-              let metadata = parseWasm(bytes);
+              const metadata = parseWasm(bytes);
               if (metadata.isComponent) {
-                const lowered = lowerComponent(bytes);
-                if (lowered) metadata = parseWasm(lowered);
-              }
-              if (!metadata.error) {
+                // Component Model: use jco or lowered core for .d.ts
+                generateComponentDts(file);
+              } else if (!metadata.error) {
                 const dtsContent = generateDts(metadata);
                 writeFileSync(file + ".d.ts", dtsContent);
               }
@@ -614,4 +622,60 @@ function safeId(name: string): string {
   if (!/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(name))
     return `_${name.replace(/[^a-zA-Z0-9_$]/g, "_")}`;
   return name;
+}
+
+/**
+ * Generate .d.ts for a Component Model wasm.
+ * Uses jco transpile --typescript if available, otherwise
+ * falls back to lowered core module signatures.
+ */
+function generateComponentDts(
+  wasmPath: string,
+  jcoFiles?: string[],
+): void {
+  const dtsPath = wasmPath + ".d.ts";
+
+  // Check if jco already generated a .d.ts
+  if (jcoFiles) {
+    const dtsFile = jcoFiles.find((f) => f.endsWith(".d.ts"));
+    if (dtsFile) {
+      const jcoDir = resolve(dirname(wasmPath), ".wite-jco");
+      const srcDts = resolve(jcoDir, dtsFile);
+      if (existsSync(srcDts)) {
+        try {
+          const content = readFileSync(srcDts, "utf-8");
+          writeFileSync(dtsPath, content);
+          return;
+        } catch {
+          // Fall through
+        }
+      }
+    }
+  }
+
+  // Fallback: use jco transpile with types
+  const result = jcoTranspileWithTypes(wasmPath);
+  if (result) {
+    try {
+      writeFileSync(dtsPath, result.dts);
+      return;
+    } catch {
+      // Fall through
+    }
+  }
+
+  // Final fallback: lower to core and generate from signatures
+  try {
+    const bytes = new Uint8Array(readFileSync(wasmPath));
+    const lowered = lowerComponent(bytes);
+    if (lowered) {
+      const metadata = parseWasm(lowered);
+      if (!metadata.error) {
+        const dtsContent = generateDts(metadata);
+        writeFileSync(dtsPath, dtsContent);
+      }
+    }
+  } catch {
+    // Non-fatal
+  }
 }

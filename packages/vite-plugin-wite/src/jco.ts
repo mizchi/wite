@@ -70,5 +70,40 @@ export function jcoTranspile(
 
   const js = readFileSync(jsPath, "utf-8");
   const files = readdirSync(targetDir);
-  return { js, files };
+  return { js, files, outDir: targetDir };
+}
+
+/**
+ * Run jco transpile with TypeScript output for .d.ts generation.
+ */
+export function jcoTranspileWithTypes(
+  wasmPath: string,
+): { dts: string } | null {
+  if (!isJcoAvailable()) return null;
+
+  const targetDir = resolve(dirname(wasmPath), ".wite-jco-types");
+  if (!existsSync(targetDir)) {
+    mkdirSync(targetDir, { recursive: true });
+  }
+
+  try {
+    execFileSync(
+      "npx",
+      ["jco", "transpile", wasmPath, "-o", targetDir, "--map", "*=*"],
+      { stdio: "pipe", timeout: 30000 },
+    );
+  } catch {
+    return null;
+  }
+
+  // Find .d.ts file
+  const name = basename(wasmPath, ".wasm");
+  const dtsPath = resolve(targetDir, name + ".d.ts");
+  if (!existsSync(dtsPath)) {
+    const files = readdirSync(targetDir).filter((f) => f.endsWith(".d.ts"));
+    if (files.length === 0) return null;
+    return { dts: readFileSync(resolve(targetDir, files[0]), "utf-8") };
+  }
+
+  return { dts: readFileSync(dtsPath, "utf-8") };
 }
