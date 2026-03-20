@@ -2170,70 +2170,640 @@ fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
 }
 
 ///|
+fn apply_merged_stateless_peephole(
+  instr_bytes : Bytes,
+  safe_mode : Bool,
+) -> Bytes {
+  let spans = match parse_instruction_spans(instr_bytes) {
+    Some(v) => v
+    None => return instr_bytes
+  }
+  let out : Array[Byte] = []
+  let mut changed = false
+  let mut i = 0
+  let max_u32 = 0xffffffffU
+  while i < spans.length() {
+    // === 5-span patterns ===
+    if i + 4 < spans.length() && !safe_mode &&
+      is_optimize_instructions_i32_get_opcode(spans[i].opcode) &&
+      spans[i + 1].opcode == 0x41U &&
+      spans[i + 2].opcode == 0x6aU &&
+      is_drop_elidable_producer_span(instr_bytes, spans[i + 3]) &&
+      is_memory_store_opcode(spans[i + 4].opcode) {
+      if decode_i32_const_nonnegative_from_span(instr_bytes, spans[i + 1])
+        is Some(addend) {
+        if decode_memory_memarg_from_span(instr_bytes, spans[i + 4])
+          is Some((align, offset)) {
+          if addend <= max_u32 - offset {
+            let new_offset = offset + addend
+            let rewritten_store_len = 1 +
+              encode_u32_leb128(align).length() +
+              encode_u32_leb128(new_offset).length()
+            let original_len = spans[i].end_ -
+              spans[i].start +
+              (spans[i + 1].end_ - spans[i + 1].start) +
+              1 +
+              (spans[i + 3].end_ - spans[i + 3].start) +
+              (spans[i + 4].end_ - spans[i + 4].start)
+            let rewritten_len = spans[i].end_ -
+              spans[i].start +
+              (spans[i + 3].end_ - spans[i + 3].start) +
+              rewritten_store_len
+            if rewritten_len < original_len {
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[i].start,
+                spans[i].end_,
+              )
+              out.append(
+                instr_bytes[spans[i + 3].start:spans[i + 3].end_].to_array(),
+              )
+              append_memory_memarg(out, spans[i + 4].opcode, align, new_offset)
+              i += 5
+              changed = true
+              continue
+            }
+          }
+        }
+      }
+    }
+    // === 4-span patterns ===
+    // i32_add_into_load_offset: get + i32.const + i32.add + load/store
+    if i + 3 < spans.length() && !safe_mode &&
+      is_optimize_instructions_i32_get_opcode(spans[i].opcode) &&
+      spans[i + 1].opcode == 0x41U &&
+      spans[i + 2].opcode == 0x6aU &&
+      is_memory_memarg_opcode(spans[i + 3].opcode) {
+      if decode_i32_const_nonnegative_from_span(instr_bytes, spans[i + 1])
+        is Some(addend) {
+        if decode_memory_memarg_from_span(instr_bytes, spans[i + 3])
+          is Some((align, offset)) {
+          if addend <= max_u32 - offset {
+            let new_offset = offset + addend
+            let rewritten_memarg_len = 1 +
+              encode_u32_leb128(align).length() +
+              encode_u32_leb128(new_offset).length()
+            let original_len = spans[i].end_ -
+              spans[i].start +
+              (spans[i + 1].end_ - spans[i + 1].start) +
+              1 +
+              (spans[i + 3].end_ - spans[i + 3].start)
+            let rewritten_len = spans[i].end_ -
+              spans[i].start +
+              rewritten_memarg_len
+            if rewritten_len < original_len {
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[i].start,
+                spans[i].end_,
+              )
+              append_memory_memarg(out, spans[i + 3].opcode, align, new_offset)
+              i += 4
+              changed = true
+              continue
+            }
+          }
+        }
+      }
+    }
+    // === 3-span patterns ===
+    if i + 2 < spans.length() {
+      // i32_add: i32.const(a) + i32.const(b) + i32.add => i32.const(a+b)
+      if spans[i].opcode == 0x41U &&
+        spans[i + 1].opcode == 0x41U &&
+        spans[i + 2].opcode == 0x6aU {
+        if decode_i32_const_signed_from_span(instr_bytes, spans[i])
+          is Some(lhs) {
+          if decode_i32_const_signed_from_span(instr_bytes, spans[i + 1])
+            is Some(rhs) {
+            let sum = (lhs.reinterpret_as_uint() + rhs.reinterpret_as_uint()).reinterpret_as_int()
+            let original_len = spans[i].end_ -
+              spans[i].start +
+              (spans[i + 1].end_ - spans[i + 1].start) +
+              1
+            let folded_imm = encode_signed_i32_leb128(sum)
+            let folded_len = 1 + folded_imm.length()
+            if folded_len < original_len {
+              append_i32_const_signed(out, sum)
+              i += 3
+              changed = true
+              continue
+            }
+          }
+        }
+      }
+      // i32_binary_ops: i32.const(a) + i32.const(b) + binary_op => i32.const(result)
+      if spans[i].opcode == 0x41U && spans[i + 1].opcode == 0x41U {
+        if decode_i32_const_signed_from_span(instr_bytes, spans[i])
+          is Some(lhs) {
+          if decode_i32_const_signed_from_span(instr_bytes, spans[i + 1])
+            is Some(rhs) {
+            if eval_i32_const_binary(lhs, rhs, spans[i + 2].opcode)
+              is Some(value) {
+              let original_len = spans[i].end_ -
+                spans[i].start +
+                (spans[i + 1].end_ - spans[i + 1].start) +
+                1
+              let folded_imm = encode_signed_i32_leb128(value)
+              let folded_len = 1 + folded_imm.length()
+              if folded_len < original_len {
+                append_i32_const_signed(out, value)
+                i += 3
+                changed = true
+                continue
+              }
+            }
+          }
+        }
+      }
+      // i32_const_cmp: i32.const(a) + i32.const(b) + cmp_op => i32.const(0|1)
+      if spans[i].opcode == 0x41U && spans[i + 1].opcode == 0x41U {
+        if decode_i32_const_signed_from_span(instr_bytes, spans[i])
+          is Some(lhs) {
+          if decode_i32_const_signed_from_span(instr_bytes, spans[i + 1])
+            is Some(rhs) {
+            if eval_i32_const_cmp(lhs, rhs, spans[i + 2].opcode)
+              is Some(value) {
+              let original_len = spans[i].end_ -
+                spans[i].start +
+                (spans[i + 1].end_ - spans[i + 1].start) +
+                1
+              if 2 < original_len {
+                append_i32_const_small(out, value)
+                i += 3
+                changed = true
+                continue
+              }
+            }
+          }
+        }
+      }
+      // bool_double_eqz: bool_producer + i32.eqz + i32.eqz => bool_producer
+      if is_i32_bool_producer_opcode(spans[i].opcode) &&
+        spans[i + 1].opcode == 0x45U &&
+        spans[i + 2].opcode == 0x45U {
+        append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
+        i += 3
+        changed = true
+        continue
+      }
+      // double_eqz_br_if: i32.eqz + i32.eqz + br_if => br_if
+      if spans[i].opcode == 0x45U &&
+        spans[i + 1].opcode == 0x45U &&
+        spans[i + 2].opcode == 0x0dU {
+        append_bytes_range(
+          out,
+          instr_bytes,
+          spans[i + 2].start,
+          spans[i + 2].end_,
+        )
+        i += 3
+        changed = true
+        continue
+      }
+      // same_local_get_pair: local.get(x) + local.get(x) + op => specialized
+      if spans[i].opcode == 0x20U && spans[i + 1].opcode == 0x20U {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+          is Some(first_local) {
+          if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
+            is Some(second_local) {
+            if first_local == second_local {
+              match spans[i + 2].opcode {
+                0x71U | 0x72U => {
+                  // local.get x; local.get x; i32.and/or => local.get x
+                  append_bytes_range(
+                    out,
+                    instr_bytes,
+                    spans[i].start,
+                    spans[i].end_,
+                  )
+                  i += 3
+                  changed = true
+                  continue
+                }
+                0x46U | 0x4cU | 0x4dU | 0x4eU | 0x4fU => {
+                  // x==x / x<=x / x>=x => 1
+                  append_i32_const_small(out, 1U)
+                  i += 3
+                  changed = true
+                  continue
+                }
+                0x47U | 0x48U | 0x49U | 0x4aU | 0x4bU | 0x6bU | 0x73U => {
+                  // x!=x / x<x / x>x / x-x / x^x => 0
+                  append_i32_const_small(out, 0U)
+                  i += 3
+                  changed = true
+                  continue
+                }
+                _ => ()
+              }
+            }
+          }
+        }
+      }
+      // i32_const_cmp_bitwise: get + i32.const(0) + bitwise/cmp => simplified
+      if is_optimize_instructions_i32_get_opcode(spans[i].opcode) &&
+        spans[i + 1].opcode == 0x41U {
+        let lhs = instr_bytes[spans[i].start:spans[i].end_]
+        match
+          decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i + 1]) {
+          Some(0U) =>
+            match spans[i + 2].opcode {
+              0x71U | 0x49U => {
+                // x & 0 / x <_u 0 => 0
+                append_i32_const_small(out, 0U)
+                i += 3
+                changed = true
+                continue
+              }
+              0x4fU => {
+                // x >=_u 0 => 1
+                append_i32_const_small(out, 1U)
+                i += 3
+                changed = true
+                continue
+              }
+              0x46U | 0x4dU => {
+                // x == 0 / x <=_u 0 => x.eqz
+                append_bytes_view(out, lhs)
+                out.push(0x45U.to_byte())
+                i += 3
+                changed = true
+                continue
+              }
+              0x47U | 0x4bU => {
+                // x != 0 / x >_u 0 => x.eqz; i32.eqz
+                append_bytes_view(out, lhs)
+                out.push(0x45U.to_byte())
+                out.push(0x45U.to_byte())
+                i += 3
+                changed = true
+                continue
+              }
+              _ => ()
+            }
+          _ => ()
+        }
+        match decode_i32_const_small_signed_from_span(instr_bytes, spans[i + 1]) {
+          Some(-1) =>
+            if spans[i + 2].opcode == 0x71U {
+              // x & -1 => x
+              append_bytes_view(out, lhs)
+              i += 3
+              changed = true
+              continue
+            }
+          _ => ()
+        }
+      }
+      // i32_const_cmp_bitwise (reversed): i32.const + get + op
+      if spans[i].opcode == 0x41U &&
+        is_optimize_instructions_i32_get_opcode(spans[i + 1].opcode) {
+        let rhs = instr_bytes[spans[i + 1].start:spans[i + 1].end_]
+        match
+          decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
+          Some(0U) =>
+            match spans[i + 2].opcode {
+              0x71U | 0x6cU | 0x74U | 0x75U | 0x76U | 0x77U | 0x78U => {
+                // 0 & x / 0 * x / 0 << x / 0 >> x etc => 0
+                append_i32_const_small(out, 0U)
+                i += 3
+                changed = true
+                continue
+              }
+              0x6aU | 0x72U | 0x73U => {
+                // 0 + x / 0 | x / 0 ^ x => x
+                append_bytes_view(out, rhs)
+                i += 3
+                changed = true
+                continue
+              }
+              0x46U => {
+                // 0 == x => x.eqz
+                append_bytes_view(out, rhs)
+                out.push(0x45U.to_byte())
+                i += 3
+                changed = true
+                continue
+              }
+              0x47U => {
+                // 0 != x => x.eqz; i32.eqz
+                append_bytes_view(out, rhs)
+                out.push(0x45U.to_byte())
+                out.push(0x45U.to_byte())
+                i += 3
+                changed = true
+                continue
+              }
+              _ => ()
+            }
+          Some(1U) =>
+            if spans[i + 2].opcode == 0x6cU {
+              // 1 * x => x
+              append_bytes_view(out, rhs)
+              i += 3
+              changed = true
+              continue
+            }
+          _ => ()
+        }
+        match decode_i32_const_small_signed_from_span(instr_bytes, spans[i]) {
+          Some(-1) =>
+            match spans[i + 2].opcode {
+              0x71U => {
+                // -1 & x => x
+                append_bytes_view(out, rhs)
+                i += 3
+                changed = true
+                continue
+              }
+              0x72U => {
+                // -1 | x => -1
+                append_bytes_range(
+                  out,
+                  instr_bytes,
+                  spans[i].start,
+                  spans[i].end_,
+                )
+                i += 3
+                changed = true
+                continue
+              }
+              _ => ()
+            }
+          _ => ()
+        }
+      }
+      // local_cse_get_set_get: local.get(x) + local.set(y) + local.get(x)
+      //   => local.get(x) + local.tee(y)
+      if spans[i].opcode == 0x20U &&
+        spans[i + 1].opcode == 0x21U &&
+        spans[i + 2].opcode == 0x20U {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+          is Some(first_get_index) {
+          if decode_local_index_immediate_from_span(instr_bytes, spans[i + 2])
+            is Some(second_get_index) {
+            if first_get_index == second_get_index &&
+              spans[i + 1].end_ > spans[i + 1].start + 1 {
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[i].start,
+                spans[i].end_,
+              )
+              out.push(0x22U.to_byte())
+              out.append(
+                instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_array(),
+              )
+              i += 3
+              changed = true
+              continue
+            }
+          }
+        }
+      }
+    }
+    // === 2-span patterns ===
+    if i + 1 < spans.length() {
+      // i32_const_zero_cmp_suffix: i32.const(0) + cmp => eqz or const
+      if spans[i].opcode == 0x41U {
+        match decode_i32_const_signed_from_span(instr_bytes, spans[i]) {
+          Some(0) =>
+            match spans[i + 1].opcode {
+              0x46U | 0x4dU => {
+                // x == 0 / x <=_u 0 => x.eqz
+                out.push(0x45U.to_byte())
+                i += 2
+                changed = true
+                continue
+              }
+              0x47U | 0x4bU => {
+                // x != 0 / x >_u 0 => x.eqz; i32.eqz
+                out.push(0x45U.to_byte())
+                out.push(0x45U.to_byte())
+                i += 2
+                changed = true
+                continue
+              }
+              _ => ()
+            }
+          None => ()
+          _ => ()
+        }
+      }
+      // i64_const_zero_cmp_suffix: i64.const(0) + cmp => simplified
+      if is_i64_const_zero_from_span(instr_bytes, spans[i]) {
+        match spans[i + 1].opcode {
+          0x51U | 0x58U => {
+            // x == 0 / x <=_u 0 => i64.eqz
+            out.push(0x50U.to_byte())
+            i += 2
+            changed = true
+            continue
+          }
+          0x52U | 0x56U => {
+            // x != 0 / x >_u 0 => i64.eqz; i32.eqz
+            out.push(0x50U.to_byte())
+            out.push(0x45U.to_byte())
+            i += 2
+            changed = true
+            continue
+          }
+          _ => ()
+        }
+      }
+      // i32_identity_ops: i32.const(identity_value) + arith_op => drop both
+      if spans[i].opcode == 0x41U {
+        // Special case: i32.const(-1) + i32.and => identity
+        match decode_i32_const_small_signed_from_span(instr_bytes, spans[i]) {
+          Some(-1) =>
+            if spans[i + 1].opcode == 0x71U {
+              i += 2
+              changed = true
+              continue
+            }
+          _ => ()
+        }
+        match
+          decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i]) {
+          Some(rhs_const) =>
+            if is_optimize_instructions_i32_identity_opcode(
+                rhs_const,
+                spans[i + 1].opcode,
+              ) {
+              i += 2
+              changed = true
+              continue
+            }
+          None => ()
+        }
+      }
+      // i32_eqz_const: i32.const(v) + i32.eqz => i32.const(v==0 ? 1 : 0)
+      if spans[i].opcode == 0x41U && spans[i + 1].opcode == 0x45U {
+        match decode_i32_const_signed_from_span(instr_bytes, spans[i]) {
+          Some(value) => {
+            append_i32_const_small(out, if value == 0 { 1U } else { 0U })
+            i += 2
+            changed = true
+            continue
+          }
+          None => ()
+        }
+      }
+      // br_if_const: i32.const(v) + br_if => drop+br or drop
+      if spans[i].opcode == 0x41U && spans[i + 1].opcode == 0x0dU {
+        match decode_i32_const_signed_from_span(instr_bytes, spans[i]) {
+          Some(0) => {
+            i += 2
+            changed = true
+            continue
+          }
+          Some(_) =>
+            if spans[i + 1].end_ > spans[i + 1].start + 1 {
+              out.push(0x0cU.to_byte())
+              out.append(
+                instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_array(),
+              )
+              i += 2
+              changed = true
+              continue
+            }
+          None => ()
+        }
+      }
+      // local_set_get_to_tee: local.set(x) + local.get(x) => local.tee(x)
+      if spans[i].opcode == 0x21U && spans[i + 1].opcode == 0x20U {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+          is Some(set_index) {
+          if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
+            is Some(get_index) {
+            if set_index == get_index && spans[i].end_ > spans[i].start + 1 {
+              out.push(0x22U.to_byte())
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[i].start + 1,
+                spans[i].end_,
+              )
+              i += 2
+              changed = true
+              continue
+            }
+          }
+        }
+      }
+      // local_get_set_noop: local.get(x) + local.set(x) => (drop both)
+      if spans[i].opcode == 0x20U && spans[i + 1].opcode == 0x21U {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+          is Some(get_index) {
+          if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
+            is Some(set_index) {
+            if get_index == set_index {
+              i += 2
+              changed = true
+              continue
+            }
+          }
+        }
+      }
+      // local_get_tee_to_get: local.get(x) + local.tee(x) => local.get(x)
+      if spans[i].opcode == 0x20U && spans[i + 1].opcode == 0x22U {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+          is Some(get_index) {
+          if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
+            is Some(tee_index) {
+            if get_index == tee_index {
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[i].start,
+                spans[i].end_,
+              )
+              i += 2
+              changed = true
+              continue
+            }
+          }
+        }
+      }
+      // local_tee_drop_to_set: local.tee(x) + drop => local.set(x)
+      if spans[i].opcode == 0x22U &&
+        spans[i + 1].opcode == 0x1aU &&
+        spans[i].end_ > spans[i].start + 1 {
+        out.push(0x21U.to_byte())
+        append_bytes_range(out, instr_bytes, spans[i].start + 1, spans[i].end_)
+        i += 2
+        changed = true
+        continue
+      }
+      // rse_local_tee_set_same: local.tee(x) + local.set(x) => local.set(x)
+      if spans[i].opcode == 0x22U && spans[i + 1].opcode == 0x21U {
+        if decode_local_index_immediate_from_span(instr_bytes, spans[i])
+          is Some(tee_index) {
+          if decode_local_index_immediate_from_span(instr_bytes, spans[i + 1])
+            is Some(set_index) {
+            if tee_index == set_index && spans[i].end_ > spans[i].start + 1 {
+              out.push(0x21U.to_byte())
+              append_bytes_range(
+                out,
+                instr_bytes,
+                spans[i].start + 1,
+                spans[i].end_,
+              )
+              i += 2
+              changed = true
+              continue
+            }
+          }
+        }
+      }
+    }
+    // No pattern matched — copy span verbatim
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
+    i += 1
+  }
+  if !changed {
+    return instr_bytes
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
 fn optimize_instruction_bytes(
   instr_bytes : Bytes,
   config : OptimizeConfig,
 ) -> Bytes {
   let mut current_bytes = instr_bytes
   if config.enable_peephole {
-    let mut local_simplify_round = 0
-    while local_simplify_round < 6 {
-      let before_local_simplify = current_bytes
-      current_bytes = apply_precompute_i32_add(current_bytes)
-      current_bytes = apply_precompute_i32_binary_ops(current_bytes)
-      current_bytes = apply_precompute_i32_const_cmp(current_bytes)
-      current_bytes = apply_precompute_i32_add_into_load_offset(
+    let mut round = 0
+    while round < 6 {
+      let before = current_bytes
+      // Stateless patterns (merged, parses spans once)
+      current_bytes = apply_merged_stateless_peephole(
         current_bytes,
         config.safe_mode,
       )
-      current_bytes = apply_precompute_i32_const_zero_cmp_suffix(current_bytes)
-      current_bytes = apply_precompute_i64_const_zero_cmp_suffix(current_bytes)
-      current_bytes = apply_precompute_i32_identity_ops(current_bytes)
-      current_bytes = apply_precompute_i32_eqz_const(current_bytes)
-      current_bytes = apply_precompute_i32_bool_double_eqz(current_bytes)
-      current_bytes = apply_precompute_i32_double_eqz_br_if(current_bytes)
+      // Stateful passes
       current_bytes = apply_precompute_local_const_propagation(current_bytes)
       current_bytes = apply_precompute_local_bool_double_eqz(current_bytes)
       current_bytes = apply_precompute_local_dead_set_overwrite(current_bytes)
-      current_bytes = apply_precompute_i32_add(current_bytes)
-      current_bytes = apply_precompute_i32_binary_ops(current_bytes)
-      current_bytes = apply_precompute_i32_const_cmp(current_bytes)
-      current_bytes = apply_precompute_i32_add_into_load_offset(
+      // Merged stateless again (picks up changes from stateful)
+      current_bytes = apply_merged_stateless_peephole(
         current_bytes,
         config.safe_mode,
       )
-      current_bytes = apply_precompute_i32_const_zero_cmp_suffix(current_bytes)
-      current_bytes = apply_precompute_i64_const_zero_cmp_suffix(current_bytes)
-      current_bytes = apply_precompute_local_bool_double_eqz(current_bytes)
-      current_bytes = apply_precompute_i32_bool_double_eqz(current_bytes)
-      current_bytes = apply_precompute_i32_double_eqz_br_if(current_bytes)
-      current_bytes = apply_precompute_br_if_const(current_bytes)
+      // Structural passes
       current_bytes = apply_precompute_br_if_zero_before_end_to_drop(
         current_bytes,
       )
       current_bytes = apply_rewrite_block_br_if0_to_if(current_bytes)
-      current_bytes = apply_optimize_instructions_i32_identity_ops(
-        current_bytes,
-      )
-      current_bytes = apply_optimize_instructions_i32_const_cmp_bitwise(
-        current_bytes,
-      )
-      current_bytes = apply_optimize_instructions_same_local_get_pair(
-        current_bytes,
-      )
-      current_bytes = apply_simplify_local_set_get_to_tee(current_bytes)
-      current_bytes = apply_simplify_local_tee_drop_to_set(current_bytes)
-      current_bytes = apply_rse_local_tee_set_same(current_bytes)
-      current_bytes = apply_simplify_local_get_set_noop(current_bytes)
-      current_bytes = apply_simplify_local_get_tee_to_get(current_bytes)
-      current_bytes = apply_local_cse_get_set_get(current_bytes)
-      current_bytes = apply_simplify_local_tee_drop_to_set(current_bytes)
-      current_bytes = apply_rse_local_tee_set_same(current_bytes)
-      if physical_equal(before_local_simplify, current_bytes) ||
-        bytes_equal(before_local_simplify, current_bytes) {
+      if physical_equal(before, current_bytes) ||
+        bytes_equal(before, current_bytes) {
         break
       }
-      local_simplify_round += 1
+      round += 1
     }
   }
   let spans = match parse_instruction_spans(current_bytes) {
