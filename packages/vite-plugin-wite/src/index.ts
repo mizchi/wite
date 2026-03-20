@@ -7,6 +7,21 @@ import { generateJsWrapper, generateDts } from "./codegen.js";
 import { lowerComponent } from "./component.js";
 import { RUNTIME_MODULE_ID, RUNTIME_MODULE_CODE } from "./runtime.js";
 
+/**
+ * Per-environment options for the wite plugin.
+ * Corresponds to wite's EnvironmentConfig/RuntimeTarget on the MoonBit side.
+ */
+export interface WiteEnvironmentOptions {
+  /** Custom import shims for this environment */
+  shims?: Record<string, string>;
+  /** Generate .d.ts files for this environment (default: inherit from top-level) */
+  dts?: boolean;
+  /** Optimization level applied during build ("-O0", "-O1", "-Os", "-Oz") */
+  optimize?: string;
+  /** Binary kind override ("auto", "core", "component") */
+  kind?: "auto" | "core" | "component";
+}
+
 export interface WitePluginOptions {
   /**
    * Custom import shims for wasm modules.
@@ -20,12 +35,51 @@ export interface WitePluginOptions {
    * @default true
    */
   dts?: boolean;
+
+  /**
+   * Per-environment overrides, keyed by Vite environment name.
+   * When using Vite's Environment API, the plugin reads
+   * `this.environment.name` in hooks to select the right options.
+   *
+   * @example
+   * ```ts
+   * witePlugin({
+   *   environments: {
+   *     client: { shims: { "my:module": "import.meta.glob(...);" } },
+   *     ssr: { shims: { "my:module": "require('...');" } },
+   *     edge: { optimize: "-Os" }
+   *   }
+   * })
+   * ```
+   */
+  environments?: Record<string, WiteEnvironmentOptions>;
 }
 
 const VIRTUAL_PREFIX = "\0wite:";
 
+/**
+ * Resolve effective options for the current environment.
+ * Merges top-level defaults with per-environment overrides.
+ */
+function resolveEnvOptions(
+  envName: string | undefined,
+  topLevel: { shims?: Record<string, string>; dts: boolean },
+  environments?: Record<string, WiteEnvironmentOptions>,
+): { shims: Record<string, string>; dts: boolean; optimize?: string } {
+  const envOpts = envName ? environments?.[envName] : undefined;
+  return {
+    shims: { ...topLevel.shims, ...envOpts?.shims },
+    dts: envOpts?.dts ?? topLevel.dts,
+    optimize: envOpts?.optimize,
+  };
+}
+
 export default function witePlugin(options: WitePluginOptions = {}): Plugin {
-  const { shims: customShims, dts = true } = options;
+  const {
+    shims: customShims,
+    dts = true,
+    environments: envOptions,
+  } = options;
   let config: ResolvedConfig;
   let isBuild = false;
 
@@ -44,7 +98,7 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
     resolveId(source, importer) {
       if (source === RUNTIME_MODULE_ID) return source;
 
-      if (!source.endsWith(".wasm")) return;
+      if (!source.endsWith(".wasm") && !source.endsWith(".wac")) return;
       if (source.startsWith("\0")) return;
 
       const importerDir = importer ? dirname(importer) : config.root;
@@ -57,6 +111,15 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
       if (id === RUNTIME_MODULE_ID) return RUNTIME_MODULE_CODE;
 
       if (!id.startsWith(VIRTUAL_PREFIX)) return;
+
+      // Read environment from Vite Environment API (Vite 6+)
+      // Falls back to undefined for Vite 5 compatibility
+      const envName: string | undefined = (this as any).environment?.name;
+      const resolved = resolveEnvOptions(
+        envName,
+        { shims: customShims, dts },
+        envOptions,
+      );
 
       const wasmPath = id.slice(VIRTUAL_PREFIX.length);
       let bytes: Uint8Array;
@@ -102,8 +165,8 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
       }
       contentHashMap.set(hash, id);
 
-      // Generate .d.ts if enabled
-      if (dts) {
+      // Generate .d.ts if enabled for this environment
+      if (resolved.dts) {
         const dtsContent = generateDts(metadata);
         const dtsPath = wasmPath + ".d.ts";
         try {
@@ -116,11 +179,11 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
       // Generate JS wrapper
       const shimCode =
         metadata.imports.length > 0
-          ? generateImportShimsInline(metadata, customShims)
+          ? generateImportShimsInline(metadata, resolved.shims)
           : "";
       const importObject =
         metadata.imports.length > 0
-          ? generateImportObjectInline(metadata, customShims)
+          ? generateImportObjectInline(metadata, resolved.shims)
           : "{}";
 
       const exports = metadata.exports
@@ -141,7 +204,6 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
         wasmUrlCode = `const wasmUrl = import.meta.ROLLUP_FILE_URL_${fileRef};`;
       } else {
         // Dev mode: serve the original file via Vite's static file serving
-        // Add timestamp for cache busting when wasm files change
         const relPath = relative(config.root, wasmPath);
         const normalizedPath = "/" + relPath.split("\\").join("/");
         wasmUrlCode = `const wasmUrl = ${JSON.stringify(normalizedPath)} + "?t=" + ${JSON.stringify(String(Date.now()))};`;
@@ -156,9 +218,9 @@ ${exports}
     },
 
     configureServer(server) {
-      // Watch .wasm files for HMR
+      // Watch .wasm and .wac files for HMR
       server.watcher.on("change", (file) => {
-        if (file.endsWith(".wasm")) {
+        if (file.endsWith(".wasm") || file.endsWith(".wac")) {
           // Invalidate content-hash cache so re-load uses fresh bytes
           for (const [hash, cachedId] of contentHashMap) {
             if (cachedId === VIRTUAL_PREFIX + file) {
@@ -167,13 +229,25 @@ ${exports}
             }
           }
 
-          const mod = server.moduleGraph.getModuleById(
-            VIRTUAL_PREFIX + file,
-          );
+          // Vite 6+ Environment API: invalidate in all environment module graphs
+          if (server.environments) {
+            for (const env of Object.values(server.environments)) {
+              const mod = (env as any).moduleGraph?.getModuleById(
+                VIRTUAL_PREFIX + file,
+              );
+              if (mod) {
+                (env as any).moduleGraph?.invalidateModule(mod);
+              }
+            }
+          }
+
+          // Vite 5 fallback: single moduleGraph
+          const mod = server.moduleGraph.getModuleById(VIRTUAL_PREFIX + file);
           if (mod) {
             server.moduleGraph.invalidateModule(mod);
-            server.ws.send({ type: "full-reload" });
           }
+
+          server.ws.send({ type: "full-reload" });
         }
       });
     },
