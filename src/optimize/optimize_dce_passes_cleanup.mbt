@@ -1,26 +1,4 @@
 ///|
-fn apply_remove_unused_module_elements(
-  bytes : Bytes,
-  config : OptimizeConfig,
-) -> RumeApplyResult {
-  let result = try? apply_remove_unused_module_elements_raise(bytes, config)
-  match result {
-    Ok(v) => v
-    Err(_) =>
-      {
-        bytes,
-        removed_import_count: 0U,
-        removed_table_count: 0U,
-        removed_memory_count: 0U,
-        removed_global_count: 0U,
-        removed_element_count: 0U,
-        removed_data_count: 0U,
-        removed_export_count: 0U,
-      }
-  }
-}
-
-///|
 fn apply_remove_unused_module_elements_with_sections(
   bytes : Bytes,
   config : OptimizeConfig,
@@ -43,18 +21,6 @@ fn apply_remove_unused_module_elements_with_sections(
         removed_export_count: 0U,
       }
   }
-}
-
-///|
-fn apply_remove_unused_module_elements_raise(
-  bytes : Bytes,
-  config : OptimizeConfig,
-) -> RumeApplyResult raise WiteError {
-  apply_remove_unused_module_elements_raise_with_sections(
-    bytes,
-    config,
-    parse_core_sections_raise(bytes),
-  )
 }
 
 ///|
@@ -475,15 +441,6 @@ fn apply_remove_unused_module_elements_raise_with_sections(
 }
 
 ///|
-fn apply_type_refining(bytes : Bytes) -> TypeRefineApplyResult {
-  let result = try? apply_type_refining_raise(bytes)
-  match result {
-    Ok(v) => v
-    Err(_) => { bytes, refined_type_count: 0U }
-  }
-}
-
-///|
 fn apply_type_refining_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
@@ -493,16 +450,6 @@ fn apply_type_refining_with_sections(
     Ok(v) => v
     Err(_) => { bytes, refined_type_count: 0U }
   }
-}
-
-///|
-fn apply_type_refining_raise(
-  bytes : Bytes,
-) -> TypeRefineApplyResult raise WiteError {
-  apply_type_refining_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
 }
 
 ///|
@@ -679,15 +626,6 @@ fn apply_type_refining_raise_with_sections(
 }
 
 ///|
-fn apply_signature_pruning(bytes : Bytes) -> SignaturePruneApplyResult {
-  let result = try? apply_signature_pruning_raise(bytes)
-  match result {
-    Ok(v) => v
-    Err(_) => { bytes, pruned_function_count: 0U, pruned_param_count: 0U }
-  }
-}
-
-///|
 fn apply_signature_pruning_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
@@ -697,16 +635,6 @@ fn apply_signature_pruning_with_sections(
     Ok(v) => v
     Err(_) => { bytes, pruned_function_count: 0U, pruned_param_count: 0U }
   }
-}
-
-///|
-fn apply_signature_pruning_raise(
-  bytes : Bytes,
-) -> SignaturePruneApplyResult raise WiteError {
-  apply_signature_pruning_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
 }
 
 ///|
@@ -948,15 +876,6 @@ fn apply_signature_pruning_raise_with_sections(
 }
 
 ///|
-fn apply_remove_unused_types(bytes : Bytes) -> RemoveUnusedTypesApplyResult {
-  let result = try? apply_remove_unused_types_raise(bytes)
-  match result {
-    Ok(v) => v
-    Err(_) => { bytes, removed_type_count: 0U }
-  }
-}
-
-///|
 fn apply_remove_unused_types_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
@@ -968,16 +887,6 @@ fn apply_remove_unused_types_with_sections(
     Ok(v) => v
     Err(_) => { bytes, removed_type_count: 0U }
   }
-}
-
-///|
-fn apply_remove_unused_types_raise(
-  bytes : Bytes,
-) -> RemoveUnusedTypesApplyResult raise WiteError {
-  apply_remove_unused_types_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
 }
 
 ///|
@@ -1124,14 +1033,6 @@ fn apply_remove_unused_types_raise_with_sections(
 }
 
 ///|
-fn apply_dce_raise(
-  bytes : Bytes,
-  config : OptimizeConfig,
-) -> DceApplyResult raise WiteError {
-  apply_dce_raise_with_sections(bytes, config, parse_core_sections_raise(bytes))
-}
-
-///|
 fn apply_dce_raise_with_sections(
   bytes : Bytes,
   config : OptimizeConfig,
@@ -1258,11 +1159,6 @@ fn apply_dce_raise_with_sections(
     removed_body_bytes: call_graph.dead_body_bytes,
     dropped_name_section,
   }
-}
-
-///|
-fn apply_dfe_raise(bytes : Bytes) -> DfeApplyResult raise WiteError {
-  apply_dfe_raise_with_sections(bytes, parse_core_sections_raise(bytes))
 }
 
 ///|

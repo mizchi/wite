@@ -1249,15 +1249,6 @@ fn collect_call_count_by_target_raise(
 }
 
 ///|
-fn apply_inlining_optimizing(bytes : Bytes) -> InliningApplyResult {
-  let result = try? apply_inlining_optimizing_raise(bytes)
-  match result {
-    Ok(v) => v
-    Err(_) => { bytes, inlined_call_count: 0U }
-  }
-}
-
-///|
 fn apply_inlining_optimizing_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
@@ -1269,16 +1260,6 @@ fn apply_inlining_optimizing_with_sections(
     Ok(v) => v
     Err(_) => { bytes, inlined_call_count: 0U }
   }
-}
-
-///|
-fn apply_inlining_optimizing_raise(
-  bytes : Bytes,
-) -> InliningApplyResult raise WiteError {
-  apply_inlining_optimizing_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
 }
 
 ///|

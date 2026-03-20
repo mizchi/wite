@@ -186,15 +186,6 @@ priv struct DaeApplyResult {
 }
 
 ///|
-fn apply_dae_optimizing(bytes : Bytes) -> DaeApplyResult {
-  let result = try? apply_dae_optimizing_raise(bytes)
-  match result {
-    Ok(v) => v
-    Err(_) => { bytes, removed_instr_count: 0U }
-  }
-}
-
-///|
 fn apply_dae_optimizing_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
@@ -204,14 +195,6 @@ fn apply_dae_optimizing_with_sections(
     Ok(v) => v
     Err(_) => { bytes, removed_instr_count: 0U }
   }
-}
-
-///|
-fn apply_dae_optimizing_raise(bytes : Bytes) -> DaeApplyResult raise WiteError {
-  apply_dae_optimizing_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
 }
 
 ///|
@@ -2042,16 +2025,6 @@ fn rewrite_instruction_local_indices_for_coalesce_raise(
 priv struct CoalesceLocalsApplyResult {
   bytes : Bytes
   removed_local_count : UInt
-}
-
-///|
-fn apply_coalesce_locals_raise(
-  bytes : Bytes,
-) -> CoalesceLocalsApplyResult raise WiteError {
-  apply_coalesce_locals_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
 }
 
 ///|

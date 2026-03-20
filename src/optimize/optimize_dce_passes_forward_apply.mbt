@@ -274,16 +274,6 @@ fn rewrite_code_section_payload_for_const_call_forwarding_raise(
 }
 
 ///|
-fn apply_const_call_forwarding_propagation_raise(
-  bytes : Bytes,
-) -> CfpConstApplyResult raise WiteError {
-  apply_const_call_forwarding_propagation_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
-}
-
-///|
 fn apply_const_call_forwarding_propagation_raise_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
@@ -406,16 +396,6 @@ fn rewrite_code_section_payload_for_call_forwarding_raise(
   (
     encode_code_section_payload_from_bodies(rewritten_bodies),
     rewritten_call_count,
-  )
-}
-
-///|
-fn apply_call_forwarding_propagation_raise(
-  bytes : Bytes,
-) -> CfpApplyResult raise WiteError {
-  apply_call_forwarding_propagation_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
   )
 }
 
@@ -726,16 +706,6 @@ fn rewrite_code_section_payload_for_signature_refining_raise(
   (
     encode_code_section_payload_from_bodies(rewritten_bodies),
     rewritten_call_count,
-  )
-}
-
-///|
-fn apply_signature_refining_raise(
-  bytes : Bytes,
-) -> SignatureRefineApplyResult raise WiteError {
-  apply_signature_refining_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
   )
 }
 

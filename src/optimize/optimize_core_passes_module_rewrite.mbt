@@ -62,26 +62,6 @@ fn build_function_import_dedupe_key_raise(
 }
 
 ///|
-fn apply_duplicate_import_elimination(
-  bytes : Bytes,
-) -> DuplicateImportElimApplyResult {
-  let result = try? apply_duplicate_import_elimination_raise(bytes)
-  match result {
-    Ok(v) => v
-    Err(_) =>
-      {
-        bytes,
-        removed_import_count: 0U,
-        removed_function_import_count: 0U,
-        removed_table_import_count: 0U,
-        removed_memory_import_count: 0U,
-        removed_global_import_count: 0U,
-        dropped_name_section: false,
-      }
-  }
-}
-
-///|
 fn apply_duplicate_import_elimination_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
@@ -102,16 +82,6 @@ fn apply_duplicate_import_elimination_with_sections(
         dropped_name_section: false,
       }
   }
-}
-
-///|
-fn apply_duplicate_import_elimination_raise(
-  bytes : Bytes,
-) -> DuplicateImportElimApplyResult raise WiteError {
-  apply_duplicate_import_elimination_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
 }
 
 ///|
@@ -835,10 +805,7 @@ priv struct MemoryPackingApplyResult {
 pub fn apply_directize_raise(
   bytes : Bytes,
 ) -> DirectizeApplyResult raise WiteError {
-  apply_directize_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
+  apply_directize_raise_with_sections(bytes, parse_core_sections_raise(bytes))
 }
 
 ///|
@@ -1045,16 +1012,6 @@ fn rewrite_code_section_payload_for_simplify_globals_raise(
 }
 
 ///|
-fn apply_simplify_globals_raise(
-  bytes : Bytes,
-) -> SimplifyGlobalsApplyResult raise WiteError {
-  apply_simplify_globals_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
-}
-
-///|
 fn apply_simplify_globals_raise_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
@@ -1131,15 +1088,6 @@ fn apply_simplify_globals_raise_with_sections(
 }
 
 ///|
-fn apply_simplify_globals(bytes : Bytes) -> SimplifyGlobalsApplyResult {
-  let result = try? apply_simplify_globals_raise(bytes)
-  match result {
-    Ok(v) => v
-    Err(_) => { bytes, rewritten_global_get_count: 0U }
-  }
-}
-
-///|
 fn apply_simplify_globals_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
@@ -1149,16 +1097,6 @@ fn apply_simplify_globals_with_sections(
     Ok(v) => v
     Err(_) => { bytes, rewritten_global_get_count: 0U }
   }
-}
-
-///|
-fn apply_reorder_globals_raise(
-  bytes : Bytes,
-) -> ReorderGlobalsApplyResult raise WiteError {
-  apply_reorder_globals_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
 }
 
 ///|
@@ -1357,15 +1295,6 @@ fn apply_reorder_globals_raise_with_sections(
 }
 
 ///|
-fn apply_reorder_globals(bytes : Bytes) -> ReorderGlobalsApplyResult {
-  let result = try? apply_reorder_globals_raise(bytes)
-  match result {
-    Ok(v) => v
-    Err(_) => { bytes, reordered_local_count: 0U }
-  }
-}
-
-///|
 fn apply_reorder_globals_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
@@ -1381,16 +1310,6 @@ fn apply_reorder_globals_with_sections(
 fn is_memory_index_marked_used(used_flags : Array[Bool], index : UInt) -> Bool {
   let pos = UInt::reinterpret_as_int(index)
   pos >= 0 && pos < used_flags.length() && used_flags[pos]
-}
-
-///|
-fn apply_memory_packing_raise(
-  bytes : Bytes,
-) -> MemoryPackingApplyResult raise WiteError {
-  apply_memory_packing_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
 }
 
 ///|
@@ -1584,15 +1503,6 @@ fn apply_memory_packing_raise_with_sections(
     }
   }
   { bytes: Bytes::from_array(out[:]), reordered_local_count }
-}
-
-///|
-fn apply_memory_packing(bytes : Bytes) -> MemoryPackingApplyResult {
-  let result = try? apply_memory_packing_raise(bytes)
-  match result {
-    Ok(v) => v
-    Err(_) => { bytes, reordered_local_count: 0U }
-  }
 }
 
 ///|

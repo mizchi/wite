@@ -1,14 +1,4 @@
 ///|
-fn apply_merge_similar_functions_raise(
-  bytes : Bytes,
-) -> MsfApplyResult raise WiteError {
-  apply_merge_similar_functions_raise_with_sections(
-    bytes,
-    parse_core_sections_raise(bytes),
-  )
-}
-
-///|
 fn apply_merge_similar_functions_raise_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],

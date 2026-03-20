@@ -1,6 +1,6 @@
 {
   "name": "mizchi/wite",
-  "version": "0.6.6",
+  "version": "0.7.0",
   "deps": {
     "moonbitlang/async": "0.16.6",
     "moonbitlang/x": "0.4.40",
