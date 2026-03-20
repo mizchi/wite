@@ -1111,3 +1111,52 @@ async test "e2e: run_analyze_subcommand component-callgraph" {
     "component-callgraph",
   )
 }
+
+// ---- chunk build tests ----
+
+///|
+async test "e2e: build_chunks with no chunks is no-op" {
+  let config = @wite_config.empty_wite_config_file()
+  build_chunks(config, ".")
+}
+
+///|
+async test "e2e: build_chunks with pre-built chunk" {
+  let dir = js_make_temp_dir("wite-e2e-chunk-")
+  // Write a pre-built wasm file
+  let _ = e2e_write_wasm_file(dir, "lib.wasm", e2e_minimal_core_wasm())
+  // Parse config with chunk pointing to pre-built file
+  let text =
+    #|{ "chunks": { "lib": "lib.wasm" } }
+  let config = @wite_config.parse_wite_config_text(text).unwrap()
+  build_chunks(config, dir)
+  js_remove_dir_recursive(dir)
+}
+
+///|
+async test "e2e: run_chunk_build_command skips when no build and output exists" {
+  let dir = js_make_temp_dir("wite-e2e-chunk-")
+  let _ = e2e_write_wasm_file(dir, "existing.wasm", e2e_minimal_core_wasm())
+  let text =
+    #|{ "chunks": { "test": "existing.wasm" } }
+  let config = @wite_config.parse_wite_config_text(text).unwrap()
+  let chunk = config.chunks["test"]
+  run_chunk_build_command("test", chunk, dir)
+  js_remove_dir_recursive(dir)
+}
+
+///|
+test "e2e: chunk_names returns configured chunks" {
+  let text =
+    #|{
+    #|  "chunks": {
+    #|    "a": "a.wasm",
+    #|    "b": { "output": "b.wasm", "build": "make b" }
+    #|  }
+    #|}
+  let config = @wite_config.parse_wite_config_text(text).unwrap()
+  let names = @wite_config.chunk_names(config)
+  assert_eq(names.length(), 2)
+  assert_true(names.contains("a"))
+  assert_true(names.contains("b"))
+}

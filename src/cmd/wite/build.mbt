@@ -377,6 +377,88 @@ fn materialize_wac_deps_if_needed(
 }
 
 ///|
+async fn run_chunk_build_command(
+  chunk_name : String,
+  chunk : @wite_config.ChunkConfig,
+  config_dir : String,
+) -> Unit {
+  match chunk.build {
+    None => {
+      // No build command — output must already exist
+      let output_path = resolve_path_from_config_dir(config_dir, chunk.output)
+      if !@fs.path_exists(output_path) {
+        println(
+          "chunk '" + chunk_name + "' has no build command and output not found: " +
+          output_path,
+        )
+        @sys.exit(1)
+      }
+    }
+    Some(cmd) => {
+      // Parse build command: first token is the command, rest are args
+      let parts : Array[String] = []
+      for part in cmd.split(" ") {
+        let s = part.to_string()
+        if !s.is_empty() {
+          parts.push(s)
+        }
+      }
+      if parts.length() == 0 {
+        println("chunk '" + chunk_name + "' has empty build command")
+        @sys.exit(1)
+        return
+      }
+      let bin = parts[0]
+      let args : Array[String] = []
+      for i in 1..<parts.length() {
+        args.push(parts[i])
+      }
+      println("chunk '" + chunk_name + "': " + cmd)
+      let cwd : StringView? = if config_dir == "." {
+        None
+      } else {
+        Some(config_dir)
+      }
+      let exit_code = @xprocess.run(bin, args[:], cwd?)
+      if exit_code != 0 {
+        println(
+          "chunk '" + chunk_name + "' build failed (exit " +
+          exit_code.to_string() +
+          ")",
+        )
+        @sys.exit(1)
+      }
+    }
+  }
+}
+
+///|
+async fn build_chunks(
+  config_file : @wite_config.WiteConfigFile,
+  config_dir : String,
+) -> Unit {
+  let chunk_names = @wite_config.chunk_names(config_file)
+  if chunk_names.length() == 0 {
+    return
+  }
+  for name in chunk_names {
+    let chunk = config_file.chunks[name]
+    run_chunk_build_command(name, chunk, config_dir)
+    let output_path = resolve_path_from_config_dir(config_dir, chunk.output)
+    if !@fs.path_exists(output_path) {
+      println(
+        "chunk '" + name + "' build completed but output not found: " +
+        output_path,
+      )
+      @sys.exit(1)
+    }
+    println(
+      "chunk '" + name + "': ready (" + output_path + ")",
+    )
+  }
+}
+
+///|
 async fn run_build(args : Array[String]) -> Unit {
   let default_input = pick_default_build_input_path(
     @fs.path_exists("main.wac"),
@@ -430,6 +512,8 @@ async fn run_build(args : Array[String]) -> Unit {
     None => from_config_binary_kind(config_file.build_kind)
   }
   let parsed_flags = parse_build_flags(merged_flags, env_kind)
+  // Build chunks first (before compose)
+  build_chunks(config_file, config_dir)
   // Effective input/output considering environment overrides
   let effective_input = match resolved_env {
     Some(env) =>
