@@ -1,14 +1,81 @@
 ///|
+/// Well-known exports that must not be removed by treeshake.
+/// These are essential for wasm module/runtime functionality.
+fn protected_exports() -> Array[String] {
+  [
+    "memory", // linear memory
+    "__indirect_function_table", // function table for call_indirect
+    "__stack_pointer", // stack pointer global
+    "__wasm_call_ctors", // static constructors (C/C++/Rust)
+    "_start", // WASI command entry point
+    "_initialize", // WASI reactor initialization
+    "cabi_realloc", // Component Model canonical ABI allocator
+  ]
+}
+
+///|
+fn merge_protected_exports(
+  user_exports : Array[String],
+  wasm_export_names : Array[String],
+) -> Array[String] {
+  let result = user_exports.copy()
+  let protected_list = protected_exports()
+  for name in protected_list {
+    if wasm_export_names.contains(name) && !result.contains(name) {
+      result.push(name)
+    }
+  }
+  result
+}
+
+///|
+fn collect_wasm_export_names(bytes : Bytes) -> Array[String] {
+  let names : Array[String] = []
+  // Get all export names (functions + memory + table + global)
+  // Use the wasm breakdown which includes all export types
+  match @wite_analyze.analyze_wasm_breakdown(bytes, top_limit=0U) {
+    Ok(report) => {
+      for f in report.top_functions {
+        for name in f.export_names {
+          if !names.contains(name) {
+            names.push(name)
+          }
+        }
+      }
+    }
+    Err(_) => ()
+  }
+  // Also add well-known non-function exports by scanning raw export section
+  // (memory, table, global exports aren't in top_functions)
+  let well_known_non_func = [
+    "memory", "__indirect_function_table", "__stack_pointer", "__data_end",
+    "__heap_base",
+  ]
+  match @wite_analyze.analyze_section_sizes(bytes) {
+    Ok(_) =>
+      // If module has these sections, assume these exports exist
+      for name in well_known_non_func {
+        if !names.contains(name) {
+          names.push(name)
+        }
+      }
+    Err(_) => ()
+  }
+  names
+}
+
+///|
 fn run_treeshake(args : Array[String]) -> Unit {
   if args.length() < 3 {
     println("usage: wite treeshake <input.wasm> [options]")
     println("")
     println("options:")
-    println("  -o <output.wasm>     Output file (default: <input>.treeshake.wasm)")
-    println("  --exports=a,b,c      Export names to keep (comma-separated)")
+    println("  -o <output.wasm>       Output file (default: <input>.treeshake.wasm)")
+    println("  --exports=a,b,c        Export names to keep (comma-separated)")
+    println("  --no-protect           Disable automatic protection of well-known exports")
     println("  --kind=auto|core|component")
-    println("  -Oz|-Os|-O1|-O2|-O3  Optimization level (default: -O1)")
-    println("  --verbose            Show no-change reasons")
+    println("  -Oz|-Os|-O1|-O2|-O3   Optimization level (default: -O1)")
+    println("  --verbose              Show no-change reasons and protected exports")
     @sys.exit(1)
   }
   let input_path = args[2]
@@ -17,6 +84,7 @@ fn run_treeshake(args : Array[String]) -> Unit {
   let mut opt_level = "-O1"
   let mut kind = BinaryKind::Auto
   let mut verbose = false
+  let mut no_protect = false
   let mut i = 3
   while i < args.length() {
     let arg = args[i]
@@ -49,6 +117,11 @@ fn run_treeshake(args : Array[String]) -> Unit {
       i += 1
       continue
     }
+    if arg == "--no-protect" {
+      no_protect = true
+      i += 1
+      continue
+    }
     if arg.has_prefix("-O") {
       opt_level = arg
       i += 1
@@ -70,6 +143,27 @@ fn run_treeshake(args : Array[String]) -> Unit {
       } else {
         input_path + ".treeshake.wasm"
       }
+  }
+  // Read input and apply export protection
+  let bytes = read_bytes_or_exit(input_path)
+  let final_exports = if no_protect {
+    kept_exports
+  } else {
+    // Scan actual exports and protect well-known ones
+    let wasm_exports = collect_wasm_export_names(bytes)
+    let merged = merge_protected_exports(kept_exports, wasm_exports)
+    let auto_protected : Array[String] = []
+    for name in merged {
+      if !kept_exports.contains(name) {
+        auto_protected.push(name)
+      }
+    }
+    if auto_protected.length() > 0 && verbose {
+      println(
+        "auto-protected exports: " + auto_protected.join(", "),
+      )
+    }
+    merged
   }
   // Build config: closed-world with explicit root exports
   let base_config = match @wite_core.optimize_config_from_opt_level(
@@ -101,9 +195,8 @@ fn run_treeshake(args : Array[String]) -> Unit {
     enable_merge_similar_functions=base_config.enable_merge_similar_functions,
     enable_remove_unused_module_elements=true,
     closed_world=true,
-    closed_world_root_exports=kept_exports,
+    closed_world_root_exports=final_exports,
   )
-  let bytes = read_bytes_or_exit(input_path)
   match optimize_with_kind(bytes, kind, config, []) {
     Ok(result) => {
       write_output_or_exit(out, result.bytes)
@@ -128,7 +221,7 @@ fn run_treeshake(args : Array[String]) -> Unit {
       if verbose && result.no_change_reasons.length() > 0 {
         println("  no-change: " + result.no_change_reasons.join(", "))
       }
-      println("  kept exports: " + kept_exports.join(", "))
+      println("  kept exports: " + final_exports.join(", "))
       println("  output: " + out)
     }
     Err(msg) => {
