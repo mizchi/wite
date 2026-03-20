@@ -109,7 +109,8 @@ pub fn optimize_for_size(
     let rounds = if config.pass_rounds == 0U { 1U } else { config.pass_rounds }
     let mut current = bytes
     let removed_sections : Array[String] = []
-    for _ in 0U..<rounds {
+    let mut prev_gain = 0U
+    for round_index in 0U..<rounds {
       let before_round_size = current.length().reinterpret_as_uint()
       let round = optimize_for_size_round_raise(current, config)
       let after_round_size = round.bytes.length().reinterpret_as_uint()
@@ -124,10 +125,19 @@ pub fn optimize_for_size(
         break
       }
       // Stop fixed-point rounds once a round regresses size.
-      // Keep size-neutral rounds because they can unlock later DCE.
       if after_round_size > before_round_size {
         break
       }
+      // Skip further rounds if gain is diminishing (<1% of original)
+      let gain = if before_round_size > after_round_size {
+        before_round_size - after_round_size
+      } else {
+        0U
+      }
+      if round_index > 0U && gain < before_round_size / 100U && gain <= prev_gain / 4U {
+        break
+      }
+      prev_gain = gain
     }
     let no_change_reasons = collect_optimize_no_change_reasons(
       bytes, current, config,
