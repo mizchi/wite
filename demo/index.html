@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>wite — WebAssembly Build Tool</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: #0f0f23;
+      color: #cdd6f4;
+      line-height: 1.6;
+    }
+    .container { max-width: 960px; margin: 0 auto; padding: 2rem 1.5rem; }
+
+    header { text-align: center; margin-bottom: 3rem; }
+    h1 { font-size: 2.5rem; color: #89b4fa; margin-bottom: 0.5rem; }
+    h1 span { color: #f38ba8; }
+    .tagline { color: #a6adc8; font-size: 1.1rem; }
+
+    .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2rem; }
+    @media (max-width: 640px) { .grid { grid-template-columns: 1fr; } }
+
+    .card {
+      background: #1e1e2e;
+      border: 1px solid #313244;
+      border-radius: 12px;
+      padding: 1.5rem;
+    }
+    .card h2 { color: #89b4fa; font-size: 1.1rem; margin-bottom: 1rem; }
+
+    .result {
+      background: #181825;
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.95rem;
+    }
+    .result .value { color: #a6e3a1; font-size: 1.4rem; font-weight: bold; }
+
+    #drop-zone {
+      border: 2px dashed #45475a;
+      border-radius: 12px;
+      padding: 2rem;
+      text-align: center;
+      cursor: pointer;
+      transition: all 0.2s;
+      background: #1e1e2e;
+    }
+    #drop-zone:hover, #drop-zone.dragover {
+      border-color: #89b4fa;
+      background: #1e1e2e;
+    }
+    #drop-zone p { color: #a6adc8; margin-bottom: 0.5rem; }
+    #drop-zone .icon { font-size: 2rem; margin-bottom: 0.5rem; }
+
+    #analyze-output {
+      background: #181825;
+      border-radius: 8px;
+      padding: 1rem;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.85rem;
+      white-space: pre;
+      overflow-x: auto;
+      min-height: 100px;
+      color: #bac2de;
+      line-height: 1.5;
+    }
+
+    .features { margin-top: 2rem; }
+    .features h2 { color: #89b4fa; margin-bottom: 1rem; }
+    .feature-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem; }
+    .feature {
+      background: #1e1e2e;
+      border: 1px solid #313244;
+      border-radius: 8px;
+      padding: 1rem;
+    }
+    .feature h3 { color: #f9e2af; font-size: 0.9rem; margin-bottom: 0.25rem; }
+    .feature p { color: #a6adc8; font-size: 0.8rem; }
+
+    .install {
+      margin-top: 2rem;
+      text-align: center;
+    }
+    .install code {
+      background: #181825;
+      padding: 0.75rem 1.5rem;
+      border-radius: 8px;
+      font-family: 'JetBrains Mono', monospace;
+      color: #a6e3a1;
+      display: inline-block;
+    }
+    a { color: #89b4fa; text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    .hidden { display: none; }
+    #file-input { display: none; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1><span>wite</span></h1>
+      <p class="tagline">WebAssembly Build Tool — Component Model counterpart of Vite</p>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <h2>Live Wasm Execution</h2>
+        <div class="result">
+          <p>Imported via <code>vite-plugin-wite</code>:</p>
+          <p style="margin-top: 0.5rem"><code>import { add } from "./add.wasm"</code></p>
+          <p style="margin-top: 1rem" class="value" id="wasm-result">Loading...</p>
+          <p style="margin-top: 0.5rem; color: #a6adc8; font-size: 0.8rem" id="mem-info"></p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Drop a .wasm file to inspect</h2>
+        <div id="drop-zone" onclick="document.getElementById('file-input').click()">
+          <div class="icon">📦</div>
+          <p>Drag & drop or click to select</p>
+          <p style="font-size: 0.8rem; color: #585b70">.wasm (core or component)</p>
+        </div>
+        <input type="file" id="file-input" accept=".wasm" />
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Analysis</h2>
+      <pre id="analyze-output">Drop a .wasm file above to see its structure, sections, imports, and exports.</pre>
+    </div>
+
+    <div class="features">
+      <h2>Features</h2>
+      <div class="feature-grid">
+        <div class="feature">
+          <h3>wite build</h3>
+          <p>WAC composition + optimization pipeline</p>
+        </div>
+        <div class="feature">
+          <h3>wite treeshake</h3>
+          <p>Export-based DCE with auto-protection</p>
+        </div>
+        <div class="feature">
+          <h3>wite dump</h3>
+          <p>Binary inspection (sections, disassembly, hex)</p>
+        </div>
+        <div class="feature">
+          <h3>wite analyze</h3>
+          <p>Call graph, DCE report, size breakdown</p>
+        </div>
+        <div class="feature">
+          <h3>wite optimize</h3>
+          <p>Peephole, DCE, DFE, merge — -O0 to -Oz</p>
+        </div>
+        <div class="feature">
+          <h3>wite dev</h3>
+          <p>Dev server with livereload & debug UI</p>
+        </div>
+        <div class="feature">
+          <h3>Vite Plugin</h3>
+          <p>HMR, .d.ts, 4 runtimes, jco integration</p>
+        </div>
+        <div class="feature">
+          <h3>Environments</h3>
+          <p>browser, webworker, workerd, wasmtime</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="install">
+      <p style="margin-bottom: 0.5rem; color: #a6adc8">Install</p>
+      <code>moon install mizchi/wite/cmd/wite</code>
+      <p style="margin-top: 1rem">
+        <a href="https://github.com/mizchi/wite">GitHub</a> ·
+        <a href="https://mooncakes.io/docs/#/mizchi/wite/">mooncakes</a>
+      </p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>

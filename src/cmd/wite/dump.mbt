@@ -114,12 +114,8 @@ fn run_dump(args : Array[String]) -> Unit {
     bytes[6] == b'\x01' &&
     bytes[7] == b'\x00'
   println(input_path + ":")
-  println(
-    "  file size: " + bytes.length().to_string() + " bytes",
-  )
-  println(
-    "  type: " + (if is_component { "component" } else { "core module" }),
-  )
+  println("  file size: " + bytes.length().to_string() + " bytes")
+  println("  type: " + (if is_component { "component" } else { "core module" }))
   println("")
   if is_component {
     dump_component(bytes, show_headers, show_details)
@@ -138,11 +134,7 @@ fn run_dump(args : Array[String]) -> Unit {
 }
 
 ///|
-fn dump_core(
-  bytes : Bytes,
-  show_headers : Bool,
-  show_details : Bool,
-) -> Unit {
+fn dump_core(bytes : Bytes, show_headers : Bool, show_details : Bool) -> Unit {
   let sections = @wite_optimize.parse_core_sections_raise(bytes) catch {
     e => {
       println("parse failed: " + @wite_core.error_to_string(e))
@@ -231,9 +223,7 @@ fn dump_core(
     // Function details
     match @wite_analyze.analyze_function_sizes(bytes) {
       Ok(functions) => {
-        println(
-          "Functions (" + functions.length().to_string() + "):",
-        )
+        println("Functions (" + functions.length().to_string() + "):")
         for f in functions {
           let label = match f.name {
             Some(name) => name
@@ -282,9 +272,7 @@ fn dump_core(
           }
         }
         if export_list.length() > 0 {
-          println(
-            "Exports (" + export_list.length().to_string() + "):",
-          )
+          println("Exports (" + export_list.length().to_string() + "):")
           for line in export_list {
             println(line)
           }
@@ -351,7 +339,11 @@ fn hex_byte(b : Byte) -> String {
   let hi = b.to_int() / 16
   let lo = b.to_int() % 16
   let hex_char = fn(v : Int) -> Char {
-    if v < 10 { Int::unsafe_to_char(48 + v) } else { Int::unsafe_to_char(87 + v) }
+    if v < 10 {
+      Int::unsafe_to_char(48 + v)
+    } else {
+      Int::unsafe_to_char(87 + v)
+    }
   }
   String::from_array([hex_char(hi), hex_char(lo)])
 }
@@ -431,14 +423,7 @@ fn dump_raw_sections(
       None => ""
     }
     let size = section.section_end - section.payload_start
-    println(
-      "Raw: " +
-      name +
-      extra +
-      " (" +
-      size.to_string() +
-      " bytes)",
-    )
+    println("Raw: " + name + extra + " (" + size.to_string() + " bytes)")
     let max_dump = 256
     let dump_size = if size > max_dump { max_dump } else { size }
     let mut offset = section.payload_start
@@ -578,7 +563,8 @@ fn dump_disassemble(bytes : Bytes, section_filter : Int?) -> Unit {
             exp_payload,
           )
           match parsed {
-            Ok(names) => @wite_analyze.merge_export_function_names(export_names, names)
+            Ok(names) =>
+              @wite_analyze.merge_export_function_names(export_names, names)
             Err(_) => ()
           }
         }
@@ -641,12 +627,7 @@ fn dump_disassemble(bytes : Bytes, section_filter : Int?) -> Unit {
               } else {
                 hex_byte(instr_bytes[span.start]) + " ..."
               }
-              println(
-                indent +
-                pad_right(mnemonic, 20) +
-                " ; " +
-                hex,
-              )
+              println(indent + pad_right(mnemonic, 20) + " ; " + hex)
               // Adjust depth for block-start
               if span.opcode == 0x02U ||
                 span.opcode == 0x03U ||
