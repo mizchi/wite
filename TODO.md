@@ -20,16 +20,7 @@
 - [ ] P2: P2 `signature-refining/cfp` の拡張で DCE callgraph 精度を上げる（Top3）
 - [ ] P2: N5 GC hierarchy type-refining を導入して type 残差を潰す（Top4）
 
-## Next Actions (2026-02-11)
-
-1. [ ] Top1 P5 `precompute/optimize-instructions` 拡張
-目的: `zlib` の `code` gap (`3420 bytes`) を優先縮小。完了条件: `bench/kpi/zlib_gap.md` の `code` gap が減少し、`gap_to_wasm_opt_bytes` も改善。
-2. [ ] Top2 P5 `duplicate-import-elimination`
-目的: `zlib` の `function` 残差 (`44 bytes`) を削る。完了条件: `bench/kpi/zlib_gap.md` の `function` gap が減少。
-3. [ ] Top3 P2 `signature-refining/cfp` 拡張
-目的: DCE callgraph 精度を上げる。完了条件: `bench/kpi/directize_chain.tsv` の `dce_gain_bytes` が現状 (`2298`) より増加。
-
-## Performance Improvements (2026-03-20)
+## Performance Improvements (2026-03-21)
 
 ### 完了済み
 
@@ -37,13 +28,11 @@
 - [x] peephole: dirty flag + opcode pre-filter → spans パース前に不要パスをスキップ
 - [x] peephole: **18 stateless パスを unified single-parse に統合** → optimize -O1: 1.3s → 290ms (-78%)
 - [x] round: diminishing-returns 早期終了 → -Oz/O3 で不要ラウンドをスキップ
+- [x] **sections 使い回し**: 17パスに `_with_sections` 版を追加、サイズ変更時のみ再パース
+- [x] **旧 peephole パス関数の削除** → -1004行
+- [x] Library API facade 拡充 → bundle/config を root facade に追加
 
 ### 未着手
-
-- [ ] **sections 使い回し** (推定 -30~40%, Medium Effort)
-  `optimize_for_size_round_raise` 内で各パスが独立に `parse_core_sections_raise(bytes)` を呼んでいる。
-  1ラウンドあたり 15+ 回のフルパース → sections を1回パースして各パスに渡す。
-  パスのシグネチャ変更: `(Bytes) → Result` から `(Bytes, Array[RawSection]) → Result` に。
 
 - [ ] **DCE cluster 統合** (推定 -10~15%, Medium Effort)
   directize, CFP, CFP-const, signature refine, DCE の5パスを1関数にまとめて
@@ -53,28 +42,49 @@
   `apply_type_refining` 等が変更なしでも新 `Bytes` を返す。
   dirty flag で元の参照を返せば `physical_equal` で O(1) 変更検出可能。
 
-- [x] **旧 peephole パス関数の削除** → -1004行
-- [x] Library API facade 拡充 → bundle/config を root facade に追加
 - [ ] deps パッケージの I/O 抽象化: コールバック/trait で I/O 注入可能に
 
-## Feature Backlog
+## Architecture (2026-03-21)
+
+### 完了済み
+
+- [x] I/O 分離: analyze/component/config から I/O を cmd/wite に移動、pure library 化
+- [x] Environment API: RuntimeTarget, EnvironmentDef, resolve_all_environments, --env/--all-envs
+- [x] Chunk build: ChunkConfig, build command 実行, componentize (wasm-tools), incremental
+- [x] Vite plugin Environment API: per-env options, this.environment.name, server.environments
+- [x] 4 runtime targets: browser, webworker, workerd, node
+- [x] wasm HMR: import.meta.hot.accept, wite:update custom event
+- [x] .d.ts 自動生成: core wasm (signatures), CM (jco or lowered core), dev server watch
+- [x] jco transpile 統合: auto/true/false, missing jco error with install instructions
+
+### 未着手
 
 - [ ] `wite build --chunk=NAME`: 特定 chunk のみリビルド
-- [ ] `wite build --all-envs`: 全 environment 一括ビルド
 - [ ] chunk 間依存グラフ (`depends_on` フィールド)
 - [ ] dev mode chunk 単位 watch
-- [ ] wasm-gc chunk 分割の制約ドキュメント（CM boundary での型制約）
-- [ ] **built-in CM→ESM transpiler** (jco 代替): Component Model wasm をブラウザ用 ESM に変換する機能を wite 内蔵で実装し、jco 依存を除去する
+- [ ] **built-in CM→ESM transpiler** (jco 代替): CM wasm をブラウザ用 ESM に変換する機能を wite 内蔵で実装し、jco 依存を除去する
 - [ ] WASI browser shims 自動注入（要検証）
+- [ ] wasm streaming compilation + caching (Cache API / IndexedDB)
+- [ ] wasm source map (DWARF debug info → Chrome DevTools)
+- [ ] wasm bundle splitting (lazy wasm loading)
+- [ ] Vite devtools 統合 (wasm サイズ/callgraph 表示)
 
-## Testing
+## Testing (2026-03-21)
 
-カバレッジ: 69.3% (8,981/12,967)
+### MoonBit
+
+- テスト: 627
+- カバレッジ: **69.9%** (9,148/13,080)
 
 改善ターゲット:
 - [ ] `deps/` (16%) — mock 化が必要
 - [ ] `plugin-api/` (0%) — JS export 専用テスト
 - [ ] `cmd/wite/dev.mbt` (20%) — async dev server E2E 拡充
+
+### Vite Plugin
+
+- テスト: 46 (5 ファイル)
+- Fixtures: 7 wasm ファイル (core, CM, error cases)
 
 ## Completed Specs
 
