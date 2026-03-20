@@ -219,10 +219,10 @@ fn optimize_for_size_round_raise(
   bytes : Bytes,
   config : OptimizeConfig,
 ) -> OptimizeRoundResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  let mut cached_sections = parse_core_sections_raise(bytes)
   let stage1_out : Array[Byte] = bytes[0:8].to_array()
   let removed_sections : Array[String] = []
-  for section in sections {
+  for section in cached_sections {
     if section.section_id == 0U && !keep_custom_section(section, config) {
       removed_sections.push(section_key(section, false))
     } else if section.section_id == 10U && should_optimize_code_section(config) {
@@ -236,9 +236,17 @@ fn optimize_for_size_round_raise(
     }
   }
   let mut optimized_bytes = Bytes::from_array(stage1_out[:])
+  // After stage1, re-parse since code section was modified
+  cached_sections = parse_core_sections_raise(optimized_bytes)
   if config.enable_peephole {
-    let coalesce = apply_coalesce_locals_raise(optimized_bytes)
+    let prev_len = optimized_bytes.length()
+    let coalesce = apply_coalesce_locals_raise_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = coalesce.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if coalesce.removed_local_count > 0U {
       removed_sections.push(
         "coalesce-locals:removed:" + coalesce.removed_local_count.to_string(),
@@ -246,10 +254,14 @@ fn optimize_for_size_round_raise(
     }
   }
   if should_duplicate_import_eliminate(config) {
-    let duplicate_import_elim = apply_duplicate_import_elimination(
-      optimized_bytes,
+    let prev_len = optimized_bytes.length()
+    let duplicate_import_elim = apply_duplicate_import_elimination_with_sections(
+      optimized_bytes, cached_sections,
     )
     optimized_bytes = duplicate_import_elim.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if duplicate_import_elim.removed_import_count > 0U {
       removed_sections.push(
         "dup-imports:imports:" +
@@ -270,40 +282,68 @@ fn optimize_for_size_round_raise(
   }
   if config.enable_dce {
     let dce_cluster_before = optimized_bytes
+    let dce_cluster_cached_sections = cached_sections
     let dce_cluster_removed_sections : Array[String] = []
-    let directize = apply_directize_raise(optimized_bytes)
+    let directize = apply_directize_raise_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = directize.bytes
+    if optimized_bytes.length() != dce_cluster_before.length() {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if directize.rewritten_call_count > 0U {
       dce_cluster_removed_sections.push(
         "directize:calls:" + directize.rewritten_call_count.to_string(),
       )
     }
-    let cfp_const = apply_const_call_forwarding_propagation_raise(
-      optimized_bytes,
+    let prev_len = optimized_bytes.length()
+    let cfp_const = apply_const_call_forwarding_propagation_raise_with_sections(
+      optimized_bytes, cached_sections,
     )
     optimized_bytes = cfp_const.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if cfp_const.rewritten_call_count > 0U {
       dce_cluster_removed_sections.push(
         "cfp-const:calls:" + cfp_const.rewritten_call_count.to_string(),
       )
     }
-    let cfp = apply_call_forwarding_propagation_raise(optimized_bytes)
+    let prev_len2 = optimized_bytes.length()
+    let cfp = apply_call_forwarding_propagation_raise_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = cfp.bytes
+    if optimized_bytes.length() != prev_len2 {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if cfp.rewritten_call_count > 0U {
       dce_cluster_removed_sections.push(
         "cfp:calls:" + cfp.rewritten_call_count.to_string(),
       )
     }
-    let signature_refine = apply_signature_refining_raise(optimized_bytes)
+    let prev_len3 = optimized_bytes.length()
+    let signature_refine = apply_signature_refining_raise_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = signature_refine.bytes
+    if optimized_bytes.length() != prev_len3 {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if signature_refine.rewritten_call_count > 0U {
       dce_cluster_removed_sections.push(
         "signature-refine:calls:" +
         signature_refine.rewritten_call_count.to_string(),
       )
     }
-    let dce = apply_dce_raise(optimized_bytes, config)
+    let prev_len4 = optimized_bytes.length()
+    let dce = apply_dce_raise_with_sections(
+      optimized_bytes, config, cached_sections,
+    )
     optimized_bytes = dce.bytes
+    if optimized_bytes.length() != prev_len4 {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if dce.removed_function_count > 0U {
       dce_cluster_removed_sections.push(
         "dce:functions:" +
@@ -321,6 +361,7 @@ fn optimize_for_size_round_raise(
     let dce_cluster_after_size = optimized_bytes.length().reinterpret_as_uint()
     if dce_cluster_after_size > dce_cluster_before_size {
       optimized_bytes = dce_cluster_before
+      cached_sections = dce_cluster_cached_sections
       removed_sections.push(
         "dce-cluster:rollback:size-regress:" +
         dce_cluster_before_size.to_string() +
@@ -332,8 +373,14 @@ fn optimize_for_size_round_raise(
     }
   }
   if should_refine_types(config) {
-    let type_refine = apply_type_refining(optimized_bytes)
+    let prev_len = optimized_bytes.length()
+    let type_refine = apply_type_refining_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = type_refine.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if type_refine.refined_type_count > 0U {
       removed_sections.push(
         "type-refine:types:" + type_refine.refined_type_count.to_string(),
@@ -341,8 +388,14 @@ fn optimize_for_size_round_raise(
     }
   }
   if should_signature_prune(config) {
-    let signature_prune = apply_signature_pruning(optimized_bytes)
+    let prev_len = optimized_bytes.length()
+    let signature_prune = apply_signature_pruning_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = signature_prune.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if signature_prune.pruned_function_count > 0U {
       removed_sections.push(
         "signature-prune:functions:" +
@@ -353,8 +406,12 @@ fn optimize_for_size_round_raise(
     }
   }
   if config.enable_dfe {
-    let dfe = apply_dfe_raise(optimized_bytes)
+    let prev_len = optimized_bytes.length()
+    let dfe = apply_dfe_raise_with_sections(optimized_bytes, cached_sections)
     optimized_bytes = dfe.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if dfe.removed_function_count > 0U {
       removed_sections.push(
         "dfe:functions:" +
@@ -368,8 +425,14 @@ fn optimize_for_size_round_raise(
     }
   }
   if config.enable_merge_similar_functions {
-    let msf = apply_merge_similar_functions_raise(optimized_bytes)
+    let prev_len = optimized_bytes.length()
+    let msf = apply_merge_similar_functions_raise_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = msf.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if msf.removed_function_count > 0U {
       removed_sections.push(
         "msf:functions:" +
@@ -383,8 +446,14 @@ fn optimize_for_size_round_raise(
     }
   }
   if config.enable_remove_unused_module_elements {
-    let rume = apply_remove_unused_module_elements(optimized_bytes, config)
+    let prev_len = optimized_bytes.length()
+    let rume = apply_remove_unused_module_elements_with_sections(
+      optimized_bytes, config, cached_sections,
+    )
     optimized_bytes = rume.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if rume.removed_import_count > 0U ||
       rume.removed_table_count > 0U ||
       rume.removed_memory_count > 0U ||
@@ -411,8 +480,14 @@ fn optimize_for_size_round_raise(
     }
   }
   if should_simplify_globals(config) {
-    let simplify_globals = apply_simplify_globals(optimized_bytes)
+    let prev_len = optimized_bytes.length()
+    let simplify_globals = apply_simplify_globals_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = simplify_globals.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if simplify_globals.rewritten_global_get_count > 0U {
       removed_sections.push(
         "simplify-globals:gets:" +
@@ -421,8 +496,14 @@ fn optimize_for_size_round_raise(
     }
   }
   if should_reorder_globals(config) {
-    let reorder_globals = apply_reorder_globals(optimized_bytes)
+    let prev_len = optimized_bytes.length()
+    let reorder_globals = apply_reorder_globals_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = reorder_globals.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if reorder_globals.reordered_local_count > 0U {
       removed_sections.push(
         "reorder-globals:locals:" +
@@ -431,8 +512,14 @@ fn optimize_for_size_round_raise(
     }
   }
   if should_memory_pack(config) {
-    let memory_pack = apply_memory_packing(optimized_bytes)
+    let prev_len = optimized_bytes.length()
+    let memory_pack = apply_memory_packing_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = memory_pack.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if memory_pack.reordered_local_count > 0U {
       removed_sections.push(
         "memory-packing:locals:" + memory_pack.reordered_local_count.to_string(),
@@ -440,8 +527,14 @@ fn optimize_for_size_round_raise(
     }
   }
   if should_remove_unused_types(config) {
-    let remove_unused_types = apply_remove_unused_types(optimized_bytes)
+    let prev_len = optimized_bytes.length()
+    let remove_unused_types = apply_remove_unused_types_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = remove_unused_types.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if remove_unused_types.removed_type_count > 0U {
       removed_sections.push(
         "types:" + remove_unused_types.removed_type_count.to_string(),
@@ -449,18 +542,32 @@ fn optimize_for_size_round_raise(
     }
   }
   if config.enable_dce {
-    let inlining = apply_inlining_optimizing(optimized_bytes)
+    let prev_len = optimized_bytes.length()
+    let inlining = apply_inlining_optimizing_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = inlining.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if inlining.inlined_call_count > 0U {
       removed_sections.push(
         "inlining:calls:" + inlining.inlined_call_count.to_string(),
       )
     }
-    let dae = apply_dae_optimizing(optimized_bytes)
+    let prev_len2 = optimized_bytes.length()
+    let dae = apply_dae_optimizing_with_sections(
+      optimized_bytes, cached_sections,
+    )
     optimized_bytes = dae.bytes
+    if optimized_bytes.length() != prev_len2 {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
     if dae.removed_instr_count > 0U {
       removed_sections.push("dae:instrs:" + dae.removed_instr_count.to_string())
     }
   }
+  // suppress unused variable warning for cached_sections after last pass
+  ignore(cached_sections)
   { bytes: optimized_bytes, removed_sections }
 }

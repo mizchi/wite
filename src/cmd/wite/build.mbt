@@ -388,7 +388,9 @@ async fn run_chunk_build_command(
       let output_path = resolve_path_from_config_dir(config_dir, chunk.output)
       if !@fs.path_exists(output_path) {
         println(
-          "chunk '" + chunk_name + "' has no build command and output not found: " +
+          "chunk '" +
+          chunk_name +
+          "' has no build command and output not found: " +
           output_path,
         )
         @sys.exit(1)
@@ -422,7 +424,9 @@ async fn run_chunk_build_command(
       let exit_code = @xprocess.run(bin, args[:], cwd?)
       if exit_code != 0 {
         println(
-          "chunk '" + chunk_name + "' build failed (exit " +
+          "chunk '" +
+          chunk_name +
+          "' build failed (exit " +
           exit_code.to_string() +
           ")",
         )
@@ -454,8 +458,8 @@ async fn componentize_chunk(
   let component_path = output_path + ".component.wasm"
   // Step 1: embed WIT
   let embed_args : Array[String] = [
-    "component", "embed", resolved_wit, output_path, "--encoding", "utf8",
-    "--output", component_path,
+    "component", "embed", resolved_wit, output_path, "--encoding", "utf8", "--output",
+    component_path,
   ]
   match chunk.world {
     Some(world) => {
@@ -470,9 +474,7 @@ async fn componentize_chunk(
   )
   if embed_exit != 0 {
     let err = embed_stderr.text() catch { _ => "" }
-    println(
-      "chunk '" + chunk_name + "' embed failed: " + err,
-    )
+    println("chunk '" + chunk_name + "' embed failed: " + err)
     @sys.exit(1)
   }
   // Step 2: create component from embedded module
@@ -485,16 +487,14 @@ async fn componentize_chunk(
   )
   if new_exit != 0 {
     let err = new_stderr.text() catch { _ => "" }
-    println(
-      "chunk '" + chunk_name + "' componentize failed: " + err,
-    )
+    println("chunk '" + chunk_name + "' componentize failed: " + err)
     @sys.exit(1)
   }
   // Cleanup intermediate file
-  @fs.remove_file(component_path) catch { _ => () }
-  println(
-    "chunk '" + chunk_name + "': componentized (" + output_path + ")",
-  )
+  @fs.remove_file(component_path) catch {
+    _ => ()
+  }
+  println("chunk '" + chunk_name + "': componentized (" + output_path + ")")
 }
 
 ///|
@@ -539,7 +539,9 @@ async fn build_chunks(
     }
     if !@fs.path_exists(output_path) {
       println(
-        "chunk '" + name + "' build completed but output not found: " +
+        "chunk '" +
+        name +
+        "' build completed but output not found: " +
         output_path,
       )
       @sys.exit(1)
@@ -547,9 +549,7 @@ async fn build_chunks(
     // Componentize step (core → component via WIT)
     componentize_chunk(name, chunk, config_dir)
     let size = get_file_size(output_path)
-    println(
-      "chunk '" + name + "': ready (" + size.to_string() + " bytes)",
-    )
+    println("chunk '" + name + "': ready (" + size.to_string() + " bytes)")
   }
 }
 

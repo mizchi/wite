@@ -277,7 +277,17 @@ fn rewrite_code_section_payload_for_const_call_forwarding_raise(
 fn apply_const_call_forwarding_propagation_raise(
   bytes : Bytes,
 ) -> CfpConstApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_const_call_forwarding_propagation_raise_with_sections(
+    bytes,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_const_call_forwarding_propagation_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> CfpConstApplyResult raise WiteError {
   let mut type_payload : Bytes? = None
   let mut import_payload : Bytes? = None
   let mut function_payload : Bytes? = None
@@ -403,7 +413,17 @@ fn rewrite_code_section_payload_for_call_forwarding_raise(
 fn apply_call_forwarding_propagation_raise(
   bytes : Bytes,
 ) -> CfpApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_call_forwarding_propagation_raise_with_sections(
+    bytes,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_call_forwarding_propagation_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> CfpApplyResult raise WiteError {
   let mut type_payload : Bytes? = None
   let mut import_payload : Bytes? = None
   let mut function_payload : Bytes? = None
@@ -713,7 +733,17 @@ fn rewrite_code_section_payload_for_signature_refining_raise(
 fn apply_signature_refining_raise(
   bytes : Bytes,
 ) -> SignatureRefineApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_signature_refining_raise_with_sections(
+    bytes,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_signature_refining_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> SignatureRefineApplyResult raise WiteError {
   let mut type_payload : Bytes? = None
   let mut import_payload : Bytes? = None
   let mut function_payload : Bytes? = None

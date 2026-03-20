@@ -134,7 +134,9 @@ pub fn optimize_for_size(
       } else {
         0U
       }
-      if round_index > 0U && gain < before_round_size / 100U && gain <= prev_gain / 4U {
+      if round_index > 0U &&
+        gain < before_round_size / 100U &&
+        gain <= prev_gain / 4U {
         break
       }
       prev_gain = gain

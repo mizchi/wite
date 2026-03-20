@@ -195,8 +195,30 @@ fn apply_dae_optimizing(bytes : Bytes) -> DaeApplyResult {
 }
 
 ///|
+fn apply_dae_optimizing_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> DaeApplyResult {
+  let result = try? apply_dae_optimizing_raise_with_sections(bytes, sections)
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, removed_instr_count: 0U }
+  }
+}
+
+///|
 fn apply_dae_optimizing_raise(bytes : Bytes) -> DaeApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_dae_optimizing_raise_with_sections(
+    bytes,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_dae_optimizing_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> DaeApplyResult raise WiteError {
   let mut code_section_payload : Bytes? = None
   for section in sections {
     if section.section_id == 10U {
@@ -1180,7 +1202,8 @@ fn apply_merged_stateless_peephole(
   let max_u32 = 0xffffffffU
   while i < spans.length() {
     // === 5-span patterns ===
-    if i + 4 < spans.length() && !safe_mode &&
+    if i + 4 < spans.length() &&
+      !safe_mode &&
       is_optimize_instructions_i32_get_opcode(spans[i].opcode) &&
       spans[i + 1].opcode == 0x41U &&
       spans[i + 2].opcode == 0x6aU &&
@@ -1226,7 +1249,8 @@ fn apply_merged_stateless_peephole(
     }
     // === 4-span patterns ===
     // i32_add_into_load_offset: get + i32.const + i32.add + load/store
-    if i + 3 < spans.length() && !safe_mode &&
+    if i + 3 < spans.length() &&
+      !safe_mode &&
       is_optimize_instructions_i32_get_opcode(spans[i].opcode) &&
       spans[i + 1].opcode == 0x41U &&
       spans[i + 2].opcode == 0x6aU &&
@@ -1270,8 +1294,7 @@ fn apply_merged_stateless_peephole(
       if spans[i].opcode == 0x41U &&
         spans[i + 1].opcode == 0x41U &&
         spans[i + 2].opcode == 0x6aU {
-        if decode_i32_const_signed_from_span(instr_bytes, spans[i])
-          is Some(lhs) {
+        if decode_i32_const_signed_from_span(instr_bytes, spans[i]) is Some(lhs) {
           if decode_i32_const_signed_from_span(instr_bytes, spans[i + 1])
             is Some(rhs) {
             let sum = (lhs.reinterpret_as_uint() + rhs.reinterpret_as_uint()).reinterpret_as_int()
@@ -1292,8 +1315,7 @@ fn apply_merged_stateless_peephole(
       }
       // i32_binary_ops: i32.const(a) + i32.const(b) + binary_op => i32.const(result)
       if spans[i].opcode == 0x41U && spans[i + 1].opcode == 0x41U {
-        if decode_i32_const_signed_from_span(instr_bytes, spans[i])
-          is Some(lhs) {
+        if decode_i32_const_signed_from_span(instr_bytes, spans[i]) is Some(lhs) {
           if decode_i32_const_signed_from_span(instr_bytes, spans[i + 1])
             is Some(rhs) {
             if eval_i32_const_binary(lhs, rhs, spans[i + 2].opcode)
@@ -1316,12 +1338,10 @@ fn apply_merged_stateless_peephole(
       }
       // i32_const_cmp: i32.const(a) + i32.const(b) + cmp_op => i32.const(0|1)
       if spans[i].opcode == 0x41U && spans[i + 1].opcode == 0x41U {
-        if decode_i32_const_signed_from_span(instr_bytes, spans[i])
-          is Some(lhs) {
+        if decode_i32_const_signed_from_span(instr_bytes, spans[i]) is Some(lhs) {
           if decode_i32_const_signed_from_span(instr_bytes, spans[i + 1])
             is Some(rhs) {
-            if eval_i32_const_cmp(lhs, rhs, spans[i + 2].opcode)
-              is Some(value) {
+            if eval_i32_const_cmp(lhs, rhs, spans[i + 2].opcode) is Some(value) {
               let original_len = spans[i].end_ -
                 spans[i].start +
                 (spans[i + 1].end_ - spans[i + 1].start) +
@@ -1404,7 +1424,10 @@ fn apply_merged_stateless_peephole(
         spans[i + 1].opcode == 0x41U {
         let lhs = instr_bytes[spans[i].start:spans[i].end_]
         match
-          decode_i32_const_small_nonnegative_from_span(instr_bytes, spans[i + 1]) {
+          decode_i32_const_small_nonnegative_from_span(
+            instr_bytes,
+            spans[i + 1],
+          ) {
           Some(0U) =>
             match spans[i + 2].opcode {
               0x71U | 0x49U => {
@@ -1442,7 +1465,8 @@ fn apply_merged_stateless_peephole(
             }
           _ => ()
         }
-        match decode_i32_const_small_signed_from_span(instr_bytes, spans[i + 1]) {
+        match
+          decode_i32_const_small_signed_from_span(instr_bytes, spans[i + 1]) {
           Some(-1) =>
             if spans[i + 2].opcode == 0x71U {
               // x & -1 => x
@@ -2024,7 +2048,17 @@ priv struct CoalesceLocalsApplyResult {
 fn apply_coalesce_locals_raise(
   bytes : Bytes,
 ) -> CoalesceLocalsApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_coalesce_locals_raise_with_sections(
+    bytes,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_coalesce_locals_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> CoalesceLocalsApplyResult raise WiteError {
   let mut type_section_payload : Bytes? = None
   let mut function_section_payload : Bytes? = None
   let mut code_section_payload : Bytes? = None

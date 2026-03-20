@@ -85,9 +85,7 @@ test "fixture: zlib dce report finds removable functions" {
   let report = @wite_analyze.analyze_dce_report(bytes).unwrap()
   // DCE removable count depends on callgraph analysis completeness
   // (may be 0 if all functions are reachable via indirect calls)
-  assert_true(
-    report.removable_function_count >= 0U,
-  )
+  assert_true(report.removable_function_count >= 0U)
 }
 
 ///|
@@ -98,9 +96,9 @@ test "fixture: zlib keep reasons include export roots" {
   let report = @wite_analyze.analyze_keep_reasons(bytes).unwrap()
   assert_true(report.entries.length() > 0)
   // Should have at least one export root reason
-  let has_export = report.entries.iter().any(
-    fn(e) { e.reasons.iter().any(fn(r) { r.contains("export") }) },
-  )
+  let has_export = report.entries
+    .iter()
+    .any(fn(e) { e.reasons.iter().any(fn(r) { r.contains("export") }) })
   assert_true(has_export)
 }
 
@@ -111,7 +109,9 @@ test "fixture: zlib optimize metadata shows pass gains" {
   }
   let config = OptimizeConfig::o1()
   let report = @wite_analyze.analyze_optimize_metadata(
-    bytes, config~, function_diff_limit=3U,
+    bytes,
+    config~,
+    function_diff_limit=3U,
   ).unwrap()
   assert_eq(report.before_size, 171100U)
   assert_true(report.after_size < report.before_size)
@@ -178,10 +178,9 @@ test "fixture: component function sizes per core module" {
   let reports = analyze_component_function_sizes(bytes).unwrap()
   assert_true(reports.length() > 0)
   // At least one core module should have functions
-  let total_funcs = reports.iter().fold(
-    init=0U,
-    fn(acc, r) { acc + r.function_count },
-  )
+  let total_funcs = reports
+    .iter()
+    .fold(init=0U, fn(acc, r) { acc + r.function_count })
   assert_true(total_funcs > 0U)
 }
 
@@ -194,10 +193,9 @@ test "fixture: component call graphs per core module" {
   let reports = analyze_component_call_graphs(bytes).unwrap()
   assert_true(reports.length() > 0)
   // At least one core module should have local functions
-  let total_local = reports.iter().fold(
-    init=0U,
-    fn(acc, r) { acc + r.graph.local_function_count },
-  )
+  let total_local = reports
+    .iter()
+    .fold(init=0U, fn(acc, r) { acc + r.graph.local_function_count })
   assert_true(total_local > 0U)
 }
 
@@ -205,9 +203,7 @@ test "fixture: component call graphs per core module" {
 
 ///|
 test "fixture: hello.component profile has multiple core modules" {
-  guard read_fixture(
-      "bench/corpus/component-dce/mwac/hello.component.wasm",
-    )
+  guard read_fixture("bench/corpus/component-dce/mwac/hello.component.wasm")
     is Some(bytes) else {
     return
   }
@@ -219,9 +215,7 @@ test "fixture: hello.component profile has multiple core modules" {
 
 ///|
 test "fixture: hello.component optimize reduces core modules" {
-  guard read_fixture(
-      "bench/corpus/component-dce/mwac/hello.component.wasm",
-    )
+  guard read_fixture("bench/corpus/component-dce/mwac/hello.component.wasm")
     is Some(bytes) else {
     return
   }
@@ -233,9 +227,7 @@ test "fixture: hello.component optimize reduces core modules" {
 
 ///|
 test "fixture: hello.component root policy has candidates" {
-  guard read_fixture(
-      "bench/corpus/component-dce/mwac/hello.component.wasm",
-    )
+  guard read_fixture("bench/corpus/component-dce/mwac/hello.component.wasm")
     is Some(bytes) else {
     return
   }
@@ -255,9 +247,7 @@ test "fixture: function gap between zlib and gc_target_feature" {
     is Some(gc) else {
     return
   }
-  let gap = @wite_analyze.analyze_function_size_gap(
-    zlib, gc, top_limit=5U,
-  ).unwrap()
+  let gap = @wite_analyze.analyze_function_size_gap(zlib, gc, top_limit=5U).unwrap()
   // zlib is much larger
   assert_true(gap.left_total_body_bytes > gap.right_total_body_bytes)
   assert_true(gap.entries.length() > 0)
@@ -270,15 +260,9 @@ test "fixture: optimize presets produce decreasing sizes for zlib" {
   guard read_fixture("bench/corpus/core/binaryen/zlib.wasm") is Some(bytes) else {
     return
   }
-  let o0 = @wite_analyze.optimize_for_size(
-    bytes, config=OptimizeConfig::o0(),
-  ).unwrap()
-  let o1 = @wite_analyze.optimize_for_size(
-    bytes, config=OptimizeConfig::o1(),
-  ).unwrap()
-  let o2 = @wite_analyze.optimize_for_size(
-    bytes, config=OptimizeConfig::o2(),
-  ).unwrap()
+  let o0 = @wite_analyze.optimize_for_size(bytes, config=OptimizeConfig::o0()).unwrap()
+  let o1 = @wite_analyze.optimize_for_size(bytes, config=OptimizeConfig::o1()).unwrap()
+  let o2 = @wite_analyze.optimize_for_size(bytes, config=OptimizeConfig::o2()).unwrap()
   // O0 should be largest (no optimization)
   assert_true(o0.after_size >= o1.after_size)
   // O1 includes DCE so should be smaller than O2 (which has less aggressive DCE)
@@ -295,18 +279,30 @@ test "snapshot: zlib profile exact values" {
   }
   let p = @wite_analyze.profile_module(bytes).unwrap()
   inspect(p.total_bytes, content="171100")
-  inspect(p.function_count, content=(
-    #|114
-  ))
-  inspect(p.import_count, content=(
-    #|10
-  ))
-  inspect(p.export_count, content=(
-    #|7
-  ))
-  inspect(p.code_body_count, content=(
-    #|114
-  ))
+  inspect(
+    p.function_count,
+    content=(
+      #|114
+    ),
+  )
+  inspect(
+    p.import_count,
+    content=(
+      #|10
+    ),
+  )
+  inspect(
+    p.export_count,
+    content=(
+      #|7
+    ),
+  )
+  inspect(
+    p.code_body_count,
+    content=(
+      #|114
+    ),
+  )
 }
 
 ///|
@@ -315,20 +311,32 @@ test "snapshot: zlib callgraph summary exact values" {
     return
   }
   let s = @wite_analyze.analyze_call_graph_summary(bytes).unwrap()
-  inspect(s.local_function_count, content=(
-    #|114
-  ))
-  inspect(s.imported_function_count, content=(
-    #|8
-  ))
-  inspect(s.reachable_function_count, content=(
-    #|114
-  ))
+  inspect(
+    s.local_function_count,
+    content=(
+      #|114
+    ),
+  )
+  inspect(
+    s.imported_function_count,
+    content=(
+      #|8
+    ),
+  )
+  inspect(
+    s.reachable_function_count,
+    content=(
+      #|114
+    ),
+  )
   inspect(s.dead_function_count, content="0")
   inspect(s.has_indirect_calls, content="true")
-  inspect(s.partial, content=(
-    #|false
-  ))
+  inspect(
+    s.partial,
+    content=(
+      #|false
+    ),
+  )
 }
 
 ///|
@@ -336,14 +344,15 @@ test "snapshot: zlib optimize -O1 exact after size" {
   guard read_fixture("bench/corpus/core/binaryen/zlib.wasm") is Some(bytes) else {
     return
   }
-  let r = @wite_analyze.optimize_for_size(
-    bytes, config=OptimizeConfig::o1(),
-  ).unwrap()
+  let r = @wite_analyze.optimize_for_size(bytes, config=OptimizeConfig::o1()).unwrap()
   inspect(r.before_size, content="171100")
   // Pin the optimized size — if optimizer changes, update this
-  inspect(r.after_size, content=(
-    #|69644
-  ))
+  inspect(
+    r.after_size,
+    content=(
+      #|69644
+    ),
+  )
 }
 
 ///|
@@ -354,27 +363,34 @@ test "snapshot: component profile exact values" {
   }
   let p = profile_component(bytes).unwrap()
   inspect(p.total_bytes, content="26993")
-  inspect(p.core_module_count, content=(
-    #|4
-  ))
-  inspect(p.nested_component_count, content=(
-    #|1
-  ))
+  inspect(
+    p.core_module_count,
+    content=(
+      #|4
+    ),
+  )
+  inspect(
+    p.nested_component_count,
+    content=(
+      #|1
+    ),
+  )
 }
 
 ///|
 test "snapshot: hello.component profile exact values" {
-  guard read_fixture(
-      "bench/corpus/component-dce/mwac/hello.component.wasm",
-    )
+  guard read_fixture("bench/corpus/component-dce/mwac/hello.component.wasm")
     is Some(bytes) else {
     return
   }
   let p = profile_component(bytes).unwrap()
   inspect(p.total_bytes, content="31400")
-  inspect(p.core_module_count, content=(
-    #|1
-  ))
+  inspect(
+    p.core_module_count,
+    content=(
+      #|1
+    ),
+  )
 }
 
 // WAC compose tests are in cmd/wite E2E tests (requires @wite_bundle import)

@@ -21,11 +21,48 @@ fn apply_remove_unused_module_elements(
 }
 
 ///|
+fn apply_remove_unused_module_elements_with_sections(
+  bytes : Bytes,
+  config : OptimizeConfig,
+  sections : Array[RawSection],
+) -> RumeApplyResult {
+  let result = try? apply_remove_unused_module_elements_raise_with_sections(
+    bytes, config, sections,
+  )
+  match result {
+    Ok(v) => v
+    Err(_) =>
+      {
+        bytes,
+        removed_import_count: 0U,
+        removed_table_count: 0U,
+        removed_memory_count: 0U,
+        removed_global_count: 0U,
+        removed_element_count: 0U,
+        removed_data_count: 0U,
+        removed_export_count: 0U,
+      }
+  }
+}
+
+///|
 fn apply_remove_unused_module_elements_raise(
   bytes : Bytes,
   config : OptimizeConfig,
 ) -> RumeApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_remove_unused_module_elements_raise_with_sections(
+    bytes,
+    config,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_remove_unused_module_elements_raise_with_sections(
+  bytes : Bytes,
+  config : OptimizeConfig,
+  sections : Array[RawSection],
+) -> RumeApplyResult raise WiteError {
   let mut import_section_payload : Bytes? = None
   let mut export_section_payload : Bytes? = None
   let mut table_section_payload : Bytes? = None
@@ -447,10 +484,32 @@ fn apply_type_refining(bytes : Bytes) -> TypeRefineApplyResult {
 }
 
 ///|
+fn apply_type_refining_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> TypeRefineApplyResult {
+  let result = try? apply_type_refining_raise_with_sections(bytes, sections)
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, refined_type_count: 0U }
+  }
+}
+
+///|
 fn apply_type_refining_raise(
   bytes : Bytes,
 ) -> TypeRefineApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_type_refining_raise_with_sections(
+    bytes,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_type_refining_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> TypeRefineApplyResult raise WiteError {
   let mut type_section_payload : Bytes? = None
   for section in sections {
     match section.section_id {
@@ -629,10 +688,32 @@ fn apply_signature_pruning(bytes : Bytes) -> SignaturePruneApplyResult {
 }
 
 ///|
+fn apply_signature_pruning_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> SignaturePruneApplyResult {
+  let result = try? apply_signature_pruning_raise_with_sections(bytes, sections)
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, pruned_function_count: 0U, pruned_param_count: 0U }
+  }
+}
+
+///|
 fn apply_signature_pruning_raise(
   bytes : Bytes,
 ) -> SignaturePruneApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_signature_pruning_raise_with_sections(
+    bytes,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_signature_pruning_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> SignaturePruneApplyResult raise WiteError {
   let mut imported_function_count = 0U
   let mut type_section_payload : Bytes? = None
   let mut function_section_payload : Bytes? = None
@@ -876,10 +957,34 @@ fn apply_remove_unused_types(bytes : Bytes) -> RemoveUnusedTypesApplyResult {
 }
 
 ///|
+fn apply_remove_unused_types_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> RemoveUnusedTypesApplyResult {
+  let result = try? apply_remove_unused_types_raise_with_sections(
+    bytes, sections,
+  )
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, removed_type_count: 0U }
+  }
+}
+
+///|
 fn apply_remove_unused_types_raise(
   bytes : Bytes,
 ) -> RemoveUnusedTypesApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_remove_unused_types_raise_with_sections(
+    bytes,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_remove_unused_types_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> RemoveUnusedTypesApplyResult raise WiteError {
   let mut type_section_payload : Bytes? = None
   let mut import_section_payload : Bytes? = None
   let mut function_section_payload : Bytes? = None
@@ -1023,6 +1128,15 @@ fn apply_dce_raise(
   bytes : Bytes,
   config : OptimizeConfig,
 ) -> DceApplyResult raise WiteError {
+  apply_dce_raise_with_sections(bytes, config, parse_core_sections_raise(bytes))
+}
+
+///|
+fn apply_dce_raise_with_sections(
+  bytes : Bytes,
+  config : OptimizeConfig,
+  sections : Array[RawSection],
+) -> DceApplyResult raise WiteError {
   let export_root_names = export_root_names_from_config(config)
   let call_graph = analyze_call_graph_raise(bytes, export_root_names)
   if call_graph.partial {
@@ -1072,7 +1186,6 @@ fn apply_dce_raise(
       dropped_name_section: false,
     }
   }
-  let sections = parse_core_sections_raise(bytes)
   let out : Array[Byte] = bytes[0:8].to_array()
   let mut dropped_name_section = false
   for section in sections {
@@ -1149,7 +1262,14 @@ fn apply_dce_raise(
 
 ///|
 fn apply_dfe_raise(bytes : Bytes) -> DfeApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_dfe_raise_with_sections(bytes, parse_core_sections_raise(bytes))
+}
+
+///|
+fn apply_dfe_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> DfeApplyResult raise WiteError {
   let mut imported_function_count = 0U
   let mut function_type_indices : Array[UInt] = []
   let mut code_bodies : Array[Bytes] = []

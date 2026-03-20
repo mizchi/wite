@@ -2,7 +2,17 @@
 fn apply_merge_similar_functions_raise(
   bytes : Bytes,
 ) -> MsfApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_merge_similar_functions_raise_with_sections(
+    bytes,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_merge_similar_functions_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> MsfApplyResult raise WiteError {
   let mut type_payload : Bytes? = None
   let mut imported_function_type_indices : Array[UInt] = []
   let mut local_function_type_indices : Array[UInt] = []

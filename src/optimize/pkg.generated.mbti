@@ -10,6 +10,8 @@ pub fn append_encoded_section(Array[Byte], UInt, Bytes) -> Unit
 
 pub fn apply_directize_raise(Bytes) -> DirectizeApplyResult raise @types.WiteError
 
+pub fn apply_directize_raise_with_sections(Bytes, Array[RawSection]) -> DirectizeApplyResult raise @types.WiteError
+
 pub fn bytes_equal(Bytes, Bytes) -> Bool
 
 pub fn clone_optimize_config(@types.OptimizeConfig, pass_rounds? : UInt, closed_world_root_exports? : Array[String]) -> @types.OptimizeConfig

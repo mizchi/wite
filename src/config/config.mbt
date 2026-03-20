@@ -270,9 +270,7 @@ pub fn parse_chunk_config(
 }
 
 ///|
-fn parse_chunks(
-  json_value : Json,
-) -> Result[Map[String, ChunkConfig], String] {
+fn parse_chunks(json_value : Json) -> Result[Map[String, ChunkConfig], String] {
   match json_value {
     Object(obj) => {
       let chunks : Map[String, ChunkConfig] = {}

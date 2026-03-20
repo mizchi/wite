@@ -1258,10 +1258,34 @@ fn apply_inlining_optimizing(bytes : Bytes) -> InliningApplyResult {
 }
 
 ///|
+fn apply_inlining_optimizing_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> InliningApplyResult {
+  let result = try? apply_inlining_optimizing_raise_with_sections(
+    bytes, sections,
+  )
+  match result {
+    Ok(v) => v
+    Err(_) => { bytes, inlined_call_count: 0U }
+  }
+}
+
+///|
 fn apply_inlining_optimizing_raise(
   bytes : Bytes,
 ) -> InliningApplyResult raise WiteError {
-  let sections = parse_core_sections_raise(bytes)
+  apply_inlining_optimizing_raise_with_sections(
+    bytes,
+    parse_core_sections_raise(bytes),
+  )
+}
+
+///|
+fn apply_inlining_optimizing_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> InliningApplyResult raise WiteError {
   let mut type_section_payload : Bytes? = None
   let mut function_section_payload : Bytes? = None
   let mut code_section_payload : Bytes? = None

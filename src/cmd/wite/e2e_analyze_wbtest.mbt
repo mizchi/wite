@@ -1264,9 +1264,7 @@ test "fixture: wac compose + optimize pipeline" {
     Err(_) => return
   }
   let config = @wite_core.OptimizeConfig::o1()
-  let result = optimize_with_kind(
-    composed, BinaryKind::Auto, config, [],
-  ).unwrap()
+  let result = optimize_with_kind(composed, BinaryKind::Auto, config, []).unwrap()
   assert_true(result.before_size > 0U)
   assert_true(result.after_size <= result.before_size)
 }
@@ -1278,9 +1276,12 @@ test "fixture: wac compose snapshot" {
     return
   }
   let composed = @wite_bundle.compose_wac_file(wac_path).unwrap()
-  inspect(composed.length(), content=(
-    #|97709
-  ))
+  inspect(
+    composed.length(),
+    content=(
+      #|97709
+    ),
+  )
 }
 
 ///|
@@ -1301,9 +1302,7 @@ test "fixture: compose then optimize pipeline" {
   let composed_path = dir + "/composed.wasm"
   write_output_or_exit(composed_path, composed)
   let optimized_path = dir + "/optimized.wasm"
-  run_optimize([
-    "wite", "optimize", composed_path, optimized_path, "-O1",
-  ])
+  run_optimize(["wite", "optimize", composed_path, optimized_path, "-O1"])
   assert_true(@fs.path_exists(optimized_path))
   let optimized_bytes = @fs.read_file_to_bytes(optimized_path) catch {
     _ => {
