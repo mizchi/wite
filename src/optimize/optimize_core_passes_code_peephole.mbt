@@ -1,20 +1,45 @@
 ///|
+fn bytes_contains_byte(bytes : Bytes, target : Byte) -> Bool {
+  for i in 0..<bytes.length() {
+    if bytes[i] == target {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn bytes_contains_all2(bytes : Bytes, a : Byte, b : Byte) -> Bool {
+  let mut has_a = false
+  let mut has_b = false
+  for i in 0..<bytes.length() {
+    let v = bytes[i]
+    if v == a {
+      has_a = true
+    }
+    if v == b {
+      has_b = true
+    }
+    if has_a && has_b {
+      return true
+    }
+  }
+  false
+}
+
+///|
 fn append_bytes_range(
   out : Array[Byte],
   bytes : Bytes,
   start : Int,
   end_ : Int,
 ) -> Unit {
-  for i in start..<end_ {
-    out.push(bytes[i])
-  }
+  out.append(bytes[start:end_].to_array()[:])
 }
 
 ///|
 fn append_bytes_view(out : Array[Byte], view : BytesView) -> Unit {
-  for i in 0..<view.length() {
-    out.push(view[i])
-  }
+  out.append(view.to_array()[:])
 }
 
 ///|
@@ -209,8 +234,7 @@ fn apply_dae_optimizing_raise(bytes : Bytes) -> DaeApplyResult raise WiteError {
   let rewritten_code_payload = encode_code_section_payload_from_bodies(
     rewritten_bodies,
   )
-  let out : Array[Byte] = []
-  append_bytes_range(out, bytes, 0, 8)
+  let out : Array[Byte] = bytes[0:8].to_array()
   for section in sections {
     if section.section_id == 10U {
       append_encoded_section(out, 10U, rewritten_code_payload)
@@ -393,9 +417,7 @@ fn decode_local_index_immediate_from_span(
 fn instr_spans_to_bytes(instr_bytes : Bytes, spans : Array[InstrSpan]) -> Bytes {
   let out : Array[Byte] = []
   for span in spans {
-    for j in span.start..<span.end_ {
-      out.push(instr_bytes[j])
-    }
+    out.append(instr_bytes[span.start:span.end_].to_array()[:])
   }
   Bytes::from_array(out[:])
 }
@@ -441,11 +463,15 @@ fn is_optimize_instructions_i32_identity_opcode(
 
 ///|
 fn apply_optimize_instructions_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_byte(instr_bytes, b'\x41') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() && spans[i].opcode == 0x41U {
@@ -453,6 +479,7 @@ fn apply_optimize_instructions_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
         Some(-1) =>
           if spans[i + 1].opcode == 0x71U {
             i += 2
+            changed = true
             continue
           }
         _ => ()
@@ -467,6 +494,7 @@ fn apply_optimize_instructions_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
               spans[i + 1].opcode,
             ) {
             i += 2
+            changed = true
             continue
           }
         None => ()
@@ -474,6 +502,9 @@ fn apply_optimize_instructions_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -487,11 +518,15 @@ fn is_optimize_instructions_i32_get_opcode(opcode : UInt) -> Bool {
 fn apply_optimize_instructions_i32_const_cmp_bitwise(
   instr_bytes : Bytes,
 ) -> Bytes {
+  if !bytes_contains_byte(instr_bytes, b'\x41') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 2 < spans.length() &&
@@ -507,17 +542,20 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
             | 0x49U => { // i32.lt_u
               append_i32_const_small(out, 0U)
               i += 3
+              changed = true
               continue
             }
             0x4fU => { // i32.ge_u
               append_i32_const_small(out, 1U)
               i += 3
+              changed = true
               continue
             }
             0x46U | 0x4dU => { // i32.eq / i32.le_u => i32.eqz
               append_bytes_view(out, lhs)
               out.push(0x45U.to_byte())
               i += 3
+              changed = true
               continue
             }
             0x47U | 0x4bU => { // i32.ne / i32.gt_u => i32.eqz; i32.eqz
@@ -525,6 +563,7 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
               out.push(0x45U.to_byte())
               out.push(0x45U.to_byte())
               i += 3
+              changed = true
               continue
             }
             _ => ()
@@ -537,6 +576,7 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
             // x & -1 => x
             append_bytes_view(out, lhs)
             i += 3
+            changed = true
             continue
           }
         _ => ()
@@ -565,18 +605,21 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
             | 0x78U => { // i32.rotr
               append_i32_const_small(out, 0U)
               i += 3
+              changed = true
               continue
             }
             0x6aU | 0x72U | 0x73U => {
               // 0 + x / 0 | x / 0 ^ x => x
               append_bytes_view(out, rhs)
               i += 3
+              changed = true
               continue
             }
             0x46U => { // 0 == x => x.eqz
               append_bytes_view(out, rhs)
               out.push(0x45U.to_byte())
               i += 3
+              changed = true
               continue
             }
             0x47U => { // 0 != x => x.eqz; i32.eqz
@@ -584,6 +627,7 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
               out.push(0x45U.to_byte())
               out.push(0x45U.to_byte())
               i += 3
+              changed = true
               continue
             }
             _ => ()
@@ -593,6 +637,7 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
             // 1 * x => x
             append_bytes_view(out, rhs)
             i += 3
+            changed = true
             continue
           }
         _ => ()
@@ -604,6 +649,7 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
               // -1 & x => x
               append_bytes_view(out, rhs)
               i += 3
+              changed = true
               continue
             }
             0x72U => {
@@ -615,6 +661,7 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
                 spans[i].end_,
               )
               i += 3
+              changed = true
               continue
             }
             _ => ()
@@ -625,6 +672,9 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
@@ -632,11 +682,15 @@ fn apply_optimize_instructions_i32_const_cmp_bitwise(
 fn apply_optimize_instructions_same_local_get_pair(
   instr_bytes : Bytes,
 ) -> Bytes {
+  if !bytes_contains_byte(instr_bytes, b'\x20') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 2 < spans.length() &&
@@ -657,18 +711,21 @@ fn apply_optimize_instructions_same_local_get_pair(
                   spans[i].end_,
                 )
                 i += 3
+                changed = true
                 continue
               }
               0x46U | 0x4cU | 0x4dU | 0x4eU | 0x4fU => {
                 // x==x / x<=x / x>=x => 1
                 append_i32_const_small(out, 1U)
                 i += 3
+                changed = true
                 continue
               }
               0x47U | 0x48U | 0x49U | 0x4aU | 0x4bU | 0x6bU | 0x73U => {
                 // x!=x / x<x / x>x / x-x / x^x => 0
                 append_i32_const_small(out, 0U)
                 i += 3
+                changed = true
                 continue
               }
               _ => ()
@@ -680,16 +737,24 @@ fn apply_optimize_instructions_same_local_get_pair(
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
+  // Need i32.const (0x41) and i32.add (0x6a)
+  if !bytes_contains_all2(instr_bytes, b'\x41', b'\x6A') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 2 < spans.length() &&
@@ -709,6 +774,7 @@ fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
           if folded_len < original_len {
             append_i32_const_signed(out, sum)
             i += 3
+            changed = true
             continue
           }
         }
@@ -716,6 +782,9 @@ fn apply_precompute_i32_add(instr_bytes : Bytes) -> Bytes {
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -745,11 +814,15 @@ fn eval_i32_const_binary(
 
 ///|
 fn apply_precompute_i32_binary_ops(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_byte(instr_bytes, b'\x41') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 2 < spans.length() &&
@@ -768,6 +841,7 @@ fn apply_precompute_i32_binary_ops(instr_bytes : Bytes) -> Bytes {
             if folded_len < original_len {
               append_i32_const_signed(out, value)
               i += 3
+              changed = true
               continue
             }
           }
@@ -776,6 +850,9 @@ fn apply_precompute_i32_binary_ops(instr_bytes : Bytes) -> Bytes {
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -805,11 +882,15 @@ fn eval_i32_const_cmp(
 
 ///|
 fn apply_precompute_i32_const_cmp(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_byte(instr_bytes, b'\x41') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 2 < spans.length() &&
@@ -826,6 +907,7 @@ fn apply_precompute_i32_const_cmp(instr_bytes : Bytes) -> Bytes {
             if 2 < original_len {
               append_i32_const_small(out, value)
               i += 3
+              changed = true
               continue
             }
           }
@@ -834,6 +916,9 @@ fn apply_precompute_i32_const_cmp(instr_bytes : Bytes) -> Bytes {
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -925,12 +1010,16 @@ fn apply_precompute_i32_add_into_load_offset(
   if safe_mode {
     return instr_bytes
   }
+  if !bytes_contains_all2(instr_bytes, b'\x41', b'\x6A') {
+    return instr_bytes
+  }
   let max_u32 = 0xffffffffU
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 4 < spans.length() &&
@@ -970,6 +1059,7 @@ fn apply_precompute_i32_add_into_load_offset(
               )
               append_memory_memarg(out, spans[i + 4].opcode, align, new_offset)
               i += 5
+              changed = true
               continue
             }
           }
@@ -1007,6 +1097,7 @@ fn apply_precompute_i32_add_into_load_offset(
               )
               append_memory_memarg(out, spans[i + 3].opcode, align, new_offset)
               i += 4
+              changed = true
               continue
             }
           }
@@ -1016,16 +1107,23 @@ fn apply_precompute_i32_add_into_load_offset(
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_precompute_i32_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_byte(instr_bytes, b'\x41') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() && spans[i].opcode == 0x41U {
@@ -1036,6 +1134,7 @@ fn apply_precompute_i32_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
               // x == 0 / x <=_u 0 => x.eqz
               out.push(0x45U.to_byte())
               i += 2
+              changed = true
               continue
             }
             0x47U | 0x4bU => {
@@ -1043,6 +1142,7 @@ fn apply_precompute_i32_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
               out.push(0x45U.to_byte())
               out.push(0x45U.to_byte())
               i += 2
+              changed = true
               continue
             }
             _ => ()
@@ -1053,6 +1153,9 @@ fn apply_precompute_i32_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -1066,11 +1169,15 @@ fn is_i64_const_zero_from_span(instr_bytes : Bytes, span : InstrSpan) -> Bool {
 
 ///|
 fn apply_precompute_i64_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_byte(instr_bytes, b'\x42') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() &&
@@ -1080,6 +1187,7 @@ fn apply_precompute_i64_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
           // x == 0 / x <=_u 0 => i64.eqz
           out.push(0x50U.to_byte())
           i += 2
+          changed = true
           continue
         }
         0x52U | 0x56U => {
@@ -1087,6 +1195,7 @@ fn apply_precompute_i64_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
           out.push(0x50U.to_byte())
           out.push(0x45U.to_byte())
           i += 2
+          changed = true
           continue
         }
         _ => ()
@@ -1094,6 +1203,9 @@ fn apply_precompute_i64_const_zero_cmp_suffix(instr_bytes : Bytes) -> Bytes {
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -1105,11 +1217,15 @@ fn apply_precompute_i32_identity_ops(instr_bytes : Bytes) -> Bytes {
 
 ///|
 fn apply_precompute_i32_eqz_const(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x41', b'\x45') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() &&
@@ -1119,6 +1235,7 @@ fn apply_precompute_i32_eqz_const(instr_bytes : Bytes) -> Bytes {
         Some(value) => {
           append_i32_const_small(out, if value == 0 { 1U } else { 0U })
           i += 2
+          changed = true
           continue
         }
         None => ()
@@ -1126,6 +1243,9 @@ fn apply_precompute_i32_eqz_const(instr_bytes : Bytes) -> Bytes {
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -1147,11 +1267,15 @@ fn is_i32_bool_producer_opcode(opcode : UInt) -> Bool {
 
 ///|
 fn apply_precompute_i32_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_byte(instr_bytes, b'\x45') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 2 < spans.length() &&
@@ -1160,10 +1284,14 @@ fn apply_precompute_i32_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
       spans[i + 2].opcode == 0x45U {
       append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
       i += 3
+      changed = true
       continue
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -1177,11 +1305,15 @@ fn is_i32_const_bool_from_span(instr_bytes : Bytes, span : InstrSpan) -> Bool {
 
 ///|
 fn apply_precompute_local_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x45', b'\x20') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut known_local_bool : Map[UInt, Bool] = {}
   let mut i = 0
   while i < spans.length() {
@@ -1194,6 +1326,7 @@ fn apply_precompute_local_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
         if known_local_bool.get(local_index) is Some(true) {
           append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
           i += 3
+          changed = true
           continue
         }
       }
@@ -1231,16 +1364,23 @@ fn apply_precompute_local_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
     }
     i += 1
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_precompute_i32_double_eqz_br_if(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x45', b'\x0D') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 2 < spans.length() &&
@@ -1254,10 +1394,14 @@ fn apply_precompute_i32_double_eqz_br_if(instr_bytes : Bytes) -> Bytes {
         spans[i + 2].end_,
       )
       i += 3
+      changed = true
       continue
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -1290,11 +1434,15 @@ fn known_local_const_get(
 
 ///|
 fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x41', b'\x21') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut known_local_consts : Map[UInt, Int] = {}
   let mut known_local_unknown : Map[UInt, Bool] = {}
   for i in 0..<spans.length() {
@@ -1328,6 +1476,7 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
                   if is_local_const_propagation_barrier(span.opcode) {
                     known_local_consts = {}
                   }
+                  changed = true
                   continue
                 }
               }
@@ -1364,11 +1513,17 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
       known_local_unknown = {}
     }
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_precompute_local_dead_set_overwrite(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_byte(instr_bytes, b'\x21') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
@@ -1414,6 +1569,9 @@ fn apply_precompute_local_dead_set_overwrite(instr_bytes : Bytes) -> Bytes {
       pending_local_set_active = {}
     }
   }
+  if replacements.length() == 0 {
+    return instr_bytes
+  }
   let out : Array[Byte] = []
   for i in 0..<spans.length() {
     match replacements.get(i) {
@@ -1426,11 +1584,15 @@ fn apply_precompute_local_dead_set_overwrite(instr_bytes : Bytes) -> Bytes {
 
 ///|
 fn apply_precompute_br_if_const(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x41', b'\x0D') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() &&
@@ -1439,6 +1601,7 @@ fn apply_precompute_br_if_const(instr_bytes : Bytes) -> Bytes {
       match decode_i32_const_signed_from_span(instr_bytes, spans[i]) {
         Some(0) => {
           i += 2
+          changed = true
           continue
         }
         Some(_) =>
@@ -1448,6 +1611,7 @@ fn apply_precompute_br_if_const(instr_bytes : Bytes) -> Bytes {
               instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_array(),
             )
             i += 2
+            changed = true
             continue
           }
         None => ()
@@ -1456,16 +1620,23 @@ fn apply_precompute_br_if_const(instr_bytes : Bytes) -> Bytes {
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_precompute_br_if_zero_before_end_to_drop(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_byte(instr_bytes, b'\x0D') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let label_stack : Array[Int] = [1]
   for i in 0..<spans.length() {
     let span = spans[i]
@@ -1482,6 +1653,7 @@ fn apply_precompute_br_if_zero_before_end_to_drop(instr_bytes : Bytes) -> Bytes 
       if decode_span_u32_immediate(instr_bytes, span) is Some(0U) {
         out.push(0x1aU.to_byte())
         rewritten = true
+        changed = true
       }
     }
     if !rewritten {
@@ -1495,16 +1667,23 @@ fn apply_precompute_br_if_zero_before_end_to_drop(instr_bytes : Bytes) -> Bytes 
       _ => ()
     }
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x21', b'\x20') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() &&
@@ -1523,6 +1702,7 @@ fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
               spans[i].end_,
             )
             i += 2
+            changed = true
             continue
           }
         }
@@ -1531,16 +1711,23 @@ fn apply_simplify_local_set_get_to_tee(instr_bytes : Bytes) -> Bytes {
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_simplify_local_get_set_noop(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x20', b'\x21') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() &&
@@ -1552,6 +1739,7 @@ fn apply_simplify_local_get_set_noop(instr_bytes : Bytes) -> Bytes {
           is Some(set_index) {
           if get_index == set_index {
             i += 2
+            changed = true
             continue
           }
         }
@@ -1560,16 +1748,23 @@ fn apply_simplify_local_get_set_noop(instr_bytes : Bytes) -> Bytes {
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_simplify_local_get_tee_to_get(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x20', b'\x22') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() &&
@@ -1582,6 +1777,7 @@ fn apply_simplify_local_get_tee_to_get(instr_bytes : Bytes) -> Bytes {
           if get_index == tee_index {
             append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
             i += 2
+            changed = true
             continue
           }
         }
@@ -1590,16 +1786,23 @@ fn apply_simplify_local_get_tee_to_get(instr_bytes : Bytes) -> Bytes {
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_local_cse_get_set_get(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x20', b'\x21') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 2 < spans.length() &&
@@ -1618,6 +1821,7 @@ fn apply_local_cse_get_set_get(instr_bytes : Bytes) -> Bytes {
               instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_array(),
             )
             i += 3
+            changed = true
             continue
           }
         }
@@ -1626,16 +1830,23 @@ fn apply_local_cse_get_set_get(instr_bytes : Bytes) -> Bytes {
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
   }
+  if !changed {
+    return instr_bytes
+  }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_simplify_local_tee_drop_to_set(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x22', b'\x1A') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() &&
@@ -1645,21 +1856,29 @@ fn apply_simplify_local_tee_drop_to_set(instr_bytes : Bytes) -> Bytes {
       out.push(0x21U.to_byte())
       append_bytes_range(out, instr_bytes, spans[i].start + 1, spans[i].end_)
       i += 2
+      changed = true
       continue
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
 
 ///|
 fn apply_rse_local_tee_set_same(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x22', b'\x21') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if i + 1 < spans.length() &&
@@ -1678,6 +1897,7 @@ fn apply_rse_local_tee_set_same(instr_bytes : Bytes) -> Bytes {
               spans[i].end_,
             )
             i += 2
+            changed = true
             continue
           }
         }
@@ -1685,6 +1905,9 @@ fn apply_rse_local_tee_set_same(instr_bytes : Bytes) -> Bytes {
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -1888,12 +2111,16 @@ fn find_top_level_br_if0_in_block(
 
 ///|
 fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
+  if !bytes_contains_all2(instr_bytes, b'\x02', b'\x0D') {
+    return instr_bytes
+  }
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return instr_bytes
   }
   let matching_end = compute_matching_end_indices(spans)
   let out : Array[Byte] = []
+  let mut changed = false
   let mut i = 0
   while i < spans.length() {
     if is_empty_block_type_span(instr_bytes, spans[i]) {
@@ -1927,6 +2154,7 @@ fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
             }
             out.push(0x0bU.to_byte())
             i = end_index + 1
+            changed = true
             continue
           }
         }
@@ -1934,6 +2162,9 @@ fn apply_rewrite_block_br_if0_to_if(instr_bytes : Bytes) -> Bytes {
     }
     append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
     i += 1
+  }
+  if !changed {
+    return instr_bytes
   }
   Bytes::from_array(out[:])
 }
@@ -1998,7 +2229,8 @@ fn optimize_instruction_bytes(
       current_bytes = apply_local_cse_get_set_get(current_bytes)
       current_bytes = apply_simplify_local_tee_drop_to_set(current_bytes)
       current_bytes = apply_rse_local_tee_set_same(current_bytes)
-      if bytes_equal(before_local_simplify, current_bytes) {
+      if physical_equal(before_local_simplify, current_bytes) ||
+        bytes_equal(before_local_simplify, current_bytes) {
         break
       }
       local_simplify_round += 1
@@ -2103,13 +2335,8 @@ fn optimize_code_body_bytes(
   if optimized_instr.length() >= instr_bytes.length() {
     return body_bytes
   }
-  let out : Array[Byte] = []
-  for i in 0..<prefix_end {
-    out.push(body_bytes[i])
-  }
-  for i in 0..<optimized_instr.length() {
-    out.push(optimized_instr[i])
-  }
+  let out : Array[Byte] = body_bytes[0:prefix_end].to_array()
+  out.append(optimized_instr[:].to_array()[:])
   Bytes::from_array(out[:])
 }
 
@@ -2138,9 +2365,7 @@ fn optimize_code_section_payload_raise(
     out.append(
       encode_u32_leb128(optimized_body.length().reinterpret_as_uint())[:],
     )
-    for j in 0..<optimized_body.length() {
-      out.push(optimized_body[j])
-    }
+    out.append(optimized_body[:].to_array()[:])
     parser.set_pos(end_)
   }
   Bytes::from_array(out[:])
@@ -2327,8 +2552,7 @@ fn apply_coalesce_locals_raise(
   let rewritten_code_payload = encode_code_section_payload_from_bodies(
     rewritten_code_bodies,
   )
-  let out : Array[Byte] = []
-  append_bytes_range(out, bytes, 0, 8)
+  let out : Array[Byte] = bytes[0:8].to_array()
   for section in sections {
     if section.section_id == 10U {
       append_encoded_section(out, 10U, rewritten_code_payload)

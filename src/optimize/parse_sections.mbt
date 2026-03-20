@@ -832,10 +832,8 @@ pub fn append_encoded_section(
 ) -> Unit {
   out
   ..push(section_id.to_byte())
-  .append(encode_u32_leb128(payload.length().reinterpret_as_uint())[:])
-  for i in 0..<payload.length() {
-    out.push(payload[i])
-  }
+  ..append(encode_u32_leb128(payload.length().reinterpret_as_uint())[:])
+  .append(payload[:].to_array()[:])
 }
 
 ///|

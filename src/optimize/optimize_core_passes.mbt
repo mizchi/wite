@@ -220,10 +220,7 @@ fn optimize_for_size_round_raise(
   config : OptimizeConfig,
 ) -> OptimizeRoundResult raise WiteError {
   let sections = parse_core_sections_raise(bytes)
-  let stage1_out : Array[Byte] = []
-  for i in 0..<8 {
-    stage1_out.push(bytes[i])
-  }
+  let stage1_out : Array[Byte] = bytes[0:8].to_array()
   let removed_sections : Array[String] = []
   for section in sections {
     if section.section_id == 0U && !keep_custom_section(section, config) {
@@ -233,9 +230,9 @@ fn optimize_for_size_round_raise(
       let optimized_payload = optimize_code_section_payload(payload, config)
       append_encoded_section(stage1_out, section.section_id, optimized_payload)
     } else {
-      for i in section.section_start..<section.section_end {
-        stage1_out.push(bytes[i])
-      }
+      stage1_out.append(
+        bytes[section.section_start:section.section_end].to_array()[:],
+      )
     }
   }
   let mut optimized_bytes = Bytes::from_array(stage1_out[:])
