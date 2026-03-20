@@ -29,6 +29,55 @@
 3. [ ] Top3 P2 `signature-refining/cfp` 拡張
 目的: DCE callgraph 精度を上げる。完了条件: `bench/kpi/directize_chain.tsv` の `dce_gain_bytes` が現状 (`2298`) より増加。
 
+## Performance Improvements (2026-03-20)
+
+### 完了済み
+
+- [x] peephole: `to_array()` 中間コピー削減 → 効果なし（push ループより `to_array` + `append` の方が速い）
+- [x] peephole: dirty flag + opcode pre-filter → spans パース前に不要パスをスキップ
+- [x] peephole: **18 stateless パスを unified single-parse に統合** → optimize -O1: 1.3s → 290ms (-78%)
+- [x] round: diminishing-returns 早期終了 → -Oz/O3 で不要ラウンドをスキップ
+
+### 未着手
+
+- [ ] **sections 使い回し** (推定 -30~40%, Medium Effort)
+  `optimize_for_size_round_raise` 内で各パスが独立に `parse_core_sections_raise(bytes)` を呼んでいる。
+  1ラウンドあたり 15+ 回のフルパース → sections を1回パースして各パスに渡す。
+  パスのシグネチャ変更: `(Bytes) → Result` から `(Bytes, Array[RawSection]) → Result` に。
+
+- [ ] **DCE cluster 統合** (推定 -10~15%, Medium Effort)
+  directize, CFP, CFP-const, signature refine, DCE の5パスを1関数にまとめて
+  sections/code_bodies を共有。
+
+- [ ] **各モジュールパスに dirty flag** (推定 -5~10%, High Effort)
+  `apply_type_refining` 等が変更なしでも新 `Bytes` を返す。
+  dirty flag で元の参照を返せば `physical_equal` で O(1) 変更検出可能。
+
+- [ ] **旧 peephole パス関数の削除** (コードサイズ削減, Low Effort)
+  `apply_merged_stateless_peephole` 導入後、個別の `apply_precompute_*` は未使用。
+
+## Architecture Improvements
+
+- [ ] Library API facade 拡充: `src/top.mbt` に bundle/config の pure API を追加
+- [ ] deps パッケージの I/O 抽象化: コールバック/trait で I/O 注入可能に
+
+## Feature Backlog
+
+- [ ] `wite build --chunk=NAME`: 特定 chunk のみリビルド
+- [ ] `wite build --all-envs`: 全 environment 一括ビルド
+- [ ] chunk 間依存グラフ (`depends_on` フィールド)
+- [ ] dev mode chunk 単位 watch
+- [ ] wasm-gc chunk 分割の制約ドキュメント（CM boundary での型制約）
+
+## Testing
+
+カバレッジ: 69.3% (8,981/12,967)
+
+改善ターゲット:
+- [ ] `deps/` (16%) — mock 化が必要
+- [ ] `plugin-api/` (0%) — JS export 専用テスト
+- [ ] `cmd/wite/dev.mbt` (20%) — async dev server E2E 拡充
+
 ## Completed Specs
 
 - Analyze 拡張方針 / Recent Progress の完了項目は `spec/completed-2026-02.md` へ移動済み
