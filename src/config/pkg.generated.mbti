@@ -6,9 +6,13 @@ pub fn binary_kind_name(BinaryKind) -> String
 
 pub fn build_auto_sync_deps_command_args(String) -> Array[String]
 
+pub fn chunk_names(WiteConfigFile) -> Array[String]
+
 pub fn config_input_entries(ConfigInput) -> Array[(String, String)]
 
 pub fn config_input_single_path(ConfigInput) -> String?
+
+pub fn empty_chunk_config() -> ChunkConfig
 
 pub fn empty_environment_config() -> EnvironmentConfig
 
@@ -23,6 +27,8 @@ pub fn is_ts_config(String) -> Bool
 pub fn merge_command_flags(Array[String], Array[String]) -> Array[String]
 
 pub fn parse_binary_kind(String) -> BinaryKind?
+
+pub fn parse_chunk_config(Json, String) -> Result[ChunkConfig, String]
 
 pub fn parse_config_input(Json) -> Result[ConfigInput, String]
 
@@ -55,6 +61,13 @@ pub enum BinaryKind {
   Auto
   Core
   Component
+}
+
+pub struct ChunkConfig {
+  build : String?
+  output : String
+  wit : String?
+  world : String?
 }
 
 pub enum ConfigInput {
@@ -145,6 +158,7 @@ pub struct WiteConfigFile {
   output : ConfigOutput
   server : ServerConfig?
   environments : Map[String, EnvironmentConfig]
+  chunks : Map[String, ChunkConfig]
 }
 
 // Type aliases

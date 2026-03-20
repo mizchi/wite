@@ -1086,3 +1086,115 @@ test "empty_environment_config has safe defaults" {
   assert_false(env.closed_world)
   assert_eq(env.closed_world_root_exports, [])
 }
+
+// ---- chunk tests ----
+
+///|
+test "parse_wite_config_text with chunks" {
+  let text =
+    #|{
+    #|  "chunks": {
+    #|    "guest": {
+    #|      "build": "moon build --target wasm -p guest",
+    #|      "output": "build/guest.core.wasm",
+    #|      "wit": "wit/guest.wit"
+    #|    },
+    #|    "auth": {
+    #|      "build": "cargo component build",
+    #|      "output": "target/auth.wasm"
+    #|    }
+    #|  },
+    #|  "input": "app.wac"
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let names = @config.chunk_names(config)
+  assert_eq(names.length(), 2)
+  assert_true(names.contains("guest"))
+  assert_true(names.contains("auth"))
+  let guest = config.chunks["guest"]
+  assert_eq(guest.build, Some("moon build --target wasm -p guest"))
+  assert_eq(guest.output, "build/guest.core.wasm")
+  assert_eq(guest.wit, Some("wit/guest.wit"))
+  let auth = config.chunks["auth"]
+  assert_eq(auth.output, "target/auth.wasm")
+  assert_true(auth.wit is None)
+}
+
+///|
+test "parse_wite_config_text chunk string shorthand" {
+  let text =
+    #|{
+    #|  "chunks": {
+    #|    "lib": "deps/lib.wasm"
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let lib = config.chunks["lib"]
+  assert_eq(lib.output, "deps/lib.wasm")
+  assert_true(lib.build is None)
+  assert_true(lib.wit is None)
+}
+
+///|
+test "parse_wite_config_text chunk with world" {
+  let text =
+    #|{
+    #|  "chunks": {
+    #|    "api": {
+    #|      "output": "api.wasm",
+    #|      "wit": "wit/api.wit",
+    #|      "world": "api-world"
+    #|    }
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let api = config.chunks["api"]
+  assert_eq(api.world, Some("api-world"))
+}
+
+///|
+test "parse_wite_config_text chunk missing output returns Err" {
+  let text =
+    #|{
+    #|  "chunks": {
+    #|    "bad": { "build": "make" }
+    #|  }
+    #|}
+  let result = @config.parse_wite_config_text(text)
+  assert_true(result is Err(_))
+}
+
+///|
+test "parse_wite_config_text no chunks" {
+  let text =
+    #|{ "input": "app.wac" }
+  let config = @config.parse_wite_config_text(text).unwrap()
+  assert_eq(@config.chunk_names(config).length(), 0)
+}
+
+///|
+test "empty_chunk_config has safe defaults" {
+  let chunk = @config.empty_chunk_config()
+  assert_true(chunk.build is None)
+  assert_eq(chunk.output, "")
+  assert_true(chunk.wit is None)
+  assert_true(chunk.world is None)
+}
+
+///|
+test "parse_wite_config_text chunks combined with environments" {
+  let text =
+    #|{
+    #|  "chunks": {
+    #|    "guest": { "output": "guest.wasm", "build": "moon build" }
+    #|  },
+    #|  "environments": {
+    #|    "dev": { "optimize": "-O0" },
+    #|    "release": { "optimize": "-Oz" }
+    #|  },
+    #|  "input": "app.wac"
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  assert_eq(@config.chunk_names(config).length(), 1)
+  assert_eq(@config.environment_names(config).length(), 2)
+}

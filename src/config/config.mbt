@@ -219,6 +219,76 @@ pub struct ConfigOutput {
 }
 
 ///|
+pub struct ChunkConfig {
+  build : String?
+  output : String
+  wit : String?
+  world : String?
+}
+
+///|
+pub fn empty_chunk_config() -> ChunkConfig {
+  { build: None, output: "", wit: None, world: None }
+}
+
+///|
+pub fn parse_chunk_config(
+  json_value : Json,
+  label : String,
+) -> Result[ChunkConfig, String] {
+  match json_value {
+    Object(obj) => {
+      let mut build : String? = None
+      let mut output = ""
+      let mut wit : String? = None
+      let mut world : String? = None
+      match obj.get("build") {
+        Some(String(cmd)) => build = Some(cmd)
+        Some(_) => return Err(label + ".build must be string")
+        None => ()
+      }
+      match obj.get("output") {
+        Some(String(path)) => output = path
+        Some(_) => return Err(label + ".output must be string")
+        None => return Err(label + ".output is required")
+      }
+      match obj.get("wit") {
+        Some(String(path)) => wit = Some(path)
+        Some(_) => return Err(label + ".wit must be string")
+        None => ()
+      }
+      match obj.get("world") {
+        Some(String(name)) => world = Some(name)
+        Some(_) => return Err(label + ".world must be string")
+        None => ()
+      }
+      Ok({ build, output, wit, world })
+    }
+    String(path) => Ok({ build: None, output: path, wit: None, world: None })
+    _ => Err(label + " must be object or string")
+  }
+}
+
+///|
+fn parse_chunks(
+  json_value : Json,
+) -> Result[Map[String, ChunkConfig], String] {
+  match json_value {
+    Object(obj) => {
+      let chunks : Map[String, ChunkConfig] = {}
+      for entry in obj {
+        match parse_chunk_config(entry.1, "chunks." + entry.0) {
+          Ok(chunk) => chunks[entry.0] = chunk
+          Err(msg) => return Err(msg)
+        }
+      }
+      Ok(chunks)
+    }
+    _ => Err("chunks must be object")
+  }
+}
+
+///|
 pub struct EnvironmentConfig {
   input : ConfigInput
   output : ConfigOutput
@@ -256,6 +326,7 @@ pub struct WiteConfigFile {
   output : ConfigOutput
   server : ServerConfig?
   environments : Map[String, EnvironmentConfig]
+  chunks : Map[String, ChunkConfig]
 }
 
 ///|
@@ -271,7 +342,15 @@ pub fn empty_wite_config_file() -> WiteConfigFile {
     output: { dir: "dist" },
     server: None,
     environments: {},
+    chunks: {},
   }
+}
+
+///|
+pub fn chunk_names(config : WiteConfigFile) -> Array[String] {
+  let names : Array[String] = []
+  config.chunks.each((name, _) => names.push(name))
+  names
 }
 
 ///|
@@ -559,6 +638,13 @@ pub fn parse_wite_config_json(
           Err(msg) => return Err(msg)
         }
       }
+      let mut chunks : Map[String, ChunkConfig] = {}
+      if object.get("chunks") is Some(value) {
+        match parse_chunks(value) {
+          Ok(parsed) => chunks = parsed
+          Err(msg) => return Err(msg)
+        }
+      }
       Ok({
         build_flags,
         analyze_flags,
@@ -570,6 +656,7 @@ pub fn parse_wite_config_json(
         output,
         server,
         environments,
+        chunks,
       })
     }
     _ => Err("config root must be object")
