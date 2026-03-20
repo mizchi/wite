@@ -6,7 +6,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:server": "vite build --ssr src/server.ts",
-    "build:worker": "vite build --ssr src/worker.ts --outDir dist",
+    "build:worker": "npx wrangler deploy --dry-run",
     "dev:worker": "npx wrangler dev"
   },
   "devDependencies": {

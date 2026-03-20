@@ -1,6 +1,9 @@
 // Cloudflare Workers entry point
-// Uses the same wasm import as client/server
-import { add } from "./add.wasm";
+// Import wasm directly — wrangler handles the wasm binding
+import addWasm from "./add.wasm";
+
+const instance = await WebAssembly.instantiate(addWasm, {});
+const add = instance.exports.add as (a: number, b: number) => number;
 
 export default {
   async fetch(request: Request): Promise<Response> {

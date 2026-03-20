@@ -1,11 +1,4 @@
 name = "wite-env-example"
-main = "dist/worker.js"
+main = "src/worker.ts"
 compatibility_date = "2024-12-01"
-
-[build]
-command = "pnpm build:worker"
-watch_dir = "src"
-
-# Wasm modules referenced via URL are served as static assets
-[site]
-bucket = "./dist/assets"
+compatibility_flags = ["nodejs_compat"]

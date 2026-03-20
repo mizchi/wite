@@ -5,18 +5,12 @@ export default defineConfig({
   plugins: [
     wite({
       dts: true,
-      // Per-environment overrides (Vite 6+ Environment API)
       environments: {
         client: {
-          // Browser environment
+          runtime: "browser",
         },
-        server: {
-          // Server-side Node.js environment
-          dts: false,
-        },
-        // Cloudflare Workers (workerd) environment
-        // Activated when using @cloudflare/vite-plugin or --ssr with workerd
-        workerd: {
+        ssr: {
+          runtime: "node",
           dts: false,
         },
       },
@@ -24,5 +18,9 @@ export default defineConfig({
   ],
   build: {
     target: "esnext",
+  },
+  ssr: {
+    // Workers use direct wasm imports — don't process through the plugin
+    external: [/\.wasm$/],
   },
 });
