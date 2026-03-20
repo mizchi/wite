@@ -443,11 +443,16 @@ if (import.meta.hot) {
   });
 }`;
 
+  // Dev mode: use `let` for HMR re-assignment; build mode: use `const`
+  const exportCode = ctx.isBuild
+    ? ctx.exports
+    : ctx.exports.replace(/export const /g, "export let ");
+
   return `import { __witeGetInstance } from ${JSON.stringify(RUNTIME_MODULE_ID)};
 ${ctx.shimCode}
 ${wasmUrlCode}
 const { instance } = await __witeGetInstance(wasmUrl, ${ctx.importObject});
-${ctx.exports.replace(/export const /g, "export let ")}
+${exportCode}
 ${hmrCode}
 `;
 }
