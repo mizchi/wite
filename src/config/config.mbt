@@ -287,15 +287,48 @@ fn parse_chunks(json_value : Json) -> Result[Map[String, ChunkConfig], String] {
 }
 
 ///|
+pub enum RuntimeTarget {
+  Browser
+  Wasmtime
+  Workerd
+  Wagi
+  Custom(String)
+}
+
+///|
+pub fn parse_runtime_target(name : String) -> RuntimeTarget {
+  match name.to_lower() {
+    "browser" => RuntimeTarget::Browser
+    "wasmtime" => RuntimeTarget::Wasmtime
+    "workerd" => RuntimeTarget::Workerd
+    "wagi" => RuntimeTarget::Wagi
+    _ => RuntimeTarget::Custom(name)
+  }
+}
+
+///|
+pub fn runtime_target_name(target : RuntimeTarget) -> String {
+  match target {
+    RuntimeTarget::Browser => "browser"
+    RuntimeTarget::Wasmtime => "wasmtime"
+    RuntimeTarget::Workerd => "workerd"
+    RuntimeTarget::Wagi => "wagi"
+    RuntimeTarget::Custom(name) => name
+  }
+}
+
+///|
 pub struct EnvironmentConfig {
   input : ConfigInput
   output : ConfigOutput
   optimize : String?
   kind : BinaryKind
   server : ServerConfig?
+  runtime : RuntimeTarget
   strip : Bool
   closed_world : Bool
   closed_world_root_exports : Array[String]
+  post_commands : Array[String]
 }
 
 ///|
@@ -306,10 +339,27 @@ pub fn empty_environment_config() -> EnvironmentConfig {
     optimize: None,
     kind: BinaryKind::Auto,
     server: None,
+    runtime: RuntimeTarget::Browser,
     strip: false,
     closed_world: false,
     closed_world_root_exports: [],
+    post_commands: [],
   }
+}
+
+///|
+pub struct EnvironmentDef {
+  name : String
+  input : ConfigInput
+  output : ConfigOutput
+  optimize : String?
+  kind : BinaryKind
+  server : ServerConfig?
+  runtime : RuntimeTarget
+  strip : Bool
+  closed_world : Bool
+  closed_world_root_exports : Array[String]
+  post_commands : Array[String]
 }
 
 ///|
@@ -535,15 +585,30 @@ pub fn parse_environment_config(
           Err(msg) => return Err(msg)
         }
       }
+      let mut runtime = RuntimeTarget::Browser
+      match obj.get("runtime") {
+        Some(String(name)) => runtime = parse_runtime_target(name)
+        Some(_) => return Err(label + ".runtime must be string")
+        None => ()
+      }
+      let post_commands : Array[String] = []
+      if obj.get("post") is Some(value) {
+        match parse_json_string_array(value, label + ".post") {
+          Ok(cmds) => post_commands.append(cmds[:])
+          Err(msg) => return Err(msg)
+        }
+      }
       Ok({
         input,
         output,
         optimize,
         kind,
         server,
+        runtime,
         strip,
         closed_world,
         closed_world_root_exports,
+        post_commands,
       })
     }
     _ => Err(label + " must be object")
@@ -675,6 +740,7 @@ pub struct ConfigSelectionFlags {
   explicit_config_path : Bool
   use_config : Bool
   env_name : String?
+  all_envs : Bool
   remaining_flags : Array[String]
 }
 
@@ -686,6 +752,7 @@ pub fn parse_config_selection_flags(
   let mut explicit_config_path = false
   let mut use_config = true
   let mut env_name : String? = None
+  let mut all_envs = false
   let remaining_flags : Array[String] = []
   let mut i = 0
   while i < flags.length() {
@@ -719,6 +786,11 @@ pub fn parse_config_selection_flags(
       i += 1
       continue
     }
+    if flag == "--all-envs" {
+      all_envs = true
+      i += 1
+      continue
+    }
     if flag == "--env" {
       if i + 1 >= flags.length() {
         return Err("missing environment name after --env")
@@ -747,6 +819,7 @@ pub fn parse_config_selection_flags(
     explicit_config_path,
     use_config,
     env_name,
+    all_envs,
     remaining_flags,
   })
 }
@@ -783,21 +856,21 @@ pub fn resolve_environment(
 ) -> Result[EnvironmentConfig, String] {
   match env_name {
     None =>
-      // No --env flag: use top-level config as default environment
       Ok({
         input: config.input,
         output: config.output,
         optimize: None,
         kind: config.build_kind,
         server: config.server,
+        runtime: RuntimeTarget::Browser,
         strip: false,
         closed_world: false,
         closed_world_root_exports: [],
+        post_commands: [],
       })
     Some(name) =>
       match config.environments.get(name) {
         Some(env) => {
-          // Merge: environment overrides top-level, falling back to top-level defaults
           let input = match env.input {
             ConfigInput::None => config.input
             _ => env.input
@@ -821,14 +894,72 @@ pub fn resolve_environment(
             optimize: env.optimize,
             kind,
             server,
+            runtime: env.runtime,
             strip: env.strip,
             closed_world: env.closed_world,
             closed_world_root_exports: env.closed_world_root_exports,
+            post_commands: env.post_commands,
           })
         }
         None => Err("environment not found: " + name)
       }
   }
+}
+
+///|
+pub fn resolve_environment_def(
+  config : WiteConfigFile,
+  name : String,
+) -> Result[EnvironmentDef, String] {
+  match resolve_environment(config, Some(name)) {
+    Ok(env) =>
+      Ok({
+        name,
+        input: env.input,
+        output: env.output,
+        optimize: env.optimize,
+        kind: env.kind,
+        server: env.server,
+        runtime: env.runtime,
+        strip: env.strip,
+        closed_world: env.closed_world,
+        closed_world_root_exports: env.closed_world_root_exports,
+        post_commands: env.post_commands,
+      })
+    Err(msg) => Err(msg)
+  }
+}
+
+///|
+pub fn resolve_all_environments(
+  config : WiteConfigFile,
+) -> Array[EnvironmentDef] {
+  let envs : Array[EnvironmentDef] = []
+  let names = environment_names(config)
+  if names.length() == 0 {
+    // No environments defined: create a default one
+    envs.push({
+      name: "default",
+      input: config.input,
+      output: config.output,
+      optimize: None,
+      kind: config.build_kind,
+      server: config.server,
+      runtime: RuntimeTarget::Browser,
+      strip: false,
+      closed_world: false,
+      closed_world_root_exports: [],
+      post_commands: [],
+    })
+    return envs
+  }
+  for name in names {
+    match resolve_environment_def(config, name) {
+      Ok(def) => envs.push(def)
+      Err(_) => () // skip invalid environments
+    }
+  }
+  envs
 }
 
 ///|

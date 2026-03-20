@@ -106,4 +106,10 @@ pub using @config {
   type ChunkConfig,
   type ServerConfig,
   type ServerExecutor,
+  type EnvironmentDef,
+  type RuntimeTarget,
+  resolve_all_environments,
+  resolve_environment_def,
+  parse_runtime_target,
+  runtime_target_name,
 }

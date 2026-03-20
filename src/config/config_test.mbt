@@ -1198,3 +1198,125 @@ test "parse_wite_config_text chunks combined with environments" {
   assert_eq(@config.chunk_names(config).length(), 1)
   assert_eq(@config.environment_names(config).length(), 2)
 }
+
+// ---- RuntimeTarget tests ----
+
+///|
+test "parse_runtime_target known targets" {
+  assert_true(@config.parse_runtime_target("browser") is @config.RuntimeTarget::Browser)
+  assert_true(@config.parse_runtime_target("wasmtime") is @config.RuntimeTarget::Wasmtime)
+  assert_true(@config.parse_runtime_target("workerd") is @config.RuntimeTarget::Workerd)
+  assert_true(@config.parse_runtime_target("wagi") is @config.RuntimeTarget::Wagi)
+  assert_true(@config.parse_runtime_target("Browser") is @config.RuntimeTarget::Browser)
+}
+
+///|
+test "parse_runtime_target custom" {
+  assert_true(@config.parse_runtime_target("deno") is @config.RuntimeTarget::Custom(_))
+}
+
+///|
+test "runtime_target_name roundtrip" {
+  assert_eq(
+    @config.runtime_target_name(@config.parse_runtime_target("browser")),
+    "browser",
+  )
+  assert_eq(
+    @config.runtime_target_name(@config.parse_runtime_target("wasmtime")),
+    "wasmtime",
+  )
+  assert_eq(
+    @config.runtime_target_name(@config.parse_runtime_target("workerd")),
+    "workerd",
+  )
+  assert_eq(
+    @config.runtime_target_name(@config.parse_runtime_target("wagi")),
+    "wagi",
+  )
+}
+
+// ---- environment with runtime/post ----
+
+///|
+test "parse_environment_config with runtime and post" {
+  let text =
+    #|{
+    #|  "environments": {
+    #|    "edge": {
+    #|      "output": "dist/edge",
+    #|      "runtime": "workerd",
+    #|      "post": ["jco transpile"]
+    #|    }
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let edge = config.environments["edge"]
+  assert_true(edge.runtime is @config.RuntimeTarget::Workerd)
+  assert_eq(edge.post_commands, ["jco transpile"])
+}
+
+// ---- resolve_all_environments ----
+
+///|
+test "resolve_all_environments with no envs returns default" {
+  let text =
+    #|{ "input": "app.wac" }
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let envs = @config.resolve_all_environments(config)
+  assert_eq(envs.length(), 1)
+  assert_eq(envs[0].name, "default")
+}
+
+///|
+test "resolve_all_environments resolves all named envs" {
+  let text =
+    #|{
+    #|  "input": "app.wac",
+    #|  "environments": {
+    #|    "browser": { "output": "dist/browser", "optimize": "-Os", "runtime": "browser" },
+    #|    "edge": { "output": "dist/edge", "optimize": "-O1", "runtime": "workerd" }
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let envs = @config.resolve_all_environments(config)
+  assert_eq(envs.length(), 2)
+  let names = envs.map(fn(e) { e.name })
+  assert_true(names.contains("browser"))
+  assert_true(names.contains("edge"))
+}
+
+///|
+test "resolve_environment_def returns EnvironmentDef" {
+  let text =
+    #|{
+    #|  "input": "app.wac",
+    #|  "environments": {
+    #|    "prod": { "output": "dist/prod", "optimize": "-Oz", "runtime": "wasmtime" }
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let def = @config.resolve_environment_def(config, "prod").unwrap()
+  assert_eq(def.name, "prod")
+  assert_eq(def.output.dir, "dist/prod")
+  assert_eq(def.optimize, Some("-Oz"))
+  assert_true(def.runtime is @config.RuntimeTarget::Wasmtime)
+}
+
+// ---- --all-envs flag ----
+
+///|
+test "parse_config_selection_flags --all-envs" {
+  let result = @config.parse_config_selection_flags(
+    ["--all-envs", "-Oz"],
+  ).unwrap()
+  assert_true(result.all_envs)
+  assert_eq(result.remaining_flags, ["-Oz"])
+}
+
+///|
+test "parse_config_selection_flags no --all-envs" {
+  let result = @config.parse_config_selection_flags(
+    ["-Oz"],
+  ).unwrap()
+  assert_false(result.all_envs)
+}

@@ -575,6 +575,58 @@ async fn run_build(args : Array[String]) -> Unit {
   let config_selection = parse_config_selection_flags_or_exit(raw_flags)
   let config_file = resolve_config_or_default(config_selection)
   let config_dir = path_dirname(config_selection.config_path)
+  // --all-envs: build all configured environments
+  if config_selection.all_envs {
+    let env_defs = @wite_config.resolve_all_environments(config_file)
+    // Build chunks first (shared across environments)
+    build_chunks(config_file, config_dir)
+    for env_def in env_defs {
+      println("=== environment: " + env_def.name + " ===")
+      let env_flags = match env_def.optimize {
+        Some(level) => [level]
+        None => []
+      }
+      let merged = @wite_config.merge_command_flags(
+        config_file.build_flags,
+        @wite_config.merge_command_flags(
+          env_flags,
+          config_selection.remaining_flags,
+        ),
+      )
+      let env_kind = from_config_binary_kind(env_def.kind)
+      let parsed_flags = parse_build_flags(merged, env_kind)
+      let input_path = match
+        @wite_config.config_input_single_path(env_def.input) {
+        Some(p) => resolve_path_from_config_dir(config_dir, p)
+        None =>
+          match default_input {
+            Some(_) => resolved.input_path
+            None => {
+              println(
+                "environment '" + env_def.name + "' has no input",
+              )
+              continue
+            }
+          }
+      }
+      let output_dir = resolve_path_from_config_dir(
+        config_dir,
+        env_def.output.dir,
+      )
+      let basename = input_path
+        |> path_basename
+        |> derive_build_output_path
+      let out = output_dir + "/" + basename
+      materialize_wac_deps_if_needed(
+        config_selection.config_path,
+        config_selection.use_config,
+        input_path,
+        parsed_flags.best_effort,
+      )
+      build_single_entry(input_path, out, parsed_flags)
+    }
+    return
+  }
   // Resolve environment if --env is specified
   let resolved_env = match
     @wite_config.resolve_environment(config_file, config_selection.env_name) {
