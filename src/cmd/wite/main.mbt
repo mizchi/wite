@@ -17,6 +17,7 @@ async fn main {
     "diff" => run_diff_command(args)
     "optimize" => run_optimize(args)
     "treeshake" => run_treeshake(args)
+    "dump" => run_dump(args)
     "dev" => run_dev_command(args)
     "test" => run_test_command(args)
     "doc" => run_doc_command(args)

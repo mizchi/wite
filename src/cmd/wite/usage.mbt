@@ -17,6 +17,7 @@ fn print_usage() -> Unit {
   println(
     "  treeshake <input.wasm> --exports=a,b,c [-o <output.wasm>] [-O1|-Os|-Oz]",
   )
+  println("  dump <file.wasm> [--headers] [--details] [--all]")
   println(
     "  dev [dir] [--port=<n>] [--target=wasm-gc|wasm|js] [--build-cmd=<cmd>] [--watch=<path>] [--server[=wagi|workerd]]",
   )

@@ -4,12 +4,12 @@
 fn protected_exports() -> Array[String] {
   [
     "memory", // linear memory
-    "__indirect_function_table", // function table for call_indirect
-    "__stack_pointer", // stack pointer global
-    "__wasm_call_ctors", // static constructors (C/C++/Rust)
-    "_start", // WASI command entry point
-    "_initialize", // WASI reactor initialization
-    "cabi_realloc", // Component Model canonical ABI allocator
+     "__indirect_function_table", // function table for call_indirect
+     "__stack_pointer", // stack pointer global
+     "__wasm_call_ctors", // static constructors (C/C++/Rust)
+     "_start", // WASI command entry point
+     "_initialize", // WASI reactor initialization
+     "cabi_realloc", // Component Model canonical ABI allocator
   ]
 }
 
@@ -34,7 +34,7 @@ fn collect_wasm_export_names(bytes : Bytes) -> Array[String] {
   // Get all export names (functions + memory + table + global)
   // Use the wasm breakdown which includes all export types
   match @wite_analyze.analyze_wasm_breakdown(bytes, top_limit=0U) {
-    Ok(report) => {
+    Ok(report) =>
       for f in report.top_functions {
         for name in f.export_names {
           if !names.contains(name) {
@@ -42,14 +42,12 @@ fn collect_wasm_export_names(bytes : Bytes) -> Array[String] {
           }
         }
       }
-    }
     Err(_) => ()
   }
   // Also add well-known non-function exports by scanning raw export section
   // (memory, table, global exports aren't in top_functions)
   let well_known_non_func = [
-    "memory", "__indirect_function_table", "__stack_pointer", "__data_end",
-    "__heap_base",
+    "memory", "__indirect_function_table", "__stack_pointer", "__data_end", "__heap_base",
   ]
   match @wite_analyze.analyze_section_sizes(bytes) {
     Ok(_) =>
@@ -70,12 +68,18 @@ fn run_treeshake(args : Array[String]) -> Unit {
     println("usage: wite treeshake <input.wasm> [options]")
     println("")
     println("options:")
-    println("  -o <output.wasm>       Output file (default: <input>.treeshake.wasm)")
+    println(
+      "  -o <output.wasm>       Output file (default: <input>.treeshake.wasm)",
+    )
     println("  --exports=a,b,c        Export names to keep (comma-separated)")
-    println("  --no-protect           Disable automatic protection of well-known exports")
+    println(
+      "  --no-protect           Disable automatic protection of well-known exports",
+    )
     println("  --kind=auto|core|component")
     println("  -Oz|-Os|-O1|-O2|-O3   Optimization level (default: -O1)")
-    println("  --verbose              Show no-change reasons and protected exports")
+    println(
+      "  --verbose              Show no-change reasons and protected exports",
+    )
     @sys.exit(1)
   }
   let input_path = args[2]
@@ -159,16 +163,15 @@ fn run_treeshake(args : Array[String]) -> Unit {
       }
     }
     if auto_protected.length() > 0 && verbose {
-      println(
-        "auto-protected exports: " + auto_protected.join(", "),
-      )
+      println("auto-protected exports: " + auto_protected.join(", "))
     }
     merged
   }
   // Build config: closed-world with explicit root exports
-  let base_config = match @wite_core.optimize_config_from_opt_level(
-    normalize_opt_level_token(opt_level),
-  ) {
+  let base_config = match
+    @wite_core.optimize_config_from_opt_level(
+      normalize_opt_level_token(opt_level),
+    ) {
     Some(c) => c
     None => {
       println("invalid optimization level: " + opt_level)
