@@ -6,6 +6,7 @@ import { parseWasm } from "./wasm-parser.js";
 import { generateJsWrapper, generateDts } from "./codegen.js";
 import { lowerComponent } from "./component.js";
 import { RUNTIME_MODULE_ID, RUNTIME_MODULE_CODE } from "./runtime.js";
+import { jcoTranspile, isJcoAvailable } from "./jco.js";
 
 /**
  * Runtime target for wasm loading strategy.
@@ -57,6 +58,15 @@ export interface WitePluginOptions {
    * Per-environment overrides, keyed by Vite environment name.
    */
   environments?: Record<string, WiteEnvironmentOptions>;
+
+  /**
+   * Enable jco transpile for Component Model wasm.
+   * When true (or "auto"), component .wasm files are automatically
+   * transpiled to ESM using jco, with full string/record marshaling.
+   * Requires `jco` to be installed (npx jco).
+   * @default "auto" (use jco if available)
+   */
+  jco?: boolean | "auto";
 }
 
 const VIRTUAL_PREFIX = "\0wite:";
@@ -112,9 +122,12 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
     dts = true,
     runtime: defaultRuntime = "browser",
     environments: envOptions,
+    jco: jcoOption = "auto",
   } = options;
   let config: ResolvedConfig;
   let isBuild = false;
+  const useJco =
+    jcoOption === true || (jcoOption === "auto" && isJcoAvailable());
 
   const contentHashMap = new Map<string, string>();
 
@@ -198,8 +211,17 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
         return;
       }
 
-      // Handle component model: lower to core module
+      // Handle component model
       if (metadata.isComponent) {
+        // Try jco transpile first (full CM support with string marshaling)
+        if (useJco && runtime === "browser") {
+          const result = jcoTranspile(wasmPath);
+          if (result) {
+            return result.js;
+          }
+        }
+
+        // Fallback: extract first core module
         const lowered = lowerComponent(bytes);
         if (!lowered) {
           this.error(
@@ -270,6 +292,24 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
     configureServer(server) {
       server.watcher.on("change", (file) => {
         if (file.endsWith(".wasm") || file.endsWith(".wac")) {
+          // Auto-regenerate .d.ts on wasm change
+          if (dts && file.endsWith(".wasm")) {
+            try {
+              const bytes = new Uint8Array(readFileSync(file));
+              let metadata = parseWasm(bytes);
+              if (metadata.isComponent) {
+                const lowered = lowerComponent(bytes);
+                if (lowered) metadata = parseWasm(lowered);
+              }
+              if (!metadata.error) {
+                const dtsContent = generateDts(metadata);
+                writeFileSync(file + ".d.ts", dtsContent);
+              }
+            } catch {
+              // Non-fatal
+            }
+          }
+
           for (const [hash, cachedId] of contentHashMap) {
             if (cachedId === VIRTUAL_PREFIX + file) {
               contentHashMap.delete(hash);
@@ -295,7 +335,15 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
             server.moduleGraph.invalidateModule(mod);
           }
 
-          server.ws.send({ type: "full-reload" });
+          // Send wasm-specific HMR event (modules with accept() handle it)
+          // Falls back to full-reload for modules without HMR support
+          const relPath = relative(config.root, file);
+          const wasmUrl = "/" + relPath.split("\\").join("/");
+          server.ws.send({
+            type: "custom",
+            event: "wite:update",
+            data: { url: wasmUrl, file },
+          });
         }
       });
     },
@@ -347,11 +395,34 @@ function generateBrowserCode(ctx: CodeGenContext): string {
     wasmUrlCode = `const wasmUrl = ${JSON.stringify(normalizedPath)} + "?t=" + ${JSON.stringify(String(Date.now()))};`;
   }
 
+  const hmrCode = ctx.isBuild
+    ? ""
+    : `
+if (import.meta.hot) {
+  import.meta.hot.accept();
+  import.meta.hot.on('wite:update', async (data) => {
+    const { __witeReload } = await import(${JSON.stringify(RUNTIME_MODULE_ID)});
+    const reloaded = await __witeReload(wasmUrl, ${ctx.importObject});
+    const newExports = reloaded.instance.exports;
+    ${ctx.exports
+      .split("\n")
+      .filter((l) => l.startsWith("export const "))
+      .map((l) => {
+        const match = l.match(/export const (\w+) = instance\.exports\["(.+)"\]/);
+        if (!match) return "";
+        return `    ${match[1]} = newExports["${match[2]}"];`;
+      })
+      .filter(Boolean)
+      .join("\n")}
+  });
+}`;
+
   return `import { __witeGetInstance } from ${JSON.stringify(RUNTIME_MODULE_ID)};
 ${ctx.shimCode}
 ${wasmUrlCode}
 const { instance } = await __witeGetInstance(wasmUrl, ${ctx.importObject});
-${ctx.exports}
+${ctx.exports.replace(/export const /g, "export let ")}
+${hmrCode}
 `;
 }
 
