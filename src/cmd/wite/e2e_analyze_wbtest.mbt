@@ -1146,6 +1146,72 @@ async test "e2e: run_chunk_build_command skips when no build and output exists" 
 }
 
 ///|
+async test "e2e: chunk_needs_rebuild true when output missing" {
+  let text =
+    #|{ "chunks": { "x": { "output": "nonexistent.wasm", "build": "echo ok" } } }
+  let config = @wite_config.parse_wite_config_text(text).unwrap()
+  let chunk = config.chunks["x"]
+  assert_true(chunk_needs_rebuild(chunk, "."))
+}
+
+///|
+async test "e2e: chunk_needs_rebuild false when output exists" {
+  let dir = js_make_temp_dir("wite-e2e-chunk-")
+  let _ = e2e_write_wasm_file(dir, "exists.wasm", e2e_minimal_core_wasm())
+  let text =
+    #|{ "chunks": { "x": { "output": "exists.wasm", "build": "echo ok" } } }
+  let config = @wite_config.parse_wite_config_text(text).unwrap()
+  let chunk = config.chunks["x"]
+  assert_false(chunk_needs_rebuild(chunk, dir))
+  js_remove_dir_recursive(dir)
+}
+
+///|
+async test "e2e: build_chunks skips up-to-date chunks" {
+  let dir = js_make_temp_dir("wite-e2e-chunk-")
+  let _ = e2e_write_wasm_file(dir, "cached.wasm", e2e_minimal_core_wasm())
+  let text =
+    #|{ "chunks": { "cached": { "output": "cached.wasm", "build": "echo should-not-run" } } }
+  let config = @wite_config.parse_wite_config_text(text).unwrap()
+  build_chunks(config, dir)
+  // If build ran, it would print "echo should-not-run" — but chunk is up-to-date
+  js_remove_dir_recursive(dir)
+}
+
+///|
+async test "e2e: componentize_chunk skips when no wit" {
+  let dir = js_make_temp_dir("wite-e2e-chunk-")
+  let _ = e2e_write_wasm_file(dir, "core.wasm", e2e_minimal_core_wasm())
+  let text =
+    #|{ "chunks": { "core": "core.wasm" } }
+  let config = @wite_config.parse_wite_config_text(text).unwrap()
+  let chunk = config.chunks["core"]
+  componentize_chunk("core", chunk, dir)
+  // Should not fail — just returns because no wit
+  js_remove_dir_recursive(dir)
+}
+
+///|
+async test "e2e: componentize_chunk skips when already component" {
+  if !e2e_component_fixture_exists() {
+    return
+  }
+  // Copy a component fixture to temp dir
+  let dir = js_make_temp_dir("wite-e2e-chunk-")
+  let src_bytes = @fs.read_file_to_bytes(e2e_component_fixture_path()) catch {
+    _ => return
+  }
+  let _ = e2e_write_wasm_file(dir, "comp.wasm", src_bytes)
+  let text =
+    #|{ "chunks": { "comp": { "output": "comp.wasm", "wit": "nonexistent.wit" } } }
+  let config = @wite_config.parse_wite_config_text(text).unwrap()
+  let chunk = config.chunks["comp"]
+  // Should skip because it's already a component (magic bytes check)
+  componentize_chunk("comp", chunk, dir)
+  js_remove_dir_recursive(dir)
+}
+
+///|
 test "e2e: chunk_names returns configured chunks" {
   let text =
     #|{

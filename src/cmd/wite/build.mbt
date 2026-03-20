@@ -433,6 +433,92 @@ async fn run_chunk_build_command(
 }
 
 ///|
+async fn componentize_chunk(
+  chunk_name : String,
+  chunk : @wite_config.ChunkConfig,
+  config_dir : String,
+) -> Unit {
+  let wit_path = match chunk.wit {
+    Some(path) => path
+    None => return // Already a component or no WIT specified
+  }
+  let output_path = resolve_path_from_config_dir(config_dir, chunk.output)
+  let bytes = read_bytes_or_exit(output_path)
+  if is_component_wasm(bytes) {
+    // Already a component, skip componentize
+    return
+  }
+  // Run: wasm-tools component embed <wit> --output <tmp> <core.wasm>
+  //      wasm-tools component new <tmp> -o <output>
+  let resolved_wit = resolve_path_from_config_dir(config_dir, wit_path)
+  let component_path = output_path + ".component.wasm"
+  // Step 1: embed WIT
+  let embed_args : Array[String] = [
+    "component", "embed", resolved_wit, output_path, "--encoding", "utf8",
+    "--output", component_path,
+  ]
+  match chunk.world {
+    Some(world) => {
+      embed_args.push("--world")
+      embed_args.push(world)
+    }
+    None => ()
+  }
+  let (embed_exit, _, embed_stderr) = @xprocess.collect_output(
+    "wasm-tools",
+    embed_args[:],
+  )
+  if embed_exit != 0 {
+    let err = embed_stderr.text() catch { _ => "" }
+    println(
+      "chunk '" + chunk_name + "' embed failed: " + err,
+    )
+    @sys.exit(1)
+  }
+  // Step 2: create component from embedded module
+  let new_args : Array[String] = [
+    "component", "new", component_path, "-o", output_path,
+  ]
+  let (new_exit, _, new_stderr) = @xprocess.collect_output(
+    "wasm-tools",
+    new_args[:],
+  )
+  if new_exit != 0 {
+    let err = new_stderr.text() catch { _ => "" }
+    println(
+      "chunk '" + chunk_name + "' componentize failed: " + err,
+    )
+    @sys.exit(1)
+  }
+  // Cleanup intermediate file
+  @fs.remove_file(component_path) catch { _ => () }
+  println(
+    "chunk '" + chunk_name + "': componentized (" + output_path + ")",
+  )
+}
+
+///|
+fn get_file_size(path : String) -> Int {
+  let bytes = @fs.read_file_to_bytes(path) catch { _ => return 0 }
+  bytes.length()
+}
+
+///|
+fn chunk_needs_rebuild(
+  chunk : @wite_config.ChunkConfig,
+  config_dir : String,
+) -> Bool {
+  match chunk.build {
+    None => true // No build command, always "ready" (just check existence)
+    Some(_) => {
+      let output_path = resolve_path_from_config_dir(config_dir, chunk.output)
+      // If output doesn't exist, must rebuild
+      !@fs.path_exists(output_path)
+    }
+  }
+}
+
+///|
 async fn build_chunks(
   config_file : @wite_config.WiteConfigFile,
   config_dir : String,
@@ -443,8 +529,14 @@ async fn build_chunks(
   }
   for name in chunk_names {
     let chunk = config_file.chunks[name]
-    run_chunk_build_command(name, chunk, config_dir)
     let output_path = resolve_path_from_config_dir(config_dir, chunk.output)
+    // Build step
+    if chunk_needs_rebuild(chunk, config_dir) {
+      run_chunk_build_command(name, chunk, config_dir)
+    } else {
+      println("chunk '" + name + "': up-to-date (" + output_path + ")")
+      // Still need to componentize if WIT is specified
+    }
     if !@fs.path_exists(output_path) {
       println(
         "chunk '" + name + "' build completed but output not found: " +
@@ -452,8 +544,11 @@ async fn build_chunks(
       )
       @sys.exit(1)
     }
+    // Componentize step (core → component via WIT)
+    componentize_chunk(name, chunk, config_dir)
+    let size = get_file_size(output_path)
     println(
-      "chunk '" + name + "': ready (" + output_path + ")",
+      "chunk '" + name + "': ready (" + size.to_string() + " bytes)",
     )
   }
 }

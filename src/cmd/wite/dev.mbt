@@ -717,6 +717,16 @@ async fn run_dev_command(args : Array[String]) -> Unit {
     println("building with moon build --target " + target + " --release ...")
     ("moon", ["build", "--target", target, "--release"])
   }
+  // Build chunks first (if configured)
+  let dev_config_path = if dir == "." {
+    "wite.config.jsonc"
+  } else {
+    dir + "/wite.config.jsonc"
+  }
+  if @fs.path_exists(dev_config_path) {
+    let dev_config = load_wite_config_or_exit(dev_config_path)
+    build_chunks(dev_config, dir)
+  }
   // Initial build
   let cwd : StringView? = if dir == "." { None } else { Some(dir) }
   let exit_code = @xprocess.run(build_cmd, build_args, cwd?)
