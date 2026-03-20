@@ -53,12 +53,8 @@
   `apply_type_refining` 等が変更なしでも新 `Bytes` を返す。
   dirty flag で元の参照を返せば `physical_equal` で O(1) 変更検出可能。
 
-- [ ] **旧 peephole パス関数の削除** (コードサイズ削減, Low Effort)
-  `apply_merged_stateless_peephole` 導入後、個別の `apply_precompute_*` は未使用。
-
-## Architecture Improvements
-
-- [ ] Library API facade 拡充: `src/top.mbt` に bundle/config の pure API を追加
+- [x] **旧 peephole パス関数の削除** → -1004行
+- [x] Library API facade 拡充 → bundle/config を root facade に追加
 - [ ] deps パッケージの I/O 抽象化: コールバック/trait で I/O 注入可能に
 
 ## Feature Backlog
