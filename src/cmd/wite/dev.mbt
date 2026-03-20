@@ -20,9 +20,20 @@ fn livereload_script_tag() -> String {
   let s =
     #|<script>
     #|(function(){
-    #|  const es = new EventSource('/__wite_livereload');
-    #|  es.onmessage = function(e) { if (e.data === 'reload') location.reload(); };
-    #|  es.onerror = function() { setTimeout(function(){ location.reload(); }, 2000); };
+    #|  var retries = 0;
+    #|  function connect() {
+    #|    var es = new EventSource('/__wite_livereload');
+    #|    es.onopen = function() { retries = 0; };
+    #|    es.onmessage = function(e) { if (e.data === 'reload') location.reload(); };
+    #|    es.onerror = function() {
+    #|      es.close();
+    #|      retries++;
+    #|      var delay = Math.min(1000 * Math.pow(2, retries), 30000);
+    #|      console.log('[wite] connection lost, reconnecting in ' + delay + 'ms...');
+    #|      setTimeout(connect, delay);
+    #|    };
+    #|  }
+    #|  connect();
     #|})();
     #|</script>
   s
@@ -478,9 +489,14 @@ fn generate_debug_ui_html() -> String {
     #|    }).catch(e=>{ $('profile').innerHTML='<p class="error">'+e+'</p>'; });
     #|  }
     #|  loadStatus(); loadAnalyze();
-    #|  var es=new EventSource('/__wite_livereload');
-    #|  es.onmessage=function(e){ if(e.data==='reload'){ loadStatus(); loadAnalyze(); } };
-    #|  es.onerror=function(){ setTimeout(function(){ location.reload(); },2000); };
+    #|  var retries=0;
+    #|  function connectSSE(){
+    #|    var es=new EventSource('/__wite_livereload');
+    #|    es.onopen=function(){ retries=0; };
+    #|    es.onmessage=function(e){ if(e.data==='reload'){ loadStatus(); loadAnalyze(); } };
+    #|    es.onerror=function(){ es.close(); retries++; var d=Math.min(1000*Math.pow(2,retries),30000); setTimeout(connectSSE,d); };
+    #|  }
+    #|  connectSSE();
     #|})();
     #|</script>
     #|</body>
