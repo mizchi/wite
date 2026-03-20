@@ -6,13 +6,17 @@ export default defineConfig({
     wite({
       dts: true,
       // Per-environment overrides (Vite 6+ Environment API)
-      // Environment names are user-defined, not limited to "client"/"ssr"
       environments: {
         client: {
           // Browser environment
         },
         server: {
-          // Server-side environment (replaces legacy "ssr")
+          // Server-side Node.js environment
+          dts: false,
+        },
+        // Cloudflare Workers (workerd) environment
+        // Activated when using @cloudflare/vite-plugin or --ssr with workerd
+        workerd: {
           dts: false,
         },
       },
