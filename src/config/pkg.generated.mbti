@@ -10,9 +10,13 @@ pub fn config_input_entries(ConfigInput) -> Array[(String, String)]
 
 pub fn config_input_single_path(ConfigInput) -> String?
 
+pub fn empty_environment_config() -> EnvironmentConfig
+
 pub fn empty_server_bindings() -> ServerBindings
 
 pub fn empty_wite_config_file() -> WiteConfigFile
+
+pub fn environment_names(WiteConfigFile) -> Array[String]
 
 pub fn is_ts_config(String) -> Bool
 
@@ -26,6 +30,8 @@ pub fn parse_config_output(Json) -> Result[ConfigOutput, String]
 
 pub fn parse_config_selection_flags(Array[String]) -> Result[ConfigSelectionFlags, String]
 
+pub fn parse_environment_config(Json, String) -> Result[EnvironmentConfig, String]
+
 pub fn parse_json_string_array(Json, String) -> Result[Array[String], String]
 
 pub fn parse_server_bindings(Json) -> Result[ServerBindings, String]
@@ -37,6 +43,8 @@ pub fn parse_wite_config_json(Json) -> Result[WiteConfigFile, String]
 pub fn parse_wite_config_section(Json, String) -> Result[(Array[String], BinaryKind), String]
 
 pub fn parse_wite_config_text(String) -> Result[WiteConfigFile, String]
+
+pub fn resolve_environment(WiteConfigFile, String?) -> Result[EnvironmentConfig, String]
 
 pub fn should_auto_sync_deps(Bool, Bool) -> Bool
 
@@ -77,6 +85,17 @@ pub(all) struct D1DatabaseBinding {
 }
 pub impl Eq for D1DatabaseBinding
 pub impl Show for D1DatabaseBinding
+
+pub struct EnvironmentConfig {
+  input : ConfigInput
+  output : ConfigOutput
+  optimize : String?
+  kind : BinaryKind
+  server : ServerConfig?
+  strip : Bool
+  closed_world : Bool
+  closed_world_root_exports : Array[String]
+}
 
 pub(all) struct KvNamespaceBinding {
   binding : String
@@ -124,6 +143,7 @@ pub struct WiteConfigFile {
   input : ConfigInput
   output : ConfigOutput
   server : ServerConfig?
+  environments : Map[String, EnvironmentConfig]
 }
 
 // Type aliases

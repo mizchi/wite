@@ -862,3 +862,181 @@ test "parse_config_selection_flags --config empty value returns Err" {
   let result = @config.parse_config_selection_flags(["--config", ""])
   assert_true(result is Err(_))
 }
+
+// ---- environment tests ----
+
+///|
+test "parse_wite_config_text with environments" {
+  let text =
+    #|{
+    #|  "input": "app.wac",
+    #|  "environments": {
+    #|    "browser": {
+    #|      "output": "dist/browser",
+    #|      "optimize": "-Os"
+    #|    },
+    #|    "edge": {
+    #|      "output": "dist/edge",
+    #|      "optimize": "-O1",
+    #|      "server": { "executor": "workerd" }
+    #|    }
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  assert_eq(@config.environment_names(config).length(), 2)
+  let browser = config.environments["browser"]
+  assert_eq(browser.output.dir, "dist/browser")
+  assert_eq(browser.optimize, Some("-Os"))
+  let edge = config.environments["edge"]
+  assert_eq(edge.output.dir, "dist/edge")
+  assert_eq(edge.optimize, Some("-O1"))
+  assert_true(edge.server is Some(_))
+  match edge.server {
+    Some(s) => assert_true(s.executor is @config.ServerExecutor::Workerd)
+    None => fail("expected server config")
+  }
+}
+
+///|
+test "parse_wite_config_text environments with kind and strip" {
+  let text =
+    #|{
+    #|  "environments": {
+    #|    "release": {
+    #|      "optimize": "-Oz",
+    #|      "kind": "core",
+    #|      "strip": true,
+    #|      "closed-world": true,
+    #|      "closed-world-roots": ["main", "init"]
+    #|    }
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let release = config.environments["release"]
+  assert_true(release.strip)
+  assert_true(release.closed_world)
+  assert_eq(release.closed_world_root_exports, ["main", "init"])
+  assert_true(release.kind is @config.BinaryKind::Core)
+}
+
+///|
+test "parse_wite_config_text no environments" {
+  let text = #|{ "input": "app.wac" }
+  let config = @config.parse_wite_config_text(text).unwrap()
+  assert_eq(@config.environment_names(config).length(), 0)
+}
+
+///|
+test "parse_environment_config invalid kind" {
+  let text =
+    #|{
+    #|  "environments": {
+    #|    "bad": { "kind": "invalid" }
+    #|  }
+    #|}
+  let result = @config.parse_wite_config_text(text)
+  assert_true(result is Err(_))
+}
+
+///|
+test "resolve_environment default when no env name" {
+  let text =
+    #|{ "input": "app.wac", "build": { "kind": "component" } }
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let env = @config.resolve_environment(config, None).unwrap()
+  assert_true(env.input is @config.ConfigInput::Single(_))
+  assert_true(env.kind is @config.BinaryKind::Component)
+}
+
+///|
+test "resolve_environment selects named environment" {
+  let text =
+    #|{
+    #|  "input": "app.wac",
+    #|  "environments": {
+    #|    "edge": {
+    #|      "output": "dist/edge",
+    #|      "optimize": "-O1",
+    #|      "kind": "component"
+    #|    }
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let env = @config.resolve_environment(config, Some("edge")).unwrap()
+  assert_eq(env.output.dir, "dist/edge")
+  assert_eq(env.optimize, Some("-O1"))
+  assert_true(env.kind is @config.BinaryKind::Component)
+  // input falls back to top-level
+  assert_true(env.input is @config.ConfigInput::Single(_))
+}
+
+///|
+test "resolve_environment inherits top-level input" {
+  let text =
+    #|{
+    #|  "input": "main.wac",
+    #|  "environments": {
+    #|    "debug": { "optimize": "-O0" }
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let env = @config.resolve_environment(config, Some("debug")).unwrap()
+  match env.input {
+    @config.ConfigInput::Single(s) => assert_eq(s, "main.wac")
+    _ => fail("expected Single input inherited from top-level")
+  }
+  assert_eq(env.optimize, Some("-O0"))
+}
+
+///|
+test "resolve_environment overrides input" {
+  let text =
+    #|{
+    #|  "input": "app.wac",
+    #|  "environments": {
+    #|    "alt": { "input": "other.wac" }
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let env = @config.resolve_environment(config, Some("alt")).unwrap()
+  match env.input {
+    @config.ConfigInput::Single(s) => assert_eq(s, "other.wac")
+    _ => fail("expected overridden input")
+  }
+}
+
+///|
+test "resolve_environment not found returns Err" {
+  let config = @config.empty_wite_config_file()
+  let result = @config.resolve_environment(config, Some("missing"))
+  assert_true(result is Err(_))
+}
+
+///|
+test "environment_names returns sorted keys" {
+  let text =
+    #|{
+    #|  "environments": {
+    #|    "b": { "optimize": "-O1" },
+    #|    "a": { "optimize": "-O0" }
+    #|  }
+    #|}
+  let config = @config.parse_wite_config_text(text).unwrap()
+  let names = @config.environment_names(config)
+  assert_eq(names.length(), 2)
+  assert_true(names.contains("a"))
+  assert_true(names.contains("b"))
+}
+
+///|
+test "empty_environment_config has safe defaults" {
+  let env = @config.empty_environment_config()
+  assert_true(env.input is @config.ConfigInput::None)
+  assert_eq(env.output.dir, "dist")
+  assert_true(env.optimize is None)
+  assert_true(env.kind is @config.BinaryKind::Auto)
+  assert_true(env.server is None)
+  assert_false(env.strip)
+  assert_false(env.closed_world)
+  assert_eq(env.closed_world_root_exports, [])
+}

@@ -219,6 +219,32 @@ pub struct ConfigOutput {
 }
 
 ///|
+pub struct EnvironmentConfig {
+  input : ConfigInput
+  output : ConfigOutput
+  optimize : String?
+  kind : BinaryKind
+  server : ServerConfig?
+  strip : Bool
+  closed_world : Bool
+  closed_world_root_exports : Array[String]
+}
+
+///|
+pub fn empty_environment_config() -> EnvironmentConfig {
+  {
+    input: ConfigInput::None,
+    output: { dir: "dist" },
+    optimize: None,
+    kind: BinaryKind::Auto,
+    server: None,
+    strip: false,
+    closed_world: false,
+    closed_world_root_exports: [],
+  }
+}
+
+///|
 pub struct WiteConfigFile {
   build_flags : Array[String]
   analyze_flags : Array[String]
@@ -229,6 +255,7 @@ pub struct WiteConfigFile {
   input : ConfigInput
   output : ConfigOutput
   server : ServerConfig?
+  environments : Map[String, EnvironmentConfig]
 }
 
 ///|
@@ -243,6 +270,7 @@ pub fn empty_wite_config_file() -> WiteConfigFile {
     input: ConfigInput::None,
     output: { dir: "dist" },
     server: None,
+    environments: {},
   }
 }
 
@@ -366,6 +394,105 @@ pub fn parse_wite_config_section(
 }
 
 ///|
+pub fn parse_environment_config(
+  json_value : Json,
+  label : String,
+) -> Result[EnvironmentConfig, String] {
+  match json_value {
+    Object(obj) => {
+      let mut input = ConfigInput::None
+      let mut output : ConfigOutput = { dir: "dist" }
+      let mut optimize : String? = None
+      let mut kind = BinaryKind::Auto
+      let mut server : ServerConfig? = None
+      let mut strip = false
+      let mut closed_world = false
+      let closed_world_root_exports : Array[String] = []
+      if obj.get("input") is Some(value) {
+        match parse_config_input(value) {
+          Ok(parsed) => input = parsed
+          Err(msg) => return Err(label + ".input: " + msg)
+        }
+      }
+      if obj.get("output") is Some(value) {
+        match parse_config_output(value) {
+          Ok(parsed) => output = parsed
+          Err(msg) => return Err(label + ".output: " + msg)
+        }
+      }
+      match obj.get("optimize") {
+        Some(String(level)) => optimize = Some(level)
+        Some(_) => return Err(label + ".optimize must be string")
+        None => ()
+      }
+      match obj.get("kind") {
+        Some(String(raw_kind)) =>
+          match parse_binary_kind(raw_kind) {
+            Some(parsed) => kind = parsed
+            None => return Err(label + ".kind: invalid value: " + raw_kind)
+          }
+        Some(_) => return Err(label + ".kind must be string")
+        None => ()
+      }
+      if obj.get("server") is Some(value) {
+        match parse_server_config(value) {
+          Ok(parsed) => server = Some(parsed)
+          Err(msg) => return Err(label + ".server: " + msg)
+        }
+      }
+      match obj.get("strip") {
+        Some(True) => strip = true
+        Some(False) => strip = false
+        Some(_) => return Err(label + ".strip must be boolean")
+        None => ()
+      }
+      match obj.get("closed-world") {
+        Some(True) => closed_world = true
+        Some(False) => closed_world = false
+        Some(_) => return Err(label + ".closed-world must be boolean")
+        None => ()
+      }
+      if obj.get("closed-world-roots") is Some(value) {
+        match parse_json_string_array(value, label + ".closed-world-roots") {
+          Ok(roots) => closed_world_root_exports.append(roots[:])
+          Err(msg) => return Err(msg)
+        }
+      }
+      Ok({
+        input,
+        output,
+        optimize,
+        kind,
+        server,
+        strip,
+        closed_world,
+        closed_world_root_exports,
+      })
+    }
+    _ => Err(label + " must be object")
+  }
+}
+
+///|
+fn parse_environments(
+  json_value : Json,
+) -> Result[Map[String, EnvironmentConfig], String] {
+  match json_value {
+    Object(obj) => {
+      let environments : Map[String, EnvironmentConfig] = {}
+      for entry in obj {
+        match parse_environment_config(entry.1, "environments." + entry.0) {
+          Ok(env) => environments[entry.0] = env
+          Err(msg) => return Err(msg)
+        }
+      }
+      Ok(environments)
+    }
+    _ => Err("environments must be object")
+  }
+}
+
+///|
 pub fn parse_wite_config_json(
   json_value : Json,
 ) -> Result[WiteConfigFile, String] {
@@ -425,6 +552,13 @@ pub fn parse_wite_config_json(
           Err(msg) => return Err(msg)
         }
       }
+      let mut environments : Map[String, EnvironmentConfig] = {}
+      if object.get("environments") is Some(value) {
+        match parse_environments(value) {
+          Ok(parsed) => environments = parsed
+          Err(msg) => return Err(msg)
+        }
+      }
       Ok({
         build_flags,
         analyze_flags,
@@ -435,6 +569,7 @@ pub fn parse_wite_config_json(
         input,
         output,
         server,
+        environments,
       })
     }
     _ => Err("config root must be object")
@@ -526,4 +661,69 @@ pub fn build_auto_sync_deps_command_args(config_path : String) -> Array[String] 
 ///|
 pub fn is_ts_config(path : String) -> Bool {
   path.has_suffix(".ts")
+}
+
+///|
+pub fn resolve_environment(
+  config : WiteConfigFile,
+  env_name : String?,
+) -> Result[EnvironmentConfig, String] {
+  match env_name {
+    None => {
+      // No --env flag: use top-level config as default environment
+      Ok({
+        input: config.input,
+        output: config.output,
+        optimize: None,
+        kind: config.build_kind,
+        server: config.server,
+        strip: false,
+        closed_world: false,
+        closed_world_root_exports: [],
+      })
+    }
+    Some(name) =>
+      match config.environments.get(name) {
+        Some(env) => {
+          // Merge: environment overrides top-level, falling back to top-level defaults
+          let input = match env.input {
+            ConfigInput::None => config.input
+            _ => env.input
+          }
+          let output = if env.output.dir == "dist" {
+            config.output
+          } else {
+            env.output
+          }
+          let kind = match env.kind {
+            BinaryKind::Auto => config.build_kind
+            _ => env.kind
+          }
+          let server = match env.server {
+            Some(_) => env.server
+            None => config.server
+          }
+          Ok(
+            {
+              input,
+              output,
+              optimize: env.optimize,
+              kind,
+              server,
+              strip: env.strip,
+              closed_world: env.closed_world,
+              closed_world_root_exports: env.closed_world_root_exports,
+            },
+          )
+        }
+        None => Err("environment not found: " + name)
+      }
+  }
+}
+
+///|
+pub fn environment_names(config : WiteConfigFile) -> Array[String] {
+  let names : Array[String] = []
+  config.environments.each((name, _) => names.push(name))
+  names
 }
