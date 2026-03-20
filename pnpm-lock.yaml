@@ -18,6 +18,18 @@ importers:
         specifier: workspace:*
         version: link:../../packages/vite-plugin-wite
 
+  examples/vite-plugin-env:
+    devDependencies:
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+      vite:
+        specifier: ^6.0.0
+        version: 6.4.1(terser@5.46.0)
+      vite-plugin-wite:
+        specifier: workspace:*
+        version: link:../../packages/vite-plugin-wite
+
   examples/vite-plugin-multi:
     devDependencies:
       typescript:

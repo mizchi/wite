@@ -4,16 +4,16 @@ import wite from "vite-plugin-wite";
 export default defineConfig({
   plugins: [
     wite({
-      // Default shims for all environments
       dts: true,
-      // Per-environment overrides
+      // Per-environment overrides (Vite 6+ Environment API)
+      // Environment names are user-defined, not limited to "client"/"ssr"
       environments: {
         client: {
-          // Browser environment: no special shims needed for this example
+          // Browser environment
         },
-        ssr: {
-          // SSR environment: could use Node.js-specific shims
-          dts: false, // skip .d.ts in SSR
+        server: {
+          // Server-side environment (replaces legacy "ssr")
+          dts: false,
         },
       },
     }),
