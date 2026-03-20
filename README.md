@@ -102,6 +102,19 @@ wite diff module.wasm --baseline=wasm-opt --view=section
 wite diff left.wasm right.wasm --view=block --limit=20
 ```
 
+### treeshake
+
+```bash
+wite treeshake app.wasm --exports=main,malloc,free
+wite treeshake app.wasm --exports=run -o app.min.wasm -Oz
+wite treeshake app.wasm --exports=main --verbose      # shows auto-protected exports
+wite treeshake app.wasm --exports=main --no-protect   # disable auto-protection
+```
+
+Removes all code not reachable from the specified exports. Uses closed-world DCE with DFE and unused module element removal.
+
+Well-known exports (`memory`, `__wasm_call_ctors`, `_start`, `cabi_realloc`, etc.) are automatically protected from removal. Use `--no-protect` to disable.
+
 ### add
 
 ```bash
@@ -149,6 +162,46 @@ wite new --rust              # init + guest/rust/ scaffold
 ```
 
 Merge rule: config flags are applied first, then CLI arguments override (last wins). `--kind` priority: CLI > config > auto.
+
+### Environments
+
+Define per-environment build settings for multi-target deployments:
+
+```jsonc
+{
+  "input": "app.wac",
+  "environments": {
+    "browser": { "output": "dist/browser", "optimize": "-Os", "runtime": "browser" },
+    "edge": { "output": "dist/edge", "optimize": "-O1", "runtime": "workerd" },
+    "standalone": { "output": "dist/standalone", "optimize": "-Oz", "runtime": "wasmtime" }
+  }
+}
+```
+
+```bash
+wite build --env=browser     # build single environment
+wite build --all-envs        # build all environments
+```
+
+### Chunks
+
+Define per-chunk build steps that run before WAC composition:
+
+```jsonc
+{
+  "chunks": {
+    "guest": {
+      "build": "moon build --target wasm -p guest",
+      "output": "build/guest.core.wasm",
+      "wit": "wit/guest.wit"
+    },
+    "auth": "deps/auth.wasm"
+  },
+  "input": "app.wac"
+}
+```
+
+Chunks with a `wit` field are automatically componentized (`wasm-tools component embed` + `new`). Pre-built chunks (no `build` command) are verified to exist.
 
 ## Library API
 
@@ -202,20 +255,36 @@ import { defineConfig } from "vite";
 import wite from "vite-plugin-wite";
 
 export default defineConfig({
-  plugins: [wite()],
+  plugins: [
+    wite({
+      dts: true,           // auto-generate .d.ts
+      jco: "auto",         // auto-transpile Component Model via jco
+      environments: {
+        client: { runtime: "browser" },
+        ssr: { runtime: "node", dts: false },
+      },
+    }),
+  ],
   build: { target: "esnext" },
 });
 ```
 
 ```typescript
-// app.ts
+// Main thread
 import { add } from "./math.wasm";
 console.log(add(1, 2)); // 3
+
+// Web Worker (off-thread)
+import { add } from "./math.wasm?wite-worker";
+const result = await add(1, 2); // runs in Worker, returns Promise
 ```
 
-- Auto-generates JS wrappers and `.d.ts` type definitions for `.wasm` imports
-- Component Model wasm is automatically lowered to a core module for loading
-- HMR support (auto-reloads when `.wasm` files change in dev mode)
+Features:
+- **4 runtime targets**: `browser` (fetch), `webworker` (?wite-worker), `workerd` (ESM import), `node` (Buffer)
+- **HMR**: wasm changes update exports in-place without full page reload
+- **Auto .d.ts**: generates type definitions from wasm function signatures
+- **jco integration**: Component Model wasm auto-transpiled to ESM with full type marshaling
+- **Per-environment config**: different shims/options per Vite environment (Vite 6+ Environment API)
 - See [vite-plugin-wite README](./packages/vite-plugin-wite/README.md) for details
 
 ## Development
