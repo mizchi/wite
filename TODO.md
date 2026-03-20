@@ -64,6 +64,8 @@
 - [ ] chunk 間依存グラフ (`depends_on` フィールド)
 - [ ] dev mode chunk 単位 watch
 - [ ] wasm-gc chunk 分割の制約ドキュメント（CM boundary での型制約）
+- [ ] **built-in CM→ESM transpiler** (jco 代替): Component Model wasm をブラウザ用 ESM に変換する機能を wite 内蔵で実装し、jco 依存を除去する
+- [ ] WASI browser shims 自動注入（要検証）
 
 ## Testing
 

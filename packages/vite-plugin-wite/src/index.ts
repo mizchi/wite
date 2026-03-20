@@ -217,11 +217,28 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
 
       // Handle component model
       if (metadata.isComponent) {
-        // Try jco transpile first (full CM support with string marshaling)
+        // jco is required for Component Model wasm (unless explicitly disabled)
+        if (jcoOption !== false && !isJcoAvailable()) {
+          this.error(
+            `[vite-plugin-wite] Component Model wasm requires jco for browser transpilation.\n` +
+            `\n` +
+            `Install jco:\n` +
+            `  npm install -g @bytecodealliance/jco\n` +
+            `  # or\n` +
+            `  pnpm add -D @bytecodealliance/jco\n` +
+            `\n` +
+            `File: ${wasmPath}\n` +
+            `\n` +
+            `To use core wasm extraction as a fallback (loses CM type marshaling), set:\n` +
+            `  wite({ jco: false })`,
+          );
+          return;
+        }
+
+        // Try jco transpile (full CM support with string marshaling)
         if (useJco && runtime === "browser") {
           const result = jcoTranspile(wasmPath);
           if (result) {
-            // Generate .d.ts from jco output (look for .d.ts in jco output files)
             if (resolved.dts) {
               generateComponentDts(wasmPath, result.files);
             }
@@ -229,7 +246,8 @@ export default function witePlugin(options: WitePluginOptions = {}): Plugin {
           }
         }
 
-        // Fallback: extract first core module and use its signatures
+        // jco: false — fallback to core module extraction
+        // TODO: implement built-in CM→ESM transpilation to remove jco dependency
         const lowered = lowerComponent(bytes);
         if (!lowered) {
           this.error(
