@@ -589,6 +589,7 @@ pub struct ConfigSelectionFlags {
   config_path : String
   explicit_config_path : Bool
   use_config : Bool
+  env_name : String?
   remaining_flags : Array[String]
 }
 
@@ -599,6 +600,7 @@ pub fn parse_config_selection_flags(
   let mut config_path = "wite.config.jsonc"
   let mut explicit_config_path = false
   let mut use_config = true
+  let mut env_name : String? = None
   let remaining_flags : Array[String] = []
   let mut i = 0
   while i < flags.length() {
@@ -632,10 +634,36 @@ pub fn parse_config_selection_flags(
       i += 1
       continue
     }
+    if flag == "--env" {
+      if i + 1 >= flags.length() {
+        return Err("missing environment name after --env")
+      }
+      let name = flags[i + 1]
+      if name.is_empty() {
+        return Err("environment name must not be empty")
+      }
+      env_name = Some(name)
+      i += 2
+      continue
+    }
+    if flag.strip_prefix("--env=") is Some(name) {
+      if name.is_empty() {
+        return Err("environment name must not be empty")
+      }
+      env_name = Some(name.to_string())
+      i += 1
+      continue
+    }
     remaining_flags.push(flag)
     i += 1
   }
-  Ok({ config_path, explicit_config_path, use_config, remaining_flags })
+  Ok({
+    config_path,
+    explicit_config_path,
+    use_config,
+    env_name,
+    remaining_flags,
+  })
 }
 
 ///|
@@ -669,7 +697,7 @@ pub fn resolve_environment(
   env_name : String?,
 ) -> Result[EnvironmentConfig, String] {
   match env_name {
-    None => {
+    None =>
       // No --env flag: use top-level config as default environment
       Ok({
         input: config.input,
@@ -681,7 +709,6 @@ pub fn resolve_environment(
         closed_world: false,
         closed_world_root_exports: [],
       })
-    }
     Some(name) =>
       match config.environments.get(name) {
         Some(env) => {
@@ -703,18 +730,16 @@ pub fn resolve_environment(
             Some(_) => env.server
             None => config.server
           }
-          Ok(
-            {
-              input,
-              output,
-              optimize: env.optimize,
-              kind,
-              server,
-              strip: env.strip,
-              closed_world: env.closed_world,
-              closed_world_root_exports: env.closed_world_root_exports,
-            },
-          )
+          Ok({
+            input,
+            output,
+            optimize: env.optimize,
+            kind,
+            server,
+            strip: env.strip,
+            closed_world: env.closed_world,
+            closed_world_root_exports: env.closed_world_root_exports,
+          })
         }
         None => Err("environment not found: " + name)
       }

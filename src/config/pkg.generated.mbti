@@ -75,6 +75,7 @@ pub struct ConfigSelectionFlags {
   config_path : String
   explicit_config_path : Bool
   use_config : Bool
+  env_name : String?
   remaining_flags : Array[String]
 }
 

@@ -863,6 +863,51 @@ test "parse_config_selection_flags --config empty value returns Err" {
   assert_true(result is Err(_))
 }
 
+// ---- --env flag parsing ----
+
+///|
+test "parse_config_selection_flags --env with value" {
+  let result = @config.parse_config_selection_flags([
+    "--env", "browser", "--other",
+  ]).unwrap()
+  assert_eq(result.env_name, Some("browser"))
+  assert_eq(result.remaining_flags, ["--other"])
+}
+
+///|
+test "parse_config_selection_flags --env= form" {
+  let result = @config.parse_config_selection_flags(["--env=edge"]).unwrap()
+  assert_eq(result.env_name, Some("edge"))
+}
+
+///|
+test "parse_config_selection_flags no --env gives None" {
+  let result = @config.parse_config_selection_flags(["-Oz", "--no-config"]).unwrap()
+  assert_true(result.env_name is None)
+}
+
+///|
+test "parse_config_selection_flags --env missing value returns Err" {
+  let result = @config.parse_config_selection_flags(["--env"])
+  assert_true(result is Err(_))
+}
+
+///|
+test "parse_config_selection_flags --env= empty returns Err" {
+  let result = @config.parse_config_selection_flags(["--env="])
+  assert_true(result is Err(_))
+}
+
+///|
+test "parse_config_selection_flags --env combined with --config" {
+  let result = @config.parse_config_selection_flags([
+    "--config=custom.jsonc", "--env=release", "-Oz",
+  ]).unwrap()
+  assert_eq(result.config_path, "custom.jsonc")
+  assert_eq(result.env_name, Some("release"))
+  assert_eq(result.remaining_flags, ["-Oz"])
+}
+
 // ---- environment tests ----
 
 ///|
@@ -921,7 +966,8 @@ test "parse_wite_config_text environments with kind and strip" {
 
 ///|
 test "parse_wite_config_text no environments" {
-  let text = #|{ "input": "app.wac" }
+  let text =
+    #|{ "input": "app.wac" }
   let config = @config.parse_wite_config_text(text).unwrap()
   assert_eq(@config.environment_names(config).length(), 0)
 }

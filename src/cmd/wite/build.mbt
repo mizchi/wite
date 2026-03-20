@@ -398,20 +398,56 @@ async fn run_build(args : Array[String]) -> Unit {
   let config_selection = parse_config_selection_flags_or_exit(raw_flags)
   let config_file = resolve_config_or_default(config_selection)
   let config_dir = path_dirname(config_selection.config_path)
+  // Resolve environment if --env is specified
+  let resolved_env = match
+    @wite_config.resolve_environment(config_file, config_selection.env_name) {
+    Ok(env) => Some(env)
+    Err(msg) => {
+      if config_selection.env_name is Some(_) {
+        println(msg)
+        @sys.exit(1)
+      }
+      None
+    }
+  }
+  let env_build_flags = match resolved_env {
+    Some(env) =>
+      match env.optimize {
+        Some(level) => [level]
+        None => []
+      }
+    None => []
+  }
   let merged_flags = @wite_config.merge_command_flags(
     config_file.build_flags,
-    config_selection.remaining_flags,
+    @wite_config.merge_command_flags(
+      env_build_flags,
+      config_selection.remaining_flags,
+    ),
   )
-  let parsed_flags = parse_build_flags(
-    merged_flags,
-    from_config_binary_kind(config_file.build_kind),
-  )
+  let env_kind = match resolved_env {
+    Some(env) => from_config_binary_kind(env.kind)
+    None => from_config_binary_kind(config_file.build_kind)
+  }
+  let parsed_flags = parse_build_flags(merged_flags, env_kind)
+  // Effective input/output considering environment overrides
+  let effective_input = match resolved_env {
+    Some(env) =>
+      match env.input {
+        @wite_config.ConfigInput::None => config_file.input
+        _ => env.input
+      }
+    None => config_file.input
+  }
+  let effective_output_dir = match resolved_env {
+    Some(env) => env.output.dir
+    None => config_file.output.dir
+  }
   // Multi-entry: Named input with multiple entries and no explicit CLI input
-  let entries = @wite_config.config_input_entries(config_file.input)
+  let entries = @wite_config.config_input_entries(effective_input)
   if entries.length() > 1 && !resolved.explicit_input {
     let output_dir = resolve_path_from_config_dir(
-      config_dir,
-      config_file.output.dir,
+      config_dir, effective_output_dir,
     )
     // Materialize wac deps for all entries first
     for entry in entries {
@@ -434,11 +470,11 @@ async fn run_build(args : Array[String]) -> Unit {
     return
   }
   // Single-entry path
-  // Resolve input: CLI > config.input > filesystem default
+  // Resolve input: CLI > env.input > config.input > filesystem default
   let input_path = if resolved.explicit_input {
     resolved.input_path
   } else {
-    match @wite_config.config_input_single_path(config_file.input) {
+    match @wite_config.config_input_single_path(effective_input) {
       Some(config_input) =>
         resolve_path_from_config_dir(config_dir, config_input)
       None =>
@@ -455,7 +491,7 @@ async fn run_build(args : Array[String]) -> Unit {
         }
     }
   }
-  let has_config_input = !(config_file.input is @wite_config.ConfigInput::None)
+  let has_config_input = !(effective_input is @wite_config.ConfigInput::None)
   let is_wac_input = input_path.has_suffix(".wac")
   if !is_wac_input {
     auto_sync_deps_from_config_if_needed(config_selection)
@@ -466,8 +502,7 @@ async fn run_build(args : Array[String]) -> Unit {
       if has_config_input {
         let basename = input_path |> path_basename |> derive_build_output_path
         let output_dir = resolve_path_from_config_dir(
-          config_dir,
-          config_file.output.dir,
+          config_dir, effective_output_dir,
         )
         output_dir + "/" + basename
       } else if resolved.explicit_input {
