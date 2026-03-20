@@ -1226,3 +1226,96 @@ test "e2e: chunk_names returns configured chunks" {
   assert_true(names.contains("a"))
   assert_true(names.contains("b"))
 }
+
+// ---- WAC compose fixture tests ----
+
+///|
+test "fixture: wac compose produces valid component" {
+  let wac_path = "bench/corpus/component-dce/wite-build-fixture/main.wac"
+  if !@fs.path_exists(wac_path) {
+    return
+  }
+  let result = @wite_bundle.compose_wac_file(wac_path)
+  match result {
+    Ok(bytes) => {
+      assert_true(bytes.length() > 100)
+      // Component magic bytes
+      assert_eq(bytes[0], b'\x00')
+      assert_eq(bytes[1], b'\x61')
+      assert_eq(bytes[2], b'\x73')
+      assert_eq(bytes[3], b'\x6D')
+      assert_eq(bytes[4], b'\x0D')
+      assert_eq(bytes[5], b'\x00')
+      assert_eq(bytes[6], b'\x01')
+      assert_eq(bytes[7], b'\x00')
+    }
+    Err(msg) => fail("compose failed: " + msg)
+  }
+}
+
+///|
+test "fixture: wac compose + optimize pipeline" {
+  let wac_path = "bench/corpus/component-dce/wite-build-fixture/main.wac"
+  if !@fs.path_exists(wac_path) {
+    return
+  }
+  let composed = match @wite_bundle.compose_wac_file(wac_path) {
+    Ok(bytes) => bytes
+    Err(_) => return
+  }
+  let config = @wite_core.OptimizeConfig::o1()
+  let result = optimize_with_kind(
+    composed, BinaryKind::Auto, config, [],
+  ).unwrap()
+  assert_true(result.before_size > 0U)
+  assert_true(result.after_size <= result.before_size)
+}
+
+///|
+test "fixture: wac compose snapshot" {
+  let wac_path = "bench/corpus/component-dce/wite-build-fixture/main.wac"
+  if !@fs.path_exists(wac_path) {
+    return
+  }
+  let composed = @wite_bundle.compose_wac_file(wac_path).unwrap()
+  inspect(composed.length(), content=(
+    #|97709
+  ))
+}
+
+///|
+test "fixture: compose then optimize pipeline" {
+  let dir = js_make_temp_dir("wite-e2e-fixture-")
+  let wac_path = "bench/corpus/component-dce/wite-build-fixture/main.wac"
+  if !@fs.path_exists(wac_path) {
+    js_remove_dir_recursive(dir)
+    return
+  }
+  let composed = match @wite_bundle.compose_wac_file(wac_path) {
+    Ok(bytes) => bytes
+    Err(_) => {
+      js_remove_dir_recursive(dir)
+      return
+    }
+  }
+  let composed_path = dir + "/composed.wasm"
+  write_output_or_exit(composed_path, composed)
+  let optimized_path = dir + "/optimized.wasm"
+  run_optimize([
+    "wite", "optimize", composed_path, optimized_path, "-O1",
+  ])
+  assert_true(@fs.path_exists(optimized_path))
+  let optimized_bytes = @fs.read_file_to_bytes(optimized_path) catch {
+    _ => {
+      js_remove_dir_recursive(dir)
+      return
+    }
+  }
+  assert_true(optimized_bytes.length() > 0)
+  // Optimized should not be larger than composed (may be equal if no gains)
+  assert_true(
+    optimized_bytes.length().reinterpret_as_uint() <=
+    composed.length().reinterpret_as_uint(),
+  )
+  js_remove_dir_recursive(dir)
+}
