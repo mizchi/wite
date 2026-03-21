@@ -8,6 +8,7 @@ pub using @wite_optimize {
   collect_direct_callees,
   collect_direct_callees_from_body_raise,
   collect_gc_type_canonical_map_from_entries_raise,
+  collect_optimize_stage_observations,
   collect_signature_refine_alias_map,
   is_visited_function_index,
   make_bool_array,

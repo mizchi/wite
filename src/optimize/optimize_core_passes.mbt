@@ -209,6 +209,207 @@ fn collect_optimize_no_change_reasons(
 }
 
 ///|
+fn join_cfp_const_hint_reason_counts(
+  entries : Array[CfpConstHintRejectReasonCount],
+) -> String {
+  let parts : Array[String] = []
+  for entry in entries {
+    parts.push(entry.reason + "=" + entry.count.to_string())
+  }
+  parts.join(", ")
+}
+
+///|
+pub fn collect_optimize_stage_observations(
+  stage_name : String,
+  before_bytes : Bytes,
+  removed_sections : Array[String],
+  config : OptimizeConfig,
+) -> Array[String] {
+  if stage_name != "dce" || !config.enable_experimental_cfp_const_hints {
+    return []
+  }
+  let sections = try parse_core_sections_raise(before_bytes) catch {
+    _ => return []
+  } noraise {
+    v => v
+  }
+  let (
+    hint_section_count,
+    hint_unknown_version_section_count,
+    hint_malformed_section_count,
+  ) = collect_cfp_const_hint_section_stats(before_bytes, sections)
+  if hint_section_count == 0U {
+    return []
+  }
+  let mut type_section_payload : Bytes? = None
+  let mut import_section_payload : Bytes? = None
+  let mut function_section_payload : Bytes? = None
+  let mut code_section_payload : Bytes? = None
+  for section in sections {
+    let payload = before_bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      1U => type_section_payload = Some(payload)
+      2U => import_section_payload = Some(payload)
+      3U => function_section_payload = Some(payload)
+      10U => code_section_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let type_payload = match type_section_payload {
+    Some(v) => v
+    None => return []
+  }
+  let function_payload = match function_section_payload {
+    Some(v) => v
+    None => return []
+  }
+  let code_payload = match code_section_payload {
+    Some(v) => v
+    None => return []
+  }
+  let imported_function_type_indices = match import_section_payload {
+    Some(payload) =>
+      try parse_import_function_type_indices(payload) catch {
+        _ => return []
+      } noraise {
+        v => v
+      }
+    None => []
+  }
+  let imported_function_count = imported_function_type_indices
+    .length()
+    .reinterpret_as_uint()
+  let local_function_type_indices = try
+    parse_function_type_indices(function_payload)
+  catch {
+    _ => return []
+  } noraise {
+    v => v
+  }
+  let code_bodies = try parse_code_bodies(code_payload) catch {
+    _ => return []
+  } noraise {
+    v => v
+  }
+  if local_function_type_indices.length() != code_bodies.length() {
+    return []
+  }
+  let function_type_by_index = imported_function_type_indices.copy()
+  function_type_by_index.append(local_function_type_indices[:])
+  let parsed_type_entries = try
+    parse_type_section_entries_with_refs_raise(
+      type_payload, "optimize-observations",
+    )
+  catch {
+    _ => return []
+  } noraise {
+    v => v
+  }
+  let gc_type_canonical_map = try
+    collect_gc_type_canonical_map_from_entries_raise(parsed_type_entries)
+  catch {
+    _ => return []
+  } noraise {
+    v => v
+  }
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  for i in 0..<parsed_type_entries.length() {
+    if parsed_type_entries[i].form == 0x60U {
+      let entry = try
+        parse_function_type_entry_from_raw_raise(
+          parsed_type_entries[i].raw,
+          "optimize-observations",
+        )
+      catch {
+        _ => return []
+      } noraise {
+        v => v
+      }
+      function_type_entry_by_type_index.set(i.reinterpret_as_uint(), entry)
+    }
+  }
+  let parsed_hint_entries = parse_cfp_const_hint_entries(before_bytes, sections)
+  let hint_alias_map = collect_const_call_forwarding_hint_alias_map(
+    before_bytes, sections, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+    gc_type_canonical_map,
+  )
+  let hint_reject_reason_counts = collect_const_call_forwarding_hint_reject_reason_counts(
+    before_bytes, sections, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+    gc_type_canonical_map,
+  )
+  let direct_call_count_by_function = try
+    collect_direct_call_count_by_function_raise(code_bodies)
+  catch {
+    _ => return []
+  } noraise {
+    v => v
+  }
+  let root_function_indices : Map[UInt, Bool] = {}
+  let export_root_names = export_root_names_from_config(config)
+  let call_graph = try
+    analyze_call_graph_raise(before_bytes, export_root_names)
+  catch {
+    _ => return []
+  } noraise {
+    v => v
+  }
+  for index in call_graph.roots {
+    root_function_indices.set(index, true)
+  }
+  let (specialize_hint_candidate_count, specialize_hint_reject_reason_counts) = try
+    collect_const_target_specialize_hint_analysis_raise(
+      code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+      hint_alias_map, direct_call_count_by_function, root_function_indices, gc_type_canonical_map,
+    )
+  catch {
+    _ => return []
+  } noraise {
+    v => v
+  }
+  let mut hint_usable_entry_count = 0U
+  hint_alias_map.each((_, _) => hint_usable_entry_count += 1U)
+  let observations : Array[String] = []
+  let cfp_const_used = removed_sections.any(s => s.contains("cfp-const:calls:"))
+  let cfp_const_specialize_used = removed_sections.any(s => {
+    s.contains("cfp-const-specialize:calls:")
+  })
+  observations.push(
+    "cfp-const-hints: sections=" +
+    hint_section_count.to_string() +
+    " unknown-version=" +
+    hint_unknown_version_section_count.to_string() +
+    " malformed=" +
+    hint_malformed_section_count.to_string() +
+    " entries=" +
+    parsed_hint_entries.length().reinterpret_as_uint().to_string() +
+    " usable=" +
+    hint_usable_entry_count.to_string() +
+    " cfp-const-used=" +
+    cfp_const_used.to_string() +
+    " cfp-const-specialize-used=" +
+    cfp_const_specialize_used.to_string(),
+  )
+  if hint_reject_reason_counts.length() > 0 {
+    observations.push(
+      "cfp-const-hints/structural-rejects: " +
+      join_cfp_const_hint_reason_counts(hint_reject_reason_counts),
+    )
+  }
+  observations.push(
+    "cfp-const-specialize-hints: candidates=" +
+    specialize_hint_candidate_count.to_string(),
+  )
+  if specialize_hint_reject_reason_counts.length() > 0 {
+    observations.push(
+      "cfp-const-specialize-hints/rejects: " +
+      join_cfp_const_hint_reason_counts(specialize_hint_reject_reason_counts),
+    )
+  }
+  observations
+}
+
+///|
 priv struct OptimizeRoundResult {
   bytes : Bytes
   removed_sections : Array[String]
@@ -298,7 +499,7 @@ fn optimize_for_size_round_raise(
     }
     let prev_len = optimized_bytes.length()
     let cfp_const_specialize = apply_const_call_forwarding_target_specialization_raise_with_sections(
-      optimized_bytes, cached_sections,
+      optimized_bytes, cached_sections, config,
     )
     optimized_bytes = cfp_const_specialize.bytes
     if optimized_bytes.length() != prev_len {
@@ -314,7 +515,7 @@ fn optimize_for_size_round_raise(
     }
     let prev_len2 = optimized_bytes.length()
     let cfp_const = apply_const_call_forwarding_propagation_raise_with_sections(
-      optimized_bytes, cached_sections,
+      optimized_bytes, cached_sections, config,
     )
     optimized_bytes = cfp_const.bytes
     if optimized_bytes.length() != prev_len2 {

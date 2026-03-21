@@ -40,6 +40,7 @@ priv struct ComponentOptimizeRoundResult {
   bytes : Bytes
   core_module_count : UInt
   removed_sections : Array[String]
+  observations : Array[String]
   no_change_reasons : Array[String]
 }
 
@@ -56,6 +57,7 @@ fn optimize_component_for_size_round(
   }
   let out : Array[Byte] = bytes[0:8].to_array()
   let removed_sections : Array[String] = []
+  let observations : Array[String] = []
   let no_change_reasons : Array[String] = []
   let mut core_module_index = 0
   for section in sections {
@@ -77,6 +79,11 @@ fn optimize_component_for_size_round(
           "core#" + core_module_index.to_string() + ":" + removed,
         )
       }
+      for observation in optimized.observations {
+        observations.push(
+          "core#" + core_module_index.to_string() + ":" + observation,
+        )
+      }
       for reason in optimized.no_change_reasons {
         no_change_reasons.push(
           "core#" + core_module_index.to_string() + ":" + reason,
@@ -96,6 +103,7 @@ fn optimize_component_for_size_round(
     bytes: Bytes::from_array(out[:]),
     core_module_count: core_module_index.reinterpret_as_uint(),
     removed_sections,
+    observations,
     no_change_reasons,
   })
 }
@@ -109,11 +117,27 @@ pub fn optimize_for_size(
     let rounds = if config.pass_rounds == 0U { 1U } else { config.pass_rounds }
     let mut current = bytes
     let removed_sections : Array[String] = []
+    let observations : Array[String] = []
     let mut prev_gain = 0U
     for round_index in 0U..<rounds {
       let before_round_size = current.length().reinterpret_as_uint()
       let round = optimize_for_size_round_raise(current, config)
       let after_round_size = round.bytes.length().reinterpret_as_uint()
+      let round_observations = collect_optimize_stage_observations(
+        "dce",
+        current,
+        round.removed_sections,
+        config,
+      )
+      for observation in round_observations {
+        if rounds > 1U {
+          observations.push(
+            "round#" + (round_index + 1U).to_string() + ": " + observation,
+          )
+        } else {
+          observations.push(observation)
+        }
+      }
       let changed = if after_round_size != before_round_size {
         true
       } else {
@@ -156,6 +180,7 @@ pub fn optimize_for_size(
       before_size: bytes.length().reinterpret_as_uint(),
       after_size: current.length().reinterpret_as_uint(),
       removed_sections,
+      observations,
       no_change_reasons,
     }
   })
@@ -196,6 +221,7 @@ pub fn optimize_component_for_size(
   let per_round_config = clone_optimize_config(effective_config, pass_rounds=1U)
   let mut current = bytes
   let removed_sections : Array[String] = []
+  let observations : Array[String] = []
   let no_change_reasons : Array[String] = []
   let mut converged = false
   for i in 0U..<rounds {
@@ -203,6 +229,13 @@ pub fn optimize_component_for_size(
       optimize_component_for_size_round(current, per_round_config) {
       Ok(v) => v
       Err(e) => return Err(e)
+    }
+    for observation in round_result.observations {
+      if rounds > 1U {
+        observations.push("round#" + (i + 1U).to_string() + ": " + observation)
+      } else {
+        observations.push(observation)
+      }
     }
     let before_size = current.length().reinterpret_as_uint()
     let after_size = round_result.bytes.length().reinterpret_as_uint()
@@ -241,6 +274,7 @@ pub fn optimize_component_for_size(
     before_size: bytes.length().reinterpret_as_uint(),
     after_size: current.length().reinterpret_as_uint(),
     removed_sections,
+    observations,
     no_change_reasons,
   })
 }

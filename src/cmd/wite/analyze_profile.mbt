@@ -19,6 +19,36 @@ pub fn run_analyze_host(path : String, limit : UInt) -> Unit {
         report.signature_refinable_thunk_count.to_string(),
       )
       println(
+        "  cfp_const_hints: sections=" +
+        report.cfp_const_hint_section_count.to_string() +
+        " unknown_version=" +
+        report.cfp_const_hint_unknown_version_section_count.to_string() +
+        " malformed=" +
+        report.cfp_const_hint_malformed_section_count.to_string() +
+        " entries=" +
+        report.cfp_const_hint_entry_count.to_string() +
+        " usable=" +
+        report.cfp_const_hint_usable_entry_count.to_string(),
+      )
+      if report.cfp_const_hint_reject_reason_counts.length() > 0 {
+        let parts : Array[String] = []
+        for entry in report.cfp_const_hint_reject_reason_counts {
+          parts.push(entry.reason + "=" + entry.count.to_string())
+        }
+        println("    reject_reasons: " + parts.join(", "))
+      }
+      println(
+        "  cfp_const_specialize_hints: candidates=" +
+        report.cfp_const_specialize_hint_candidate_count.to_string(),
+      )
+      if report.cfp_const_specialize_hint_reject_reason_counts.length() > 0 {
+        let parts : Array[String] = []
+        for entry in report.cfp_const_specialize_hint_reject_reason_counts {
+          parts.push(entry.reason + "=" + entry.count.to_string())
+        }
+        println("    specialize_reject_reasons: " + parts.join(", "))
+      }
+      println(
         "  directize_candidate_calls: " +
         report.directize_candidate_call_count.to_string(),
       )
@@ -57,6 +87,9 @@ fn print_optimize_metadata_stage(
   )
   if stage.removed_sections.length() > 0 {
     println("      pass markers: " + stage.removed_sections.join(", "))
+  }
+  if stage.observations.length() > 0 {
+    println("      observations: " + stage.observations.join(" | "))
   }
   if stage.no_change_reasons.length() > 0 {
     println("      no-change: " + stage.no_change_reasons.join(", "))

@@ -109,6 +109,16 @@ test "parse optimize cli options accepts wasm-opt style aliases" {
 }
 
 ///|
+test "parse optimize cli options enables experimental cfp const hints only when requested" {
+  let default_parsed = parse_optimize_cli_options(["-O2"])
+  assert_false(default_parsed.config.enable_experimental_cfp_const_hints)
+  let parsed = parse_optimize_cli_options([
+    "-O2", "--experimental-cfp-const-hints",
+  ])
+  assert_true(parsed.config.enable_experimental_cfp_const_hints)
+}
+
+///|
 test "parse optimize cli options supports debuginfo alias override" {
   let parsed = parse_optimize_cli_options(["--strip", "-g"])
   assert_true(!parsed.config.strip_debug_sections)

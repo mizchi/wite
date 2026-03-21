@@ -129,6 +129,141 @@ pub fn collect_const_call_forwarding_alias_map(
 }
 
 ///|
+fn validate_const_call_forwarding_hint_entry(
+  wrapper_index : UInt,
+  target : UInt,
+  target_arg_instrs : Array[Bytes],
+  imported_function_count : UInt,
+  function_type_by_index : Array[UInt],
+  function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+  gc_type_canonical_map : Map[UInt, UInt],
+) -> (CfpConstAlias?, String?) {
+  if wrapper_index < imported_function_count {
+    return (None, Some("wrapper-not-local"))
+  }
+  if target == wrapper_index {
+    return (None, Some("self-target"))
+  }
+  let wrapper_pos = UInt::reinterpret_as_int(wrapper_index)
+  let target_pos = UInt::reinterpret_as_int(target)
+  if wrapper_pos < 0 || wrapper_pos >= function_type_by_index.length() {
+    return (None, Some("wrapper-index-out-of-range"))
+  }
+  if target_pos < 0 || target_pos >= function_type_by_index.length() {
+    return (None, Some("target-index-out-of-range"))
+  }
+  let wrapper_type_index = function_type_by_index[wrapper_pos]
+  let target_type_index = function_type_by_index[target_pos]
+  let wrapper_type = match
+    function_type_entry_by_type_index.get(wrapper_type_index) {
+    Some(v) => v
+    None => return (None, Some("wrapper-type-missing"))
+  }
+  let target_type = match
+    function_type_entry_by_type_index.get(target_type_index) {
+    Some(v) => v
+    None => return (None, Some("target-type-missing"))
+  }
+  if !can_const_forward_with_arg_instrs_to_target(
+      wrapper_type, target_type, target_arg_instrs, gc_type_canonical_map,
+    ) {
+    return (None, Some("recipe-type-mismatch"))
+  }
+  let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
+  let uses_scratch_locals = const_arg_instrs_need_scratch_locals(
+    target_arg_instrs, wrapper_param_count,
+  )
+  let wrapper_param_local_types = match
+    collect_single_byte_local_types_from_params(wrapper_type.params) {
+    Some(v) => v
+    None => []
+  }
+  if uses_scratch_locals &&
+    wrapper_param_local_types.length().reinterpret_as_uint() !=
+    wrapper_param_count {
+    return (None, Some("scratch-local-types-unsupported"))
+  }
+  (
+    Some({
+      target,
+      target_arg_instrs,
+      wrapper_param_count,
+      wrapper_param_local_types,
+      uses_scratch_locals,
+    }),
+    None,
+  )
+}
+
+///|
+pub fn collect_const_call_forwarding_hint_alias_map(
+  bytes : Bytes,
+  sections : Array[RawSection],
+  imported_function_count : UInt,
+  function_type_by_index : Array[UInt],
+  function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+  gc_type_canonical_map : Map[UInt, UInt],
+) -> Map[UInt, CfpConstAlias] {
+  let alias_map : Map[UInt, CfpConstAlias] = {}
+  for entry in parse_cfp_const_hint_entries(bytes, sections) {
+    let (wrapper_index, target, target_arg_instrs) = entry
+    match
+      validate_const_call_forwarding_hint_entry(
+        wrapper_index, target, target_arg_instrs, imported_function_count, function_type_by_index,
+        function_type_entry_by_type_index, gc_type_canonical_map,
+      ) {
+      (Some(alias_info), _) => alias_map.set(wrapper_index, alias_info)
+      _ => ()
+    }
+  }
+  alias_map
+}
+
+///|
+fn compare_cfp_const_hint_reject_reason_count(
+  a : CfpConstHintRejectReasonCount,
+  b : CfpConstHintRejectReasonCount,
+) -> Int {
+  if a.count > b.count {
+    -1
+  } else if a.count < b.count {
+    1
+  } else {
+    a.reason.compare(b.reason)
+  }
+}
+
+///|
+pub fn collect_const_call_forwarding_hint_reject_reason_counts(
+  bytes : Bytes,
+  sections : Array[RawSection],
+  imported_function_count : UInt,
+  function_type_by_index : Array[UInt],
+  function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+  gc_type_canonical_map : Map[UInt, UInt],
+) -> Array[CfpConstHintRejectReasonCount] {
+  let counts : Map[String, UInt] = {}
+  for entry in parse_cfp_const_hint_entries(bytes, sections) {
+    let (wrapper_index, target, target_arg_instrs) = entry
+    match
+      validate_const_call_forwarding_hint_entry(
+        wrapper_index, target, target_arg_instrs, imported_function_count, function_type_by_index,
+        function_type_entry_by_type_index, gc_type_canonical_map,
+      ) {
+      (_, Some(reason)) => {
+        let prev = counts.get(reason).unwrap_or(0U)
+        counts.set(reason, prev + 1U)
+      }
+      _ => ()
+    }
+  }
+  let out : Array[CfpConstHintRejectReasonCount] = []
+  counts.each((reason, count) => out.push({ reason, count }))
+  out.sort_by(compare_cfp_const_hint_reject_reason_count)
+  out
+}
+
+///|
 fn compose_const_call_forwarding_arg_instrs(
   current_target_arg_instrs : Array[Bytes],
   next_target_arg_instrs : Array[Bytes],
@@ -210,7 +345,7 @@ priv struct ConstTargetSpecializePlan {
 }
 
 ///|
-fn collect_direct_call_count_by_function_raise(
+pub fn collect_direct_call_count_by_function_raise(
   code_bodies : Array[Bytes],
 ) -> Map[UInt, UInt] raise WiteError {
   let counts : Map[UInt, UInt] = {}
@@ -382,11 +517,151 @@ fn build_direct_forwarding_wrapper_body(
 }
 
 ///|
+fn validate_const_target_specialize_hint_alias_raise(
+  wrapper_index : UInt,
+  alias_info : CfpConstAlias,
+  code_bodies : Array[Bytes],
+  imported_function_count : UInt,
+  function_type_by_index : Array[UInt],
+  function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+  direct_call_count_by_function : Map[UInt, UInt],
+  root_function_indices : Map[UInt, Bool],
+  gc_type_canonical_map : Map[UInt, UInt],
+) -> String? raise WiteError {
+  if root_function_indices.get(wrapper_index) is Some(_) {
+    return Some("wrapper-root")
+  }
+  let wrapper_local_index = wrapper_index - imported_function_count
+  let wrapper_local_pos = UInt::reinterpret_as_int(wrapper_local_index)
+  if wrapper_local_pos < 0 || wrapper_local_pos >= code_bodies.length() {
+    return Some("wrapper-body-missing")
+  }
+  let wrapper_pos = UInt::reinterpret_as_int(wrapper_index)
+  if wrapper_pos < 0 || wrapper_pos >= function_type_by_index.length() {
+    return Some("wrapper-index-out-of-range")
+  }
+  let wrapper_type_index = function_type_by_index[wrapper_pos]
+  let wrapper_type = match
+    function_type_entry_by_type_index.get(wrapper_type_index) {
+    Some(v) => v
+    None => return Some("wrapper-type-missing")
+  }
+  let wrapper_prefix = parse_local_decl_prefix_raise(
+    code_bodies[wrapper_local_pos],
+  )
+  if wrapper_prefix.local_types.length() > 0 {
+    return Some("wrapper-has-locals")
+  }
+  let target = alias_info.target
+  if target == wrapper_index {
+    return Some("self-target")
+  }
+  if root_function_indices.get(target) is Some(_) {
+    return Some("target-root")
+  }
+  if direct_call_count_by_function.get(target).unwrap_or(0U) != 1U {
+    return Some("target-direct-callers!=1")
+  }
+  if target < imported_function_count {
+    return Some("target-not-local")
+  }
+  let target_pos = UInt::reinterpret_as_int(target)
+  if target_pos < 0 || target_pos >= function_type_by_index.length() {
+    return Some("target-index-out-of-range")
+  }
+  let target_local_index = target - imported_function_count
+  let target_local_pos = UInt::reinterpret_as_int(target_local_index)
+  if target_local_pos < 0 || target_local_pos >= code_bodies.length() {
+    return Some("target-body-missing")
+  }
+  let target_type_index = function_type_by_index[target_pos]
+  let target_type = match
+    function_type_entry_by_type_index.get(target_type_index) {
+    Some(v) => v
+    None => return Some("target-type-missing")
+  }
+  let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
+  let uses_scratch_locals = const_arg_instrs_need_scratch_locals(
+    alias_info.target_arg_instrs,
+    wrapper_param_count,
+  )
+  if !uses_scratch_locals {
+    return Some("scratch-not-needed")
+  }
+  let wrapper_call_count = direct_call_count_by_function
+    .get(wrapper_index)
+    .unwrap_or(0U)
+  if scratch_const_call_forwarding_is_profitable(
+      {
+        target,
+        target_arg_instrs: alias_info.target_arg_instrs,
+        wrapper_param_count,
+        wrapper_param_local_types: [],
+        uses_scratch_locals,
+      },
+      wrapper_call_count,
+      code_bodies[wrapper_local_pos].length().reinterpret_as_uint(),
+    ) {
+    return Some("cfp-const-still-profitable")
+  }
+  if !can_const_forward_with_arg_instrs_to_target(
+      wrapper_type,
+      target_type,
+      alias_info.target_arg_instrs,
+      gc_type_canonical_map,
+    ) {
+    return Some("recipe-type-mismatch")
+  }
+  let build_result = try? build_const_target_specialized_body_raise(
+    code_bodies[target_local_pos],
+    alias_info.target_arg_instrs,
+  )
+  match build_result {
+    Ok(_) => None
+    Err(_) => Some("specialize-build-invalid")
+  }
+}
+
+///|
+pub fn collect_const_target_specialize_hint_analysis_raise(
+  code_bodies : Array[Bytes],
+  imported_function_count : UInt,
+  function_type_by_index : Array[UInt],
+  function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+  hint_alias_map : Map[UInt, CfpConstAlias],
+  direct_call_count_by_function : Map[UInt, UInt],
+  root_function_indices : Map[UInt, Bool],
+  gc_type_canonical_map : Map[UInt, UInt],
+) -> (UInt, Array[CfpConstHintRejectReasonCount]) raise WiteError {
+  let mut candidate_count = 0U
+  let counts : Map[String, UInt] = {}
+  hint_alias_map.each((wrapper_index, alias_info) => {
+    match
+      validate_const_target_specialize_hint_alias_raise(
+        wrapper_index, alias_info, code_bodies, imported_function_count, function_type_by_index,
+        function_type_entry_by_type_index, direct_call_count_by_function, root_function_indices,
+        gc_type_canonical_map,
+      ) {
+      Some(reason) => {
+        let prev = counts.get(reason).unwrap_or(0U)
+        counts.set(reason, prev + 1U)
+      }
+      None => candidate_count += 1U
+    }
+  })
+  let out : Array[CfpConstHintRejectReasonCount] = []
+  counts.each((reason, count) => out.push({ reason, count }))
+  out.sort_by(compare_cfp_const_hint_reject_reason_count)
+  (candidate_count, out)
+}
+
+///|
 fn collect_const_target_specialize_plan_raise(
   code_bodies : Array[Bytes],
   imported_function_count : UInt,
   function_type_by_index : Array[UInt],
   function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+  hint_alias_map : Map[UInt, CfpConstAlias],
   direct_call_count_by_function : Map[UInt, UInt],
   root_function_indices : Map[UInt, Bool],
   gc_type_canonical_map : Map[UInt, UInt],
@@ -412,11 +687,16 @@ fn collect_const_target_specialize_plan_raise(
       continue
     }
     let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
-    match
-      parse_forward_call_target_with_const_arg_instrs(
-        code_bodies[i],
-        wrapper_param_count,
-      ) {
+    let target_and_arg_instrs = match hint_alias_map.get(wrapper_index) {
+      Some(alias_info) =>
+        Some((alias_info.target, alias_info.target_arg_instrs))
+      None =>
+        parse_forward_call_target_with_const_arg_instrs(
+          code_bodies[i],
+          wrapper_param_count,
+        )
+    }
+    match target_and_arg_instrs {
       Some((target, target_arg_instrs)) => {
         if target == wrapper_index ||
           root_function_indices.get(target) is Some(_) ||
@@ -799,6 +1079,7 @@ fn rewrite_code_section_payload_for_const_call_forwarding_raise(
 fn apply_const_call_forwarding_target_specialization_raise_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
+  config : OptimizeConfig,
 ) -> CfpConstSpecializeApplyResult raise WiteError {
   let mut type_payload : Bytes? = None
   let mut import_payload : Bytes? = None
@@ -884,9 +1165,17 @@ fn apply_const_call_forwarding_target_specialization_raise_with_sections(
   let direct_call_count_by_function = collect_direct_call_count_by_function_raise(
     code_bodies,
   )
+  let hint_alias_map = if config.enable_experimental_cfp_const_hints {
+    collect_const_call_forwarding_hint_alias_map(
+      bytes, sections, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+      gc_type_canonical_map,
+    )
+  } else {
+    {}
+  }
   let plan_map = collect_const_target_specialize_plan_raise(
     code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
-    direct_call_count_by_function, root_function_indices, gc_type_canonical_map,
+    hint_alias_map, direct_call_count_by_function, root_function_indices, gc_type_canonical_map,
   )
   let mut specialized_function_count = 0U
   let wrapper_to_target : Map[UInt, UInt] = {}
@@ -931,7 +1220,10 @@ fn apply_const_call_forwarding_target_specialization_raise_with_sections(
   }
   let out : Array[Byte] = bytes[0:8].to_array()
   for section in sections {
-    if section.section_id == 3U {
+    if config.enable_experimental_cfp_const_hints &&
+      is_cfp_const_hint_custom_section(section) {
+      continue
+    } else if section.section_id == 3U {
       append_encoded_section(out, 3U, rewritten_function_payload)
     } else if section.section_id == 10U {
       append_encoded_section(out, 10U, rewritten_code_payload)
@@ -950,6 +1242,7 @@ fn apply_const_call_forwarding_target_specialization_raise_with_sections(
 fn apply_const_call_forwarding_propagation_raise_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
+  config : OptimizeConfig,
 ) -> CfpConstApplyResult raise WiteError {
   let mut type_payload : Bytes? = None
   let mut import_payload : Bytes? = None
@@ -1033,18 +1326,32 @@ fn apply_const_call_forwarding_propagation_raise_with_sections(
     code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
     gc_type_canonical_map,
   )
+  let hint_alias_map = if config.enable_experimental_cfp_const_hints {
+    collect_const_call_forwarding_hint_alias_map(
+      bytes, sections, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+      gc_type_canonical_map,
+    )
+  } else {
+    {}
+  }
+  let merged_alias_map = alias_map.copy()
+  hint_alias_map.each((wrapper_index, alias_info) => {
+    if merged_alias_map.get(wrapper_index) is None {
+      merged_alias_map.set(wrapper_index, alias_info)
+    }
+  })
   let mut has_alias = false
-  alias_map.each((_, _target) => has_alias = true)
+  merged_alias_map.each((_, _target) => has_alias = true)
   if !has_alias {
     return { bytes, rewritten_call_count: 0U }
   }
   let direct_call_count_by_target = collect_direct_call_count_by_const_alias_raise(
-    code_bodies, alias_map,
+    code_bodies, merged_alias_map,
   )
   let filtered_alias_map : Map[UInt, CfpConstAlias] = {}
   for i in 0..<code_bodies.length() {
     let old_index = imported_function_count + i.reinterpret_as_uint()
-    match alias_map.get(old_index) {
+    match merged_alias_map.get(old_index) {
       Some(alias_info) =>
         if !alias_info.uses_scratch_locals ||
           scratch_const_call_forwarding_is_profitable(
@@ -1070,7 +1377,10 @@ fn apply_const_call_forwarding_propagation_raise_with_sections(
   }
   let out : Array[Byte] = bytes[0:8].to_array()
   for section in sections {
-    if section.section_id == 10U {
+    if config.enable_experimental_cfp_const_hints &&
+      is_cfp_const_hint_custom_section(section) {
+      continue
+    } else if section.section_id == 10U {
       append_encoded_section(out, 10U, rewritten_code_payload)
     } else {
       out.append(bytes[section.section_start:section.section_end].to_array())

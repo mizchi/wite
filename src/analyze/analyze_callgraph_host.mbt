@@ -480,6 +480,18 @@ pub fn analyze_host_generated_code(
     let mut param_forwarding_thunk_count = 0U
     let mut const_forwarding_thunk_count = 0U
     let mut signature_refinable_thunk_count = 0U
+    let mut cfp_const_hint_section_count = 0U
+    let mut cfp_const_hint_unknown_version_section_count = 0U
+    let mut cfp_const_hint_malformed_section_count = 0U
+    let mut cfp_const_hint_entry_count = 0U
+    let mut cfp_const_hint_usable_entry_count = 0U
+    let mut cfp_const_hint_reject_reason_counts : Array[
+      CfpConstHintRejectReasonCount,
+    ] = []
+    let mut cfp_const_specialize_hint_candidate_count = 0U
+    let mut cfp_const_specialize_hint_reject_reason_counts : Array[
+      CfpConstHintRejectReasonCount,
+    ] = []
     let hints : Array[HostCodeHint] = []
     match (type_payload, function_payload, code_payload) {
       (Some(type_payload), Some(function_payload), Some(code_payload)) => {
@@ -593,6 +605,49 @@ pub fn analyze_host_generated_code(
           code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
           gc_type_canonical_map,
         )
+        let call_graph = analyze_call_graph_raise(bytes, None)
+        let root_function_indices : Map[UInt, Bool] = {}
+        for index in call_graph.roots {
+          root_function_indices.set(index, true)
+        }
+        let direct_call_count_by_function = @wite_optimize.collect_direct_call_count_by_function_raise(
+          code_bodies,
+        )
+        let parsed_cfp_const_hint_entries = @wite_optimize.parse_cfp_const_hint_entries(
+          bytes, sections,
+        )
+        let (
+          hint_section_count,
+          hint_unknown_version_section_count,
+          hint_malformed_section_count,
+        ) = @wite_optimize.collect_cfp_const_hint_section_stats(bytes, sections)
+        cfp_const_hint_section_count = hint_section_count
+        cfp_const_hint_unknown_version_section_count = hint_unknown_version_section_count
+        cfp_const_hint_malformed_section_count = hint_malformed_section_count
+        cfp_const_hint_entry_count = parsed_cfp_const_hint_entries
+          .length()
+          .reinterpret_as_uint()
+        let cfp_const_hint_alias_map = @wite_optimize.collect_const_call_forwarding_hint_alias_map(
+          bytes, sections, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+          gc_type_canonical_map,
+        )
+        cfp_const_hint_reject_reason_counts = @wite_optimize.collect_const_call_forwarding_hint_reject_reason_counts(
+          bytes, sections, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+          gc_type_canonical_map,
+        )
+        cfp_const_hint_alias_map.each((_, _) => {
+          cfp_const_hint_usable_entry_count += 1U
+        })
+        let (
+          specialize_hint_candidate_count,
+          specialize_hint_reject_reason_counts,
+        ) = @wite_optimize.collect_const_target_specialize_hint_analysis_raise(
+          code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+          cfp_const_hint_alias_map, direct_call_count_by_function, root_function_indices,
+          gc_type_canonical_map,
+        )
+        cfp_const_specialize_hint_candidate_count = specialize_hint_candidate_count
+        cfp_const_specialize_hint_reject_reason_counts = specialize_hint_reject_reason_counts
         signature_alias_map.each((function_index, alias_info) => {
           signature_refinable_thunk_count += 1U
           hints.push({
@@ -626,6 +681,14 @@ pub fn analyze_host_generated_code(
       param_forwarding_thunk_count,
       const_forwarding_thunk_count,
       signature_refinable_thunk_count,
+      cfp_const_hint_section_count,
+      cfp_const_hint_unknown_version_section_count,
+      cfp_const_hint_malformed_section_count,
+      cfp_const_hint_entry_count,
+      cfp_const_hint_usable_entry_count,
+      cfp_const_hint_reject_reason_counts,
+      cfp_const_specialize_hint_candidate_count,
+      cfp_const_specialize_hint_reject_reason_counts,
       directize_candidate_call_count: directize_result.rewritten_call_count,
       dce_removable_function_count: dce_report.removable_function_count,
       dce_removable_body_bytes: dce_report.removable_body_bytes,

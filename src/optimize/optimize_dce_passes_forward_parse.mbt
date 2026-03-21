@@ -91,7 +91,30 @@ fn parse_local_get_param_index_instr(instr : Bytes) -> UInt? {
   if instr.length() == 0 || instr[0] != 0x20U.to_byte() {
     return None
   }
+  if !is_single_instruction_with_opcode(instr, 0x20U) {
+    return None
+  }
   decode_u32_leb128_bytes(instr[1:instr.length()].to_bytes())
+}
+
+///|
+fn is_single_instruction_with_opcode(instr : Bytes, opcode : UInt) -> Bool {
+  if instr.length() == 0 {
+    return false
+  }
+  let expr : Array[Byte] = instr.to_array()
+  expr.push(0x0bU.to_byte())
+  let spans = match parse_instruction_spans(Bytes::from_array(expr[:])) {
+    Some(v) => v
+    None => return false
+  }
+  spans.length() == 2 &&
+  spans[0].opcode == opcode &&
+  spans[0].start == 0 &&
+  spans[0].end_ == instr.length() &&
+  spans[1].opcode == 0x0bU &&
+  spans[1].start == instr.length() &&
+  spans[1].end_ == instr.length() + 1
 }
 
 ///|
@@ -376,12 +399,15 @@ fn can_const_forward_with_arg_instrs_to_target(
     ) {
     return false
   }
-  let mut forwarded_param_count = 0
+  let used_params = make_bool_array(wrapper_type.params.length(), false)
   for i in 0..<target_arg_instrs.length() {
     match parse_local_get_param_index_instr(target_arg_instrs[i]) {
       Some(local_index) => {
         let local_pos = UInt::reinterpret_as_int(local_index)
         if local_pos < 0 || local_pos >= wrapper_type.params.length() {
+          return false
+        }
+        if used_params[local_pos] {
           return false
         }
         if !type_bytes_equal_with_gc_canonical_map(
@@ -391,7 +417,7 @@ fn can_const_forward_with_arg_instrs_to_target(
           ) {
           return false
         }
-        forwarded_param_count += 1
+        used_params[local_pos] = true
       }
       None => {
         let const_type = match
@@ -409,8 +435,10 @@ fn can_const_forward_with_arg_instrs_to_target(
       }
     }
   }
-  if forwarded_param_count != wrapper_type.params.length() {
-    return false
+  for used in used_params {
+    if !used {
+      return false
+    }
   }
   if count_const_arg_instrs(target_arg_instrs) == 0U {
     return false
@@ -424,10 +452,30 @@ fn appended_i32_const_instr_type(instr : Bytes) -> Bytes? {
     return None
   }
   match instr[0].to_uint() {
-    0x41U => [0x7fU.to_byte()] |> Bytes::from_array |> Some
-    0x42U => [0x7eU.to_byte()] |> Bytes::from_array |> Some
-    0x43U => [0x7dU.to_byte()] |> Bytes::from_array |> Some
-    0x44U => [0x7cU.to_byte()] |> Bytes::from_array |> Some
+    0x41U =>
+      if is_single_instruction_with_opcode(instr, 0x41U) {
+        [0x7fU.to_byte()] |> Bytes::from_array |> Some
+      } else {
+        None
+      }
+    0x42U =>
+      if is_single_instruction_with_opcode(instr, 0x42U) {
+        [0x7eU.to_byte()] |> Bytes::from_array |> Some
+      } else {
+        None
+      }
+    0x43U =>
+      if is_single_instruction_with_opcode(instr, 0x43U) {
+        [0x7dU.to_byte()] |> Bytes::from_array |> Some
+      } else {
+        None
+      }
+    0x44U =>
+      if is_single_instruction_with_opcode(instr, 0x44U) {
+        [0x7cU.to_byte()] |> Bytes::from_array |> Some
+      } else {
+        None
+      }
     _ => None
   }
 }
@@ -534,4 +582,153 @@ pub(all) struct CfpConstAlias {
   wrapper_param_count : UInt
   wrapper_param_local_types : Array[Byte]
   uses_scratch_locals : Bool
+}
+
+///|
+let cfp_const_hint_custom_section_name = "wite.cfp_const_hints"
+
+///|
+fn is_cfp_const_hint_custom_section(section : RawSection) -> Bool {
+  section.section_id == 0U &&
+  section.custom_name.unwrap_or("") == cfp_const_hint_custom_section_name
+}
+
+///|
+fn collect_cfp_const_hint_entries_and_section_stats(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> (Array[(UInt, UInt, Array[Bytes])], UInt, UInt, UInt) {
+  let entries : Array[(UInt, UInt, Array[Bytes])] = []
+  let mut section_count = 0U
+  let mut unknown_version_section_count = 0U
+  let mut malformed_section_count = 0U
+  for section in sections {
+    if !is_cfp_const_hint_custom_section(section) {
+      continue
+    }
+    section_count += 1U
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let prefix_end = try parse_custom_section_name_prefix_end(payload) catch {
+      _ => {
+        malformed_section_count += 1U
+        continue
+      }
+    } noraise {
+      v => v
+    }
+    let body = payload[prefix_end:payload.length()].to_bytes()
+    let cursor = Cursor::new(body)
+    let version = try cursor.read_u32_leb128() catch {
+      _ => {
+        malformed_section_count += 1U
+        continue
+      }
+    } noraise {
+      v => v
+    }
+    if version != 1U {
+      unknown_version_section_count += 1U
+      continue
+    }
+    let entry_count = try cursor.read_u32_leb128() catch {
+      _ => {
+        malformed_section_count += 1U
+        continue
+      }
+    } noraise {
+      v => v
+    }
+    let entry_count_i = UInt::reinterpret_as_int(entry_count)
+    if entry_count_i < 0 {
+      malformed_section_count += 1U
+      continue
+    }
+    let section_entries : Array[(UInt, UInt, Array[Bytes])] = []
+    let mut malformed = false
+    for _ in 0..<entry_count_i {
+      let wrapper_index = try cursor.read_u32_leb128() catch {
+        _ => {
+          malformed = true
+          break
+        }
+      } noraise {
+        v => v
+      }
+      let target_index = try cursor.read_u32_leb128() catch {
+        _ => {
+          malformed = true
+          break
+        }
+      } noraise {
+        v => v
+      }
+      let arg_count = try cursor.read_u32_leb128() catch {
+        _ => {
+          malformed = true
+          break
+        }
+      } noraise {
+        v => v
+      }
+      let arg_count_i = UInt::reinterpret_as_int(arg_count)
+      if arg_count_i < 0 {
+        malformed = true
+        break
+      }
+      let target_arg_instrs : Array[Bytes] = []
+      for _ in 0..<arg_count_i {
+        let instr_len_u = try cursor.read_u32_leb128() catch {
+          _ => {
+            malformed = true
+            break
+          }
+        } noraise {
+          v => v
+        }
+        let instr_len = UInt::reinterpret_as_int(instr_len_u)
+        if instr_len < 0 || cursor.get_pos() + instr_len > body.length() {
+          malformed = true
+          break
+        }
+        let instr_start = cursor.get_pos()
+        let instr_end = instr_start + instr_len
+        target_arg_instrs.push(body[instr_start:instr_end].to_bytes())
+        cursor.set_pos(instr_end)
+      }
+      if malformed {
+        break
+      }
+      section_entries.push((wrapper_index, target_index, target_arg_instrs))
+    }
+    if malformed || !cursor.eof() {
+      malformed_section_count += 1U
+      continue
+    }
+    entries.append(section_entries[:])
+  }
+  (
+    entries, section_count, unknown_version_section_count, malformed_section_count,
+  )
+}
+
+///|
+pub fn parse_cfp_const_hint_entries(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> Array[(UInt, UInt, Array[Bytes])] {
+  let (entries, _, _, _) = collect_cfp_const_hint_entries_and_section_stats(
+    bytes, sections,
+  )
+  entries
+}
+
+///|
+pub fn collect_cfp_const_hint_section_stats(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> (UInt, UInt, UInt) {
+  let (_, section_count, unknown_version_section_count, malformed_section_count) = collect_cfp_const_hint_entries_and_section_stats(
+    bytes, sections,
+  )
+  (section_count, unknown_version_section_count, malformed_section_count)
 }

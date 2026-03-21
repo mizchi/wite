@@ -221,6 +221,9 @@ fn run_treeshake(args : Array[String]) -> Unit {
       if result.removed_sections.length() > 0 {
         println("  passes: " + result.removed_sections.join(", "))
       }
+      if verbose && result.observations.length() > 0 {
+        println("  observations: " + result.observations.join(" | "))
+      }
       if verbose && result.no_change_reasons.length() > 0 {
         println("  no-change: " + result.no_change_reasons.join(", "))
       }

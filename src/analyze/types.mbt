@@ -20,6 +20,7 @@ pub using @wite {
   type CallGraphNode,
   type CallGraphReport,
   type CallGraphSummary,
+  type CfpConstHintRejectReasonCount,
   type HostCodeHint,
   type HostGeneratedCodeReport,
   type FunctionSizeDiff,

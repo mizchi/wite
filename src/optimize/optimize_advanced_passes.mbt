@@ -299,6 +299,7 @@ pub fn clone_optimize_config(
     enable_dfe=config.enable_dfe,
     enable_merge_similar_functions=config.enable_merge_similar_functions,
     enable_remove_unused_module_elements=config.enable_remove_unused_module_elements,
+    enable_experimental_cfp_const_hints=config.enable_experimental_cfp_const_hints,
     closed_world=config.closed_world,
     closed_world_root_exports~,
     safe_mode=config.safe_mode,

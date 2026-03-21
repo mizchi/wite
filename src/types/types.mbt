@@ -48,6 +48,7 @@ pub(all) struct OptimizeConfig {
   enable_dfe : Bool
   enable_merge_similar_functions : Bool
   enable_remove_unused_module_elements : Bool
+  enable_experimental_cfp_const_hints : Bool
   closed_world : Bool
   closed_world_root_exports : Array[String]
   safe_mode : Bool
@@ -74,6 +75,7 @@ pub fn OptimizeConfig::default() -> Self {
     enable_dfe: false,
     enable_merge_similar_functions: false,
     enable_remove_unused_module_elements: false,
+    enable_experimental_cfp_const_hints: false,
     closed_world: false,
     closed_world_root_exports: [],
     safe_mode: false,
@@ -101,6 +103,7 @@ pub fn OptimizeConfig::aggressive() -> Self {
     enable_dfe: false,
     enable_merge_similar_functions: false,
     enable_remove_unused_module_elements: false,
+    enable_experimental_cfp_const_hints: false,
     closed_world: false,
     closed_world_root_exports: [],
     safe_mode: false,
@@ -286,6 +289,7 @@ pub fn make_optimize_config(
   enable_dfe? : Bool = false,
   enable_merge_similar_functions? : Bool = false,
   enable_remove_unused_module_elements? : Bool = false,
+  enable_experimental_cfp_const_hints? : Bool = false,
   closed_world? : Bool = false,
   closed_world_root_exports? : Array[String] = [],
   safe_mode? : Bool = false,
@@ -309,6 +313,7 @@ pub fn make_optimize_config(
     enable_dfe,
     enable_merge_similar_functions,
     enable_remove_unused_module_elements,
+    enable_experimental_cfp_const_hints,
     closed_world,
     closed_world_root_exports,
     safe_mode,
@@ -321,6 +326,7 @@ pub(all) struct OptimizeResult {
   before_size : UInt
   after_size : UInt
   removed_sections : Array[String]
+  observations : Array[String]
   no_change_reasons : Array[String]
 }
 
@@ -478,12 +484,28 @@ pub(all) struct HostCodeHint {
 }
 
 ///|
+pub(all) struct CfpConstHintRejectReasonCount {
+  reason : String
+  count : UInt
+}
+
+///|
 pub(all) struct HostGeneratedCodeReport {
   imported_function_count : UInt
   local_function_count : UInt
   param_forwarding_thunk_count : UInt
   const_forwarding_thunk_count : UInt
   signature_refinable_thunk_count : UInt
+  cfp_const_hint_section_count : UInt
+  cfp_const_hint_unknown_version_section_count : UInt
+  cfp_const_hint_malformed_section_count : UInt
+  cfp_const_hint_entry_count : UInt
+  cfp_const_hint_usable_entry_count : UInt
+  cfp_const_hint_reject_reason_counts : Array[CfpConstHintRejectReasonCount]
+  cfp_const_specialize_hint_candidate_count : UInt
+  cfp_const_specialize_hint_reject_reason_counts : Array[
+    CfpConstHintRejectReasonCount,
+  ]
   directize_candidate_call_count : UInt
   dce_removable_function_count : UInt
   dce_removable_body_bytes : UInt
@@ -514,6 +536,7 @@ pub(all) struct OptimizeStageMetadata {
   function_regression_bytes : UInt
   function_diffs : Array[FunctionSizeDiff]
   removed_sections : Array[String]
+  observations : Array[String]
   no_change_reasons : Array[String]
 }
 

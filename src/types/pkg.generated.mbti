@@ -4,7 +4,7 @@ package "mizchi/wite/types"
 // Values
 pub fn error_to_string(WiteError) -> String
 
-pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> OptimizeConfig
+pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, enable_experimental_cfp_const_hints? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> OptimizeConfig
 
 pub fn make_runtime_profile_scenario(String, args? : Array[Int]) -> RuntimeProfileScenario
 
@@ -49,6 +49,11 @@ pub(all) struct CallGraphSummary {
   dead_function_count : UInt
   reachable_body_bytes : UInt
   dead_body_bytes : UInt
+}
+
+pub(all) struct CfpConstHintRejectReasonCount {
+  reason : String
+  count : UInt
 }
 
 pub(all) struct CodeBlockSize {
@@ -204,6 +209,14 @@ pub(all) struct HostGeneratedCodeReport {
   param_forwarding_thunk_count : UInt
   const_forwarding_thunk_count : UInt
   signature_refinable_thunk_count : UInt
+  cfp_const_hint_section_count : UInt
+  cfp_const_hint_unknown_version_section_count : UInt
+  cfp_const_hint_malformed_section_count : UInt
+  cfp_const_hint_entry_count : UInt
+  cfp_const_hint_usable_entry_count : UInt
+  cfp_const_hint_reject_reason_counts : Array[CfpConstHintRejectReasonCount]
+  cfp_const_specialize_hint_candidate_count : UInt
+  cfp_const_specialize_hint_reject_reason_counts : Array[CfpConstHintRejectReasonCount]
   directize_candidate_call_count : UInt
   dce_removable_function_count : UInt
   dce_removable_body_bytes : UInt
@@ -295,6 +308,7 @@ pub(all) struct OptimizeConfig {
   enable_dfe : Bool
   enable_merge_similar_functions : Bool
   enable_remove_unused_module_elements : Bool
+  enable_experimental_cfp_const_hints : Bool
   closed_world : Bool
   closed_world_root_exports : Array[String]
   safe_mode : Bool
@@ -321,6 +335,7 @@ pub(all) struct OptimizeResult {
   before_size : UInt
   after_size : UInt
   removed_sections : Array[String]
+  observations : Array[String]
   no_change_reasons : Array[String]
 }
 
@@ -334,6 +349,7 @@ pub(all) struct OptimizeStageMetadata {
   function_regression_bytes : UInt
   function_diffs : Array[FunctionSizeDiff]
   removed_sections : Array[String]
+  observations : Array[String]
   no_change_reasons : Array[String]
 }
 

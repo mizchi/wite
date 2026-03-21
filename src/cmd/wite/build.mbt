@@ -339,6 +339,9 @@ fn build_single_entry(
       if result.removed_sections.length() > 0 {
         println("removed sections: " + result.removed_sections.join(", "))
       }
+      if options.verbose && result.observations.length() > 0 {
+        println("observations: " + result.observations.join(" | "))
+      }
       if options.verbose && result.no_change_reasons.length() > 0 {
         println("no-change reasons: " + result.no_change_reasons.join(", "))
       }

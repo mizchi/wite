@@ -50,6 +50,7 @@ fn make_optimize_stage_config(
     } else {
       false
     },
+    enable_experimental_cfp_const_hints=base.enable_experimental_cfp_const_hints,
     enable_remove_unused_module_elements=if include_rume {
       base.enable_remove_unused_module_elements
     } else {
@@ -221,6 +222,12 @@ fn run_optimize_stage_raise(
     Ok(v) => v
     Err(err) => raise err
   }
+  let observations = collect_optimize_stage_observations(
+    stage_name,
+    bytes,
+    optimized.removed_sections,
+    config,
+  )
   let (function_gain_bytes, function_regression_bytes, function_diffs) = collect_function_size_diffs_raise(
     bytes,
     optimized.bytes,
@@ -239,6 +246,7 @@ fn run_optimize_stage_raise(
     function_regression_bytes,
     function_diffs,
     removed_sections: optimized.removed_sections,
+    observations,
     no_change_reasons: optimized.no_change_reasons,
   }
   { bytes: optimized.bytes, stage }
