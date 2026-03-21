@@ -1097,11 +1097,6 @@ fn extract_inlining_body_instr_without_end_raise(
   if expr_end == 0 {
     return None
   }
-  for i in 0..<expr_end {
-    if spans[i].opcode == 0x0fU {
-      return None
-    }
-  }
   Some(instr_bytes[spans[0].start:spans[expr_end - 1].end_].to_bytes())
 }
 
@@ -1113,6 +1108,60 @@ fn has_inlining_temp_local_unsupported_opcode(spans : Array[InstrSpan]) -> Bool 
     }
   }
   false
+}
+
+///|
+fn inlining_temp_local_has_return(spans : Array[InstrSpan]) -> Bool {
+  for span in spans {
+    if span.opcode == 0x0fU {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn inlining_block_result_type(results : Array[Bytes]) -> Bytes? {
+  if results.length() == 0 {
+    return Some([0x40U.to_byte()] |> Bytes::from_array)
+  }
+  if results.length() == 1 && results[0].length() == 1 {
+    return Some(results[0])
+  }
+  None
+}
+
+///|
+fn can_inline_temp_local_control_flow_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> Bool raise WiteError {
+  let mut structured_depth = 0
+  for span in spans {
+    match span.opcode {
+      0x00U | 0x0eU => return false
+      0x0cU | 0x0dU => {
+        if span.end_ <= span.start + 1 {
+          raise WiteError::InvalidFormat("invalid branch immediate in inlining")
+        }
+        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let target_depth = match decode_u32_leb128_bytes(imm) {
+          Some(v) => v.reinterpret_as_int()
+          None =>
+            raise WiteError::InvalidFormat(
+              "failed to decode branch immediate in inlining",
+            )
+        }
+        if target_depth < 0 || target_depth >= structured_depth {
+          return false
+        }
+      }
+      0x02U | 0x03U | 0x04U => structured_depth += 1
+      0x0bU => if structured_depth > 0 { structured_depth -= 1 }
+      _ => ()
+    }
+  }
+  true
 }
 
 ///|
@@ -1137,6 +1186,8 @@ priv struct InliningCandidate {
   uses_temp_locals : Bool
   temp_local_types : Array[Byte]
   temp_param_count : UInt
+  needs_block_wrap : Bool
+  block_result_type : Bytes
 }
 
 ///|
@@ -1302,6 +1353,8 @@ fn extract_inlining_candidate_raise(
       uses_temp_locals: false,
       temp_local_types: [],
       temp_param_count: 0U,
+      needs_block_wrap: false,
+      block_result_type: Bytes::from_array([]),
     })
   }
   if result_count == 0 &&
@@ -1313,6 +1366,8 @@ fn extract_inlining_candidate_raise(
       uses_temp_locals: false,
       temp_local_types: [],
       temp_param_count: 0U,
+      needs_block_wrap: false,
+      block_result_type: Bytes::from_array([]),
     })
   }
   if (spans.length() == 2 && spans[1].opcode == 0x0bU) ||
@@ -1331,6 +1386,8 @@ fn extract_inlining_candidate_raise(
         uses_temp_locals: false,
         temp_local_types: [],
         temp_param_count: 0U,
+        needs_block_wrap: false,
+        block_result_type: Bytes::from_array([]),
       })
     }
     if result_count == 1 &&
@@ -1345,6 +1402,8 @@ fn extract_inlining_candidate_raise(
         uses_temp_locals: false,
         temp_local_types: [],
         temp_param_count: 0U,
+        needs_block_wrap: false,
+        block_result_type: Bytes::from_array([]),
       })
     }
   }
@@ -1357,6 +1416,8 @@ fn extract_inlining_candidate_raise(
       uses_temp_locals: false,
       temp_local_types: [],
       temp_param_count: 0U,
+      needs_block_wrap: false,
+      block_result_type: Bytes::from_array([]),
     })
   }
   if result_count == 1 &&
@@ -1379,6 +1440,8 @@ fn extract_inlining_candidate_raise(
       uses_temp_locals: true,
       temp_local_types,
       temp_param_count: param_count.reinterpret_as_uint(),
+      needs_block_wrap: false,
+      block_result_type: Bytes::from_array([]),
     })
   }
   if result_count == 0 &&
@@ -1397,15 +1460,31 @@ fn extract_inlining_candidate_raise(
       uses_temp_locals: true,
       temp_local_types,
       temp_param_count: param_count.reinterpret_as_uint(),
+      needs_block_wrap: false,
+      block_result_type: Bytes::from_array([]),
     })
   }
   guard extract_inlining_body_instr_without_end_raise(instr_bytes, spans)
     is Some(replacement_instr) else {
     return None
   }
-  if prefix.local_types.length() > 0 &&
+  let has_return = inlining_temp_local_has_return(spans)
+  if has_return {
+    guard can_inline_temp_local_control_flow_raise(instr_bytes, spans) else {
+      return None
+    }
+  } else if prefix.local_types.length() > 0 &&
     has_inlining_temp_local_unsupported_opcode(spans) {
     return None
+  }
+  let needs_block_wrap = has_return
+  let block_result_type = if has_return {
+    guard inlining_block_result_type(type_entry.results) is Some(v) else {
+      return None
+    }
+    v
+  } else {
+    Bytes::from_array([])
   }
   guard inlining_temp_local_types_from_signature_and_locals(
       type_entry.params,
@@ -1419,6 +1498,8 @@ fn extract_inlining_candidate_raise(
     uses_temp_locals: true,
     temp_local_types,
     temp_param_count: param_count.reinterpret_as_uint(),
+    needs_block_wrap,
+    block_result_type,
   })
 }
 
@@ -1459,6 +1540,57 @@ fn rewrite_instruction_local_indices_for_inlining_raise(
       )
     } else {
       append_bytes_range(out, instr_bytes, span.start, span.end_)
+    }
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn rewrite_instruction_local_indices_for_block_wrapped_inlining_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  temp_local_indices : Array[UInt],
+) -> Bytes raise WiteError {
+  let local_count = temp_local_indices.length().reinterpret_as_uint()
+  let out : Array[Byte] = []
+  let mut structured_depth = 0U
+  for span in spans {
+    if span.opcode == 0x20U || span.opcode == 0x21U || span.opcode == 0x22U {
+      if span.end_ <= span.start + 1 {
+        raise WiteError::InvalidFormat("invalid local immediate in inlining")
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let local_index = match decode_u32_leb128_bytes(imm) {
+        Some(v) => v
+        None =>
+          raise WiteError::InvalidFormat(
+            "failed to decode local immediate in inlining",
+          )
+      }
+      if local_index >= local_count {
+        raise WiteError::InvalidFormat(
+          "unexpected local access in inlining candidate",
+        )
+      }
+      let index_pos = local_index.reinterpret_as_int()
+      if index_pos < 0 || index_pos >= temp_local_indices.length() {
+        raise WiteError::InvalidFormat("inlining temp local index out of range")
+      }
+      ignore(
+        out
+        ..push(span.opcode.to_byte())
+        ..append(encode_u32_leb128(temp_local_indices[index_pos])[:]),
+      )
+    } else if span.opcode == 0x0fU {
+      out.push(0x0cU.to_byte())
+      out.append(encode_u32_leb128(structured_depth)[:])
+    } else {
+      append_bytes_range(out, instr_bytes, span.start, span.end_)
+    }
+    match span.opcode {
+      0x02U | 0x03U | 0x04U => structured_depth += 1U
+      0x0bU => if structured_depth > 0U { structured_depth -= 1U }
+      _ => ()
     }
   }
   Bytes::from_array(out[:])
@@ -1513,11 +1645,19 @@ fn build_temp_local_inlining_replacement_raise(
   for i in 0..<(parse_spans.length() - 1) {
     spans.push(parse_spans[i])
   }
-  let rewritten_body = rewrite_instruction_local_indices_for_inlining_raise(
-    candidate.replacement_instr,
-    spans,
-    temp_local_indices,
-  )
+  let rewritten_body = if candidate.needs_block_wrap {
+    rewrite_instruction_local_indices_for_block_wrapped_inlining_raise(
+      candidate.replacement_instr,
+      spans,
+      temp_local_indices,
+    )
+  } else {
+    rewrite_instruction_local_indices_for_inlining_raise(
+      candidate.replacement_instr,
+      spans,
+      temp_local_indices,
+    )
+  }
   let out : Array[Byte] = []
   let mut i = candidate.temp_param_count.reinterpret_as_int()
   while i > 0 {
@@ -1528,7 +1668,14 @@ fn build_temp_local_inlining_replacement_raise(
       ..append(encode_u32_leb128(temp_local_indices[i])[:]),
     )
   }
-  out.append(rewritten_body[:].to_array())
+  if candidate.needs_block_wrap {
+    out.push(0x02U.to_byte())
+    out.append(candidate.block_result_type[:].to_array())
+    out.append(rewritten_body[:].to_array())
+    out.push(0x0bU.to_byte())
+  } else {
+    out.append(rewritten_body[:].to_array())
+  }
   let prefix_growth = estimate_inlining_prefix_growth(
     caller_base_local_types,
     added_local_types,
@@ -1600,18 +1747,28 @@ fn rewrite_instruction_calls_for_inlining_raise(
           } else if call_site_count == 1U &&
             root_function_indices.get(target) is None {
             match body_bytes_by_function_index.get(target) {
-              Some(body_bytes) => {
-                let total_growth = replacement_len + prefix_growth
-                let estimated_removed_bytes = estimate_inlining_removed_bytes(
-                  body_bytes,
-                )
-                if total_growth < call_span_len {
-                  should_inline = true
-                } else if estimated_removed_bytes >=
-                  total_growth - call_span_len {
-                  should_inline = true
+              Some(body_bytes) =>
+                if candidate.needs_block_wrap && body_bytes > 20U {
+                  ()
+                } else {
+                  let total_growth = replacement_len + prefix_growth
+                  let estimated_removed_bytes = estimate_inlining_removed_bytes(
+                    body_bytes,
+                  )
+                  let net_growth = if total_growth > call_span_len {
+                    total_growth - call_span_len
+                  } else {
+                    0U
+                  }
+                  if total_growth < call_span_len {
+                    should_inline = true
+                  } else if estimated_removed_bytes >= net_growth {
+                    should_inline = true
+                  } else if candidate.needs_block_wrap &&
+                    estimated_removed_bytes + 4U >= net_growth {
+                    should_inline = true
+                  }
                 }
-              }
               None => ()
             }
           }

@@ -297,11 +297,27 @@ fn optimize_for_size_round_raise(
       )
     }
     let prev_len = optimized_bytes.length()
+    let cfp_const_specialize = apply_const_call_forwarding_target_specialization_raise_with_sections(
+      optimized_bytes, cached_sections,
+    )
+    optimized_bytes = cfp_const_specialize.bytes
+    if optimized_bytes.length() != prev_len {
+      cached_sections = parse_core_sections_raise(optimized_bytes)
+    }
+    if cfp_const_specialize.rewritten_call_count > 0U {
+      dce_cluster_removed_sections.push(
+        "cfp-const-specialize:calls:" +
+        cfp_const_specialize.rewritten_call_count.to_string() +
+        " funcs:" +
+        cfp_const_specialize.specialized_function_count.to_string(),
+      )
+    }
+    let prev_len2 = optimized_bytes.length()
     let cfp_const = apply_const_call_forwarding_propagation_raise_with_sections(
       optimized_bytes, cached_sections,
     )
     optimized_bytes = cfp_const.bytes
-    if optimized_bytes.length() != prev_len {
+    if optimized_bytes.length() != prev_len2 {
       cached_sections = parse_core_sections_raise(optimized_bytes)
     }
     if cfp_const.rewritten_call_count > 0U {
@@ -309,12 +325,12 @@ fn optimize_for_size_round_raise(
         "cfp-const:calls:" + cfp_const.rewritten_call_count.to_string(),
       )
     }
-    let prev_len2 = optimized_bytes.length()
+    let prev_len3 = optimized_bytes.length()
     let cfp = apply_call_forwarding_propagation_raise_with_sections(
       optimized_bytes, cached_sections,
     )
     optimized_bytes = cfp.bytes
-    if optimized_bytes.length() != prev_len2 {
+    if optimized_bytes.length() != prev_len3 {
       cached_sections = parse_core_sections_raise(optimized_bytes)
     }
     if cfp.rewritten_call_count > 0U {
@@ -322,12 +338,12 @@ fn optimize_for_size_round_raise(
         "cfp:calls:" + cfp.rewritten_call_count.to_string(),
       )
     }
-    let prev_len3 = optimized_bytes.length()
+    let prev_len4 = optimized_bytes.length()
     let signature_refine = apply_signature_refining_raise_with_sections(
       optimized_bytes, cached_sections,
     )
     optimized_bytes = signature_refine.bytes
-    if optimized_bytes.length() != prev_len3 {
+    if optimized_bytes.length() != prev_len4 {
       cached_sections = parse_core_sections_raise(optimized_bytes)
     }
     if signature_refine.rewritten_call_count > 0U {
@@ -336,12 +352,12 @@ fn optimize_for_size_round_raise(
         signature_refine.rewritten_call_count.to_string(),
       )
     }
-    let prev_len4 = optimized_bytes.length()
+    let prev_len5 = optimized_bytes.length()
     let dce = apply_dce_raise_with_sections(
       optimized_bytes, config, cached_sections,
     )
     optimized_bytes = dce.bytes
-    if optimized_bytes.length() != prev_len4 {
+    if optimized_bytes.length() != prev_len5 {
       cached_sections = parse_core_sections_raise(optimized_bytes)
     }
     if dce.removed_function_count > 0U {

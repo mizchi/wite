@@ -37,3 +37,23 @@ test "cfp-const rewrite uses scratch locals for interleaved const args" {
     content="b\" \\x00 \\x01!\\x03!\\x02 \\x02A\\x05 \\x03\\x10\\x02\\x0b\"",
   )
 }
+
+///|
+test "const-target-specialize rewrites const param accesses via temp local" {
+  let body = wb_bytes_of_ints([
+    0x00, 0x20, 0x01, 0x41, 0x01, 0x6a, 0x21, 0x01, 0x20, 0x00, 0x20, 0x01, 0x6a,
+    0x20, 0x02, 0x6a, 0x0b,
+  ])
+  let target_arg_instrs = [
+    wb_bytes_of_ints([0x20, 0x00]),
+    wb_bytes_of_ints([0x41, 0x05]),
+    wb_bytes_of_ints([0x20, 0x01]),
+  ]
+  let rewritten = build_const_target_specialized_body_raise(
+    body, target_arg_instrs,
+  )
+  inspect(
+    rewritten,
+    content="b\"\\x01\\x01\\x7fA\\x05!\\x02 \\x02A\\x01j!\\x02 \\x00 \\x02j \\x01j\\x0b\"",
+  )
+}

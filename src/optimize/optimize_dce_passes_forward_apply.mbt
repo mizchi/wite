@@ -195,6 +195,300 @@ fn collect_direct_call_count_by_const_alias_raise(
 }
 
 ///|
+priv struct CfpConstSpecializeApplyResult {
+  bytes : Bytes
+  rewritten_call_count : UInt
+  specialized_function_count : UInt
+}
+
+///|
+priv struct ConstTargetSpecializePlan {
+  target : UInt
+  wrapper_type_index : UInt
+  rewritten_target_body : Bytes
+  rewritten_wrapper_body : Bytes
+}
+
+///|
+fn collect_direct_call_count_by_function_raise(
+  code_bodies : Array[Bytes],
+) -> Map[UInt, UInt] raise WiteError {
+  let counts : Map[UInt, UInt] = {}
+  for body in code_bodies {
+    let prefix_end = parse_local_decl_prefix_end(body)
+    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let spans = parse_instruction_spans_raise(instr_bytes)
+    for span in spans {
+      if span.opcode != 0x10U {
+        continue
+      }
+      if span.end_ <= span.start + 1 {
+        raise WiteError::InvalidFormat(
+          "invalid call immediate in cfp-const-specialize",
+        )
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let target = match decode_u32_leb128_bytes(imm) {
+        Some(v) => v
+        None =>
+          raise WiteError::InvalidFormat(
+            "failed to decode call immediate in cfp-const-specialize",
+          )
+      }
+      let next = match counts.get(target) {
+        Some(v) => v + 1U
+        None => 1U
+      }
+      counts.set(target, next)
+    }
+  }
+  counts
+}
+
+///|
+fn rewrite_instruction_local_indices_for_const_target_specialize_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  old_param_count : UInt,
+  forwarded_param_index_by_old_param : Map[UInt, UInt],
+  temp_local_index_by_old_param : Map[UInt, UInt],
+) -> Bytes raise WiteError {
+  let out : Array[Byte] = []
+  for span in spans {
+    if span.opcode == 0x20U || span.opcode == 0x21U || span.opcode == 0x22U {
+      if span.end_ <= span.start + 1 {
+        raise WiteError::InvalidFormat(
+          "invalid local immediate in cfp-const-specialize",
+        )
+      }
+      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let local_index = match decode_u32_leb128_bytes(imm) {
+        Some(v) => v
+        None =>
+          raise WiteError::InvalidFormat(
+            "failed to decode local immediate in cfp-const-specialize",
+          )
+      }
+      if local_index < old_param_count {
+        let remapped = match
+          forwarded_param_index_by_old_param.get(local_index) {
+          Some(v) => v
+          None =>
+            match temp_local_index_by_old_param.get(local_index) {
+              Some(v) => v
+              None =>
+                raise WiteError::InvalidFormat(
+                  "missing param remap in cfp-const-specialize",
+                )
+            }
+        }
+        ignore(
+          out
+          ..push(span.opcode.to_byte())
+          ..append(encode_u32_leb128(remapped)[:]),
+        )
+      } else {
+        out.append(instr_bytes[span.start:span.end_].to_array())
+      }
+    } else {
+      out.append(instr_bytes[span.start:span.end_].to_array())
+    }
+  }
+  Bytes::from_array(out[:])
+}
+
+///|
+fn build_const_target_specialized_body_raise(
+  body_bytes : Bytes,
+  target_arg_instrs : Array[Bytes],
+) -> Bytes raise WiteError {
+  let prefix = parse_local_decl_prefix_raise(body_bytes)
+  let instr_bytes = body_bytes[prefix.prefix_end:body_bytes.length()].to_bytes()
+  let spans = parse_instruction_spans_raise(instr_bytes)
+  let old_param_count = target_arg_instrs.length().reinterpret_as_uint()
+  let forwarded_param_index_by_old_param : Map[UInt, UInt] = {}
+  let temp_local_index_by_old_param : Map[UInt, UInt] = {}
+  let temp_local_types : Array[Byte] = []
+  let mut wrapper_param_count = 0U
+  for instr in target_arg_instrs {
+    if parse_local_get_param_index_instr(instr) is Some(_) {
+      wrapper_param_count += 1U
+    }
+  }
+  for i in 0..<target_arg_instrs.length() {
+    let old_param_index = i.reinterpret_as_uint()
+    match parse_local_get_param_index_instr(target_arg_instrs[i]) {
+      Some(local_index) =>
+        forwarded_param_index_by_old_param.set(old_param_index, local_index)
+      None => {
+        let const_type = match
+          appended_i32_const_instr_type(target_arg_instrs[i]) {
+          Some(v) => v
+          None =>
+            raise WiteError::InvalidFormat(
+              "unsupported const arg in cfp-const-specialize",
+            )
+        }
+        if const_type.length() != 1 {
+          raise WiteError::InvalidFormat(
+            "unexpected const type width in cfp-const-specialize",
+          )
+        }
+        let temp_local_index = wrapper_param_count +
+          temp_local_types.length().reinterpret_as_uint()
+        temp_local_index_by_old_param.set(old_param_index, temp_local_index)
+        temp_local_types.push(const_type[0])
+      }
+    }
+  }
+  let rewritten_instr = rewrite_instruction_local_indices_for_const_target_specialize_raise(
+    instr_bytes, spans, old_param_count, forwarded_param_index_by_old_param, temp_local_index_by_old_param,
+  )
+  let rewritten_local_types = temp_local_types.copy()
+  rewritten_local_types.append(prefix.local_types[:])
+  let rewritten_prefix = encode_local_decl_prefix_from_local_types(
+    rewritten_local_types,
+  )
+  let out : Array[Byte] = rewritten_prefix[:].to_array()
+  for i in 0..<target_arg_instrs.length() {
+    let old_param_index = i.reinterpret_as_uint()
+    match temp_local_index_by_old_param.get(old_param_index) {
+      Some(temp_local_index) => {
+        out.append(target_arg_instrs[i][:].to_array())
+        out.push(0x21U.to_byte())
+        out.append(encode_u32_leb128(temp_local_index)[:])
+      }
+      None => ()
+    }
+  }
+  out.append(rewritten_instr[:].to_array())
+  Bytes::from_array(out[:])
+}
+
+///|
+fn build_direct_forwarding_wrapper_body(
+  wrapper_param_count : UInt,
+  target : UInt,
+) -> Bytes {
+  let out : Array[Byte] = [0x00]
+  for i in 0U..<wrapper_param_count {
+    out.push(0x20U.to_byte())
+    out.append(encode_u32_leb128(i)[:])
+  }
+  out.push(0x10U.to_byte())
+  out.append(encode_u32_leb128(target)[:])
+  out.push(0x0bU.to_byte())
+  Bytes::from_array(out[:])
+}
+
+///|
+fn collect_const_target_specialize_plan_raise(
+  code_bodies : Array[Bytes],
+  imported_function_count : UInt,
+  function_type_by_index : Array[UInt],
+  function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
+  direct_call_count_by_function : Map[UInt, UInt],
+  root_function_indices : Map[UInt, Bool],
+  gc_type_canonical_map : Map[UInt, UInt],
+) -> Map[UInt, ConstTargetSpecializePlan] raise WiteError {
+  let plans : Map[UInt, ConstTargetSpecializePlan] = {}
+  for i in 0..<code_bodies.length() {
+    let wrapper_index = imported_function_count + i.reinterpret_as_uint()
+    if root_function_indices.get(wrapper_index) is Some(_) {
+      continue
+    }
+    let wrapper_pos = UInt::reinterpret_as_int(wrapper_index)
+    if wrapper_pos < 0 || wrapper_pos >= function_type_by_index.length() {
+      continue
+    }
+    let wrapper_type_index = function_type_by_index[wrapper_pos]
+    let wrapper_type = match
+      function_type_entry_by_type_index.get(wrapper_type_index) {
+      Some(v) => v
+      None => continue
+    }
+    let wrapper_prefix = parse_local_decl_prefix_raise(code_bodies[i])
+    if wrapper_prefix.local_types.length() > 0 {
+      continue
+    }
+    let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
+    match
+      parse_forward_call_target_with_const_arg_instrs(
+        code_bodies[i],
+        wrapper_param_count,
+      ) {
+      Some((target, target_arg_instrs)) => {
+        if target == wrapper_index ||
+          root_function_indices.get(target) is Some(_) ||
+          direct_call_count_by_function.get(target).unwrap_or(0U) != 1U {
+          continue
+        }
+        if target < imported_function_count {
+          continue
+        }
+        let target_pos = UInt::reinterpret_as_int(target)
+        if target_pos < 0 || target_pos >= function_type_by_index.length() {
+          continue
+        }
+        let target_local_index = target - imported_function_count
+        let target_local_pos = UInt::reinterpret_as_int(target_local_index)
+        if target_local_pos < 0 || target_local_pos >= code_bodies.length() {
+          continue
+        }
+        let target_type_index = function_type_by_index[target_pos]
+        let target_type = match
+          function_type_entry_by_type_index.get(target_type_index) {
+          Some(v) => v
+          None => continue
+        }
+        let uses_scratch_locals = const_arg_instrs_need_scratch_locals(
+          target_arg_instrs, wrapper_param_count,
+        )
+        if !uses_scratch_locals {
+          continue
+        }
+        let wrapper_call_count = direct_call_count_by_function
+          .get(wrapper_index)
+          .unwrap_or(0U)
+        if scratch_const_call_forwarding_is_profitable(
+            {
+              target,
+              target_arg_instrs,
+              wrapper_param_count,
+              wrapper_param_local_types: [],
+              uses_scratch_locals,
+            },
+            wrapper_call_count,
+            code_bodies[i].length().reinterpret_as_uint(),
+          ) {
+          continue
+        }
+        if !can_const_forward_with_arg_instrs_to_target(
+            wrapper_type, target_type, target_arg_instrs, gc_type_canonical_map,
+          ) {
+          continue
+        }
+        let rewritten_target_body = build_const_target_specialized_body_raise(
+          code_bodies[target_local_pos],
+          target_arg_instrs,
+        )
+        let rewritten_wrapper_body = build_direct_forwarding_wrapper_body(
+          wrapper_param_count, target,
+        )
+        plans.set(wrapper_index, {
+          target,
+          wrapper_type_index,
+          rewritten_target_body,
+          rewritten_wrapper_body,
+        })
+      }
+      None => ()
+    }
+  }
+  plans
+}
+
+///|
 fn estimate_scratch_const_call_forwarding_growth(
   alias_info : CfpConstAlias,
 ) -> UInt {
@@ -499,6 +793,157 @@ fn rewrite_code_section_payload_for_const_call_forwarding_raise(
     encode_code_section_payload_from_bodies(rewritten_bodies),
     rewritten_call_count,
   )
+}
+
+///|
+fn apply_const_call_forwarding_target_specialization_raise_with_sections(
+  bytes : Bytes,
+  sections : Array[RawSection],
+) -> CfpConstSpecializeApplyResult raise WiteError {
+  let mut type_payload : Bytes? = None
+  let mut import_payload : Bytes? = None
+  let mut function_payload : Bytes? = None
+  let mut code_payload : Bytes? = None
+  for section in sections {
+    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    match section.section_id {
+      1U => type_payload = Some(payload)
+      2U => import_payload = Some(payload)
+      3U => function_payload = Some(payload)
+      10U => code_payload = Some(payload)
+      _ => ()
+    }
+  }
+  let type_payload = match type_payload {
+    Some(v) => v
+    None =>
+      return { bytes, rewritten_call_count: 0U, specialized_function_count: 0U }
+  }
+  let function_payload = match function_payload {
+    Some(v) => v
+    None =>
+      return { bytes, rewritten_call_count: 0U, specialized_function_count: 0U }
+  }
+  let code_payload = match code_payload {
+    Some(v) => v
+    None =>
+      return { bytes, rewritten_call_count: 0U, specialized_function_count: 0U }
+  }
+  let local_function_type_indices = parse_function_type_indices(
+    function_payload,
+  )
+  let code_bodies = parse_code_bodies(code_payload)
+  if local_function_type_indices.length() != code_bodies.length() {
+    raise WiteError::InvalidFormat(
+      "function/code section count mismatch for cfp-const-specialize: function=" +
+      local_function_type_indices.length().to_string() +
+      " code=" +
+      code_bodies.length().to_string(),
+    )
+  }
+  let imported_function_type_indices = match import_payload {
+    Some(payload) => parse_import_function_type_indices(payload)
+    None => []
+  }
+  let function_type_by_index = imported_function_type_indices.copy()
+  function_type_by_index.append(local_function_type_indices[:])
+  let parsed_type_entries = parse_type_section_entries_with_refs_raise(
+    type_payload, "cfp-const-specialize",
+  )
+  let gc_type_canonical_map = collect_gc_type_canonical_map_from_entries_raise(
+    parsed_type_entries,
+  )
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  for i in 0..<parsed_type_entries.length() {
+    if parsed_type_entries[i].form == 0x60U {
+      function_type_entry_by_type_index.set(
+        i.reinterpret_as_uint(),
+        parse_function_type_entry_from_raw_raise(
+          parsed_type_entries[i].raw,
+          "cfp-const-specialize",
+        ),
+      )
+    }
+  }
+  let imported_function_count = imported_function_type_indices
+    .length()
+    .reinterpret_as_uint()
+  let call_graph = try analyze_call_graph_raise(bytes, None) catch {
+    _ =>
+      return { bytes, rewritten_call_count: 0U, specialized_function_count: 0U }
+  } noraise {
+    v => v
+  }
+  if call_graph.partial {
+    return { bytes, rewritten_call_count: 0U, specialized_function_count: 0U }
+  }
+  let root_function_indices : Map[UInt, Bool] = {}
+  for index in call_graph.roots {
+    root_function_indices.set(index, true)
+  }
+  let direct_call_count_by_function = collect_direct_call_count_by_function_raise(
+    code_bodies,
+  )
+  let plan_map = collect_const_target_specialize_plan_raise(
+    code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+    direct_call_count_by_function, root_function_indices, gc_type_canonical_map,
+  )
+  let mut specialized_function_count = 0U
+  let wrapper_to_target : Map[UInt, UInt] = {}
+  let rewritten_local_function_type_indices = local_function_type_indices.copy()
+  let rewritten_code_bodies = code_bodies.copy()
+  for i in 0..<code_bodies.length() {
+    let wrapper_index = imported_function_count + i.reinterpret_as_uint()
+    match plan_map.get(wrapper_index) {
+      Some(plan) => {
+        wrapper_to_target.set(wrapper_index, plan.target)
+        specialized_function_count += 1U
+        let target_local_pos = UInt::reinterpret_as_int(
+          plan.target - imported_function_count,
+        )
+        if target_local_pos < 0 ||
+          target_local_pos >= rewritten_code_bodies.length() {
+          raise WiteError::InvalidFormat(
+            "target local index out of range in cfp-const-specialize",
+          )
+        }
+        rewritten_local_function_type_indices[target_local_pos] = plan.wrapper_type_index
+        rewritten_code_bodies[target_local_pos] = plan.rewritten_target_body
+        rewritten_code_bodies[i] = plan.rewritten_wrapper_body
+      }
+      None => ()
+    }
+  }
+  if specialized_function_count == 0U {
+    return { bytes, rewritten_call_count: 0U, specialized_function_count: 0U }
+  }
+  let rewritten_function_payload = encode_function_section_payload_from_type_indices(
+    rewritten_local_function_type_indices,
+  )
+  let interim_code_payload = encode_code_section_payload_from_bodies(
+    rewritten_code_bodies,
+  )
+  let (rewritten_code_payload, rewritten_call_count) = rewrite_code_section_payload_for_call_forwarding_raise(
+    interim_code_payload, wrapper_to_target,
+  )
+  if rewritten_call_count == 0U {
+    return { bytes, rewritten_call_count: 0U, specialized_function_count: 0U }
+  }
+  let out : Array[Byte] = bytes[0:8].to_array()
+  for section in sections {
+    if section.section_id == 3U {
+      append_encoded_section(out, 3U, rewritten_function_payload)
+    } else if section.section_id == 10U {
+      append_encoded_section(out, 10U, rewritten_code_payload)
+    } else {
+      out.append(bytes[section.section_start:section.section_end].to_array())
+    }
+  }
+  {
+    bytes: Bytes::from_array(out[:]),
+    rewritten_call_count,
+    specialized_function_count,
+  }
 }
 
 ///|

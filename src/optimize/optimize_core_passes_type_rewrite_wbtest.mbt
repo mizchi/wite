@@ -218,3 +218,116 @@ test "inlining candidate extracts if unit wrapper" {
     content="b\" \\x00\\x04@ \\x01 \\x01j\\x1a\\x0b\"",
   )
 }
+
+///|
+test "inlining temp-local candidate wraps control flow and rewrites return" {
+  let body = bytes_of_ints([
+    0x01, 0x01, 0x7f, 0x41, 0x07, 0x21, 0x01, 0x02, 0x40, 0x20, 0x00, 0x0d, 0x00,
+    0x41, 0x01, 0x0f, 0x0b, 0x20, 0x01, 0x0b,
+  ])
+  let type_entry : FunctionTypeEntry = {
+    params: [bytes_of_ints([0x7f])],
+    results: [bytes_of_ints([0x7f])],
+  }
+  guard extract_inlining_candidate_raise(body, type_entry) is Some(candidate) else {
+    assert_true(false)
+    return
+  }
+  assert_true(candidate.uses_temp_locals)
+  assert_true(candidate.needs_block_wrap)
+  let (replacement, prefix_growth) = build_temp_local_inlining_replacement_raise(
+    candidate,
+    1U,
+    [],
+    [],
+  )
+  inspect(
+    replacement,
+    content="b\"!\\x01\\x02\\x7fA\\x07!\\x02\\x02@ \\x01\\x0d\\x00A\\x01\\x0c\\x01\\x0b \\x02\\x0b\"",
+  )
+  assert_eq(prefix_growth, 2U)
+}
+
+///|
+test "apply inlining optimizing rewrites local control-flow callee" {
+  let out = bytes_of_ints([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]).to_array()
+  append_test_section(
+    out,
+    1U,
+    bytes_of_ints([0x02, 0x60, 0x00, 0x01, 0x7f, 0x60, 0x01, 0x7f, 0x01, 0x7f]),
+  )
+  append_test_section(out, 3U, bytes_of_ints([0x02, 0x00, 0x01]))
+  append_test_section(
+    out,
+    7U,
+    bytes_of_ints([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]),
+  )
+  append_test_section(
+    out,
+    10U,
+    bytes_of_ints([
+      0x02, 0x06, 0x00, 0x41, 0x00, 0x10, 0x01, 0x0b, 0x14, 0x01, 0x01, 0x7f, 0x41,
+      0x07, 0x21, 0x01, 0x02, 0x40, 0x20, 0x00, 0x0d, 0x00, 0x41, 0x01, 0x0f, 0x0b,
+      0x20, 0x01, 0x0b,
+    ]),
+  )
+  let module_bytes = Bytes::from_array(out[:])
+  let sections = parse_core_sections_raise(module_bytes)
+  let function_payload = module_bytes[sections[1].payload_start:sections[1].section_end].to_bytes()
+  let code_payload = module_bytes[sections[3].payload_start:sections[3].section_end].to_bytes()
+  let function_type_indices = parse_function_type_indices(function_payload)
+  let code_bodies = parse_code_bodies(code_payload)
+  inspect(
+    code_bodies[1],
+    content="b\"\\x01\\x01\\x7fA\\x07!\\x01\\x02@ \\x00\\x0d\\x00A\\x01\\x0f\\x0b \\x01\\x0b\"",
+  )
+  let function_type_entry_map = parse_function_type_entry_map_for_function_indices_raise(
+    module_bytes[sections[0].payload_start:sections[0].section_end].to_bytes(),
+    function_type_indices,
+    "wbtest-inlining-control-flow",
+  )
+  let candidate_by_function_index : Map[UInt, InliningCandidate] = {}
+  let body_bytes_by_function_index : Map[UInt, UInt] = {}
+  for i in 0..<code_bodies.length() {
+    let function_index = i.reinterpret_as_uint()
+    let type_entry = function_type_entry_map
+      .get(function_type_indices[i])
+      .unwrap()
+    body_bytes_by_function_index.set(
+      function_index,
+      code_bodies[i].length().reinterpret_as_uint(),
+    )
+    match extract_inlining_candidate_raise(code_bodies[i], type_entry) {
+      Some(candidate) =>
+        candidate_by_function_index.set(function_index, candidate)
+      None => ()
+    }
+  }
+  guard candidate_by_function_index.get(1U) is Some(callee_candidate) else {
+    assert_true(false)
+    return
+  }
+  assert_true(callee_candidate.needs_block_wrap)
+  let call_count_by_target = collect_call_count_by_target_raise(
+    code_bodies, candidate_by_function_index,
+  )
+  assert_eq(call_count_by_target.get(1U).unwrap_or(0U), 1U)
+  let caller_prefix = parse_local_decl_prefix_raise(code_bodies[0])
+  let caller_instr = code_bodies[0][caller_prefix.prefix_end:code_bodies[0].length()].to_bytes()
+  let caller_spans = parse_instruction_spans_raise(caller_instr)
+  let (_rewritten, rewritten_call_count, _added_locals) = rewrite_instruction_calls_for_inlining_raise(
+    caller_instr,
+    caller_spans,
+    candidate_by_function_index,
+    call_count_by_target,
+    {},
+    body_bytes_by_function_index,
+    0U,
+    [],
+  )
+  assert_eq(rewritten_call_count, 1U)
+  let result = apply_inlining_optimizing_raise_with_sections(
+    module_bytes, sections,
+  )
+  assert_eq(result.inlined_call_count, 1U)
+}
