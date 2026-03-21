@@ -422,6 +422,17 @@ fn size_regression_bytes(before_size : UInt, after_size : UInt) -> UInt {
 }
 
 ///|
+fn count_const_forwarding_arg_instrs(arg_instrs : Array[Bytes]) -> UInt {
+  let mut count = 0U
+  for instr in arg_instrs {
+    if instr.length() > 0 && instr[0] != 0x20U.to_byte() {
+      count += 1U
+    }
+  }
+  count
+}
+
+///|
 pub fn analyze_host_generated_code(
   bytes : Bytes,
 ) -> Result[HostGeneratedCodeReport, WiteError] {
@@ -572,9 +583,9 @@ pub fn analyze_host_generated_code(
               Some(v) => v
               None => []
             },
-            appended_i32_const_count: alias_info.appended_i32_const_instrs
-            .length()
-            .reinterpret_as_uint(),
+            appended_i32_const_count: count_const_forwarding_arg_instrs(
+              alias_info.target_arg_instrs,
+            ),
             dropped_param_count: 0U,
           })
         })

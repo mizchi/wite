@@ -87,6 +87,14 @@ fn parse_forward_call_target_with_param_count(
 }
 
 ///|
+fn parse_local_get_param_index_instr(instr : Bytes) -> UInt? {
+  if instr.length() == 0 || instr[0] != 0x20U.to_byte() {
+    return None
+  }
+  decode_u32_leb128_bytes(instr[1:instr.length()].to_bytes())
+}
+
+///|
 pub(all) struct SignatureRefineAlias {
   target : UInt
   dropped_param_count : UInt
@@ -178,7 +186,7 @@ fn parse_forward_call_target_with_prefix_param_count(
 }
 
 ///|
-fn parse_forward_call_target_with_appended_i32_consts(
+fn parse_forward_call_target_with_const_arg_instrs(
   body_bytes : Bytes,
   wrapper_param_count : UInt,
 ) -> (UInt, Array[Bytes])? {
@@ -207,37 +215,36 @@ fn parse_forward_call_target_with_appended_i32_consts(
     Some(v) => v
     None => return None
   }
-  if call_pos <= wrapper_param_count_i {
-    return None
-  }
-  for i in 0..<wrapper_param_count_i {
-    if spans[i].opcode != 0x20U {
-      return None
-    }
-    match decode_span_u32_immediate(instr_bytes, spans[i]) {
-      Some(local_index) =>
-        if local_index != i.reinterpret_as_uint() {
-          return None
-        }
-      None => return None
-    }
-  }
-  let appended_i32_const_instrs : Array[Bytes] = []
-  for i in wrapper_param_count_i..<call_pos {
+  let target_arg_instrs : Array[Bytes] = []
+  let mut expected_param_index = 0
+  let mut const_count = 0U
+  for i in 0..<call_pos {
     let span = spans[i]
-    if span.opcode != 0x41U &&
-      span.opcode != 0x42U &&
-      span.opcode != 0x43U &&
-      span.opcode != 0x44U {
+    if span.opcode == 0x20U {
+      match decode_span_u32_immediate(instr_bytes, span) {
+        Some(local_index) =>
+          if local_index != expected_param_index.reinterpret_as_uint() {
+            return None
+          } else {
+            expected_param_index += 1
+          }
+        None => return None
+      }
+    } else if span.opcode == 0x41U ||
+      span.opcode == 0x42U ||
+      span.opcode == 0x43U ||
+      span.opcode == 0x44U {
+      const_count += 1U
+    } else {
       return None
     }
-    appended_i32_const_instrs.push(instr_bytes[span.start:span.end_].to_bytes())
+    target_arg_instrs.push(instr_bytes[span.start:span.end_].to_bytes())
   }
-  if appended_i32_const_instrs.length() == 0 {
+  if expected_param_index != wrapper_param_count_i || const_count == 0U {
     return None
   }
   decode_span_u32_immediate(instr_bytes, spans[call_pos]).map(target => {
-    (target, appended_i32_const_instrs)
+    (target, target_arg_instrs)
   })
 }
 
@@ -300,18 +307,68 @@ pub fn collect_gc_type_canonical_map_from_entries_raise(
 }
 
 ///|
-fn can_const_forward_with_appended_i32_to_target(
+fn const_arg_instrs_need_scratch_locals(
+  target_arg_instrs : Array[Bytes],
+  wrapper_param_count : UInt,
+) -> Bool {
+  let wrapper_param_count_i = UInt::reinterpret_as_int(wrapper_param_count)
+  if wrapper_param_count_i < 0 {
+    return false
+  }
+  if target_arg_instrs.length() < wrapper_param_count_i {
+    return false
+  }
+  for i in 0..<wrapper_param_count_i {
+    match parse_local_get_param_index_instr(target_arg_instrs[i]) {
+      Some(local_index) =>
+        if local_index != i.reinterpret_as_uint() {
+          return true
+        }
+      None => return true
+    }
+  }
+  for i in wrapper_param_count_i..<target_arg_instrs.length() {
+    if appended_i32_const_instr_type(target_arg_instrs[i]) is None {
+      return true
+    }
+  }
+  false
+}
+
+///|
+fn collect_single_byte_local_types_from_params(
+  param_types : Array[Bytes],
+) -> Array[Byte]? {
+  let out : Array[Byte] = []
+  for param_type in param_types {
+    if param_type.length() != 1 {
+      return None
+    }
+    out.push(param_type[0])
+  }
+  Some(out)
+}
+
+///|
+fn count_const_arg_instrs(target_arg_instrs : Array[Bytes]) -> UInt {
+  let mut count = 0U
+  for instr in target_arg_instrs {
+    if appended_i32_const_instr_type(instr) is Some(_) {
+      count += 1U
+    }
+  }
+  count
+}
+
+///|
+fn can_const_forward_with_arg_instrs_to_target(
   wrapper_type : FunctionTypeEntry,
   target_type : FunctionTypeEntry,
-  appended_i32_const_instrs : Array[Bytes],
+  target_arg_instrs : Array[Bytes],
   gc_type_canonical_map : Map[UInt, UInt],
 ) -> Bool {
-  let wrapper_param_count = wrapper_type.params.length().reinterpret_as_uint()
   let target_param_count = target_type.params.length().reinterpret_as_uint()
-  let appended_const_count = appended_i32_const_instrs
-    .length()
-    .reinterpret_as_uint()
-  if target_param_count != wrapper_param_count + appended_const_count {
+  if target_param_count != target_arg_instrs.length().reinterpret_as_uint() {
     return false
   }
   if !function_type_results_equal_with_gc_canonical_map(
@@ -319,29 +376,44 @@ fn can_const_forward_with_appended_i32_to_target(
     ) {
     return false
   }
-  for i in 0..<wrapper_type.params.length() {
-    if !type_bytes_equal_with_gc_canonical_map(
-        wrapper_type.params[i],
-        target_type.params[i],
-        gc_type_canonical_map,
-      ) {
-      return false
+  let mut forwarded_param_count = 0
+  for i in 0..<target_arg_instrs.length() {
+    match parse_local_get_param_index_instr(target_arg_instrs[i]) {
+      Some(local_index) => {
+        let local_pos = UInt::reinterpret_as_int(local_index)
+        if local_pos < 0 || local_pos >= wrapper_type.params.length() {
+          return false
+        }
+        if !type_bytes_equal_with_gc_canonical_map(
+            wrapper_type.params[local_pos],
+            target_type.params[i],
+            gc_type_canonical_map,
+          ) {
+          return false
+        }
+        forwarded_param_count += 1
+      }
+      None => {
+        let const_type = match
+          appended_i32_const_instr_type(target_arg_instrs[i]) {
+          Some(v) => v
+          None => return false
+        }
+        if !type_bytes_equal_with_gc_canonical_map(
+            const_type,
+            target_type.params[i],
+            gc_type_canonical_map,
+          ) {
+          return false
+        }
+      }
     }
   }
-  for i in 0..<appended_i32_const_instrs.length() {
-    let const_type = match
-      appended_i32_const_instr_type(appended_i32_const_instrs[i]) {
-      Some(v) => v
-      None => return false
-    }
-    let param_index = wrapper_type.params.length() + i
-    if !type_bytes_equal_with_gc_canonical_map(
-        const_type,
-        target_type.params[param_index],
-        gc_type_canonical_map,
-      ) {
-      return false
-    }
+  if forwarded_param_count != wrapper_type.params.length() {
+    return false
+  }
+  if count_const_arg_instrs(target_arg_instrs) == 0U {
+    return false
   }
   true
 }
@@ -458,5 +530,8 @@ fn can_signature_refine_forward_to_target(
 ///|
 pub(all) struct CfpConstAlias {
   target : UInt
-  appended_i32_const_instrs : Array[Bytes]
+  target_arg_instrs : Array[Bytes]
+  wrapper_param_count : UInt
+  wrapper_param_local_types : Array[Byte]
+  uses_scratch_locals : Bool
 }

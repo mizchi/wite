@@ -129,7 +129,10 @@ pub fn unique_sorted(Array[String]) -> Array[String]
 // Types and methods
 pub(all) struct CfpConstAlias {
   target : UInt
-  appended_i32_const_instrs : Array[Bytes]
+  target_arg_instrs : Array[Bytes]
+  wrapper_param_count : UInt
+  wrapper_param_local_types : Array[Byte]
+  uses_scratch_locals : Bool
 }
 
 pub(all) struct Cursor {
