@@ -1433,6 +1433,78 @@ fn sample_module_with_inlining_unique_growth_positive_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_inlining_param_reread_callee_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 2 local functions with type idx 0
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0, call 1, end
+  // #1: local.get 0, local.get 0, i32.add, end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x06, 0x00, 0x20, 0x00, 0x10, 0x01, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x20,
+      0x00, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_inlining_repeated_growth_positive_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 2 local functions with type idx 0
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: call 1, call 1, i32.add, call 1, i32.add, end
+  // #1: i32.const 65535, end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x0a, 0x00, 0x10, 0x01, 0x10, 0x01, 0x6a, 0x10, 0x01, 0x6a, 0x0b, 0x06,
+      0x00, 0x41, 0xff, 0xff, 0x03, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_inlining_local_reread_callee_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 2 local functions with type idx 0
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0, call 1, end
+  // #1: (local i32), local.get 0, local.tee 1, local.get 1, i32.add, end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x06, 0x00, 0x20, 0x00, 0x10, 0x01, 0x0b, 0x0b, 0x01, 0x01, 0x7f, 0x20,
+      0x00, 0x22, 0x01, 0x20, 0x01, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_runtime_imported_zero_arg_export_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -6014,6 +6086,118 @@ test "optimize inlining-optimizing accepts unique private callee when total size
       0x20, 0x00, 0x41, 0xff, 0xff, 0x03, 0x6a,
     ]),
   )
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 1U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [0, 1, 7, 11]),
+  )
+}
+
+///|
+test "optimize inlining-optimizing inlines param reread callee via temp locals" {
+  let bytes = sample_module_with_inlining_param_reread_callee_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("inlining:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 1U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [0, 1, 7, 11]),
+  )
+}
+
+///|
+test "optimize inlining-optimizing accepts repeated positive-growth private callee" {
+  let bytes = sample_module_with_inlining_repeated_growth_positive_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("inlining:calls:3")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 1U)
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
+test "optimize inlining-optimizing inlines callee local reread via temp locals" {
+  let bytes = sample_module_with_inlining_local_reread_callee_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("inlining:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
   guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
     assert_true(false)
     return
