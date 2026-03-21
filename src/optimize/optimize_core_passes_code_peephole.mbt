@@ -945,7 +945,8 @@ fn apply_vacuum_to_spans(spans : Array[InstrSpan]) -> Array[InstrSpan] {
   let out : Array[InstrSpan] = []
   let mut dead = false
   let mut dead_depth = 0
-  for span in spans {
+  for i in 0..<spans.length() {
+    let span = spans[i]
     if dead {
       match span.opcode {
         0x02U | 0x03U | 0x04U => dead_depth += 1
@@ -1413,6 +1414,13 @@ fn apply_merged_stateless_peephole(
           ) {
           Some(0U) =>
             match spans[i + 2].opcode {
+              0x6cU => {
+                // x * 0 => 0
+                append_i32_const_small(out, 0U)
+                i += 3
+                changed = true
+                continue
+              }
               0x71U | 0x49U => {
                 // x & 0 / x <_u 0 => 0
                 append_i32_const_small(out, 0U)
@@ -1451,12 +1459,27 @@ fn apply_merged_stateless_peephole(
         match
           decode_i32_const_small_signed_from_span(instr_bytes, spans[i + 1]) {
           Some(-1) =>
-            if spans[i + 2].opcode == 0x71U {
-              // x & -1 => x
-              append_bytes_view(out, lhs)
-              i += 3
-              changed = true
-              continue
+            match spans[i + 2].opcode {
+              0x71U => {
+                // x & -1 => x
+                append_bytes_view(out, lhs)
+                i += 3
+                changed = true
+                continue
+              }
+              0x72U => {
+                // x | -1 => -1
+                append_bytes_range(
+                  out,
+                  instr_bytes,
+                  spans[i + 1].start,
+                  spans[i + 1].end_,
+                )
+                i += 3
+                changed = true
+                continue
+              }
+              _ => ()
             }
           _ => ()
         }
