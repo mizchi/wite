@@ -1241,6 +1241,52 @@ fn extract_inlining_if_return_const_wrapper_instr_raise(
 }
 
 ///|
+fn is_inlining_if_without_result(instr_bytes : Bytes, span : InstrSpan) -> Bool {
+  span.opcode == 0x04U &&
+  span.end_ == span.start + 2 &&
+  instr_bytes[span.start + 1].to_uint() == 0x40U
+}
+
+///|
+fn extract_inlining_if_unit_wrapper_instr_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+) -> Bytes? {
+  if spans.length() < 4 || spans[spans.length() - 1].opcode != 0x0bU {
+    return None
+  }
+  let expr_end = spans.length() - 1
+  let mut if_index = -1
+  for i in 0..<expr_end {
+    let opcode = spans[i].opcode
+    if opcode == 0x04U {
+      if_index = i
+      break
+    }
+    if is_inlining_expression_unsupported_opcode(opcode) {
+      return None
+    }
+  }
+  if if_index <= 0 ||
+    !is_inlining_if_without_result(instr_bytes, spans[if_index]) {
+    return None
+  }
+  guard find_inlining_if_block_span(spans, if_index) is Some(if_block) else {
+    return None
+  }
+  if if_block.else_index >= 0 || if_block.end_index != expr_end - 1 {
+    return None
+  }
+  for i in (if_index + 1)..<if_block.end_index {
+    if is_inlining_expression_unsupported_opcode(spans[i].opcode) ||
+      spans[i].opcode == 0x05U {
+      return None
+    }
+  }
+  Some(instr_bytes[spans[0].start:spans[if_block.end_index].end_].to_bytes())
+}
+
+///|
 fn extract_inlining_candidate_raise(
   body_bytes : Bytes,
   type_entry : FunctionTypeEntry,
@@ -1320,6 +1366,24 @@ fn extract_inlining_candidate_raise(
       spans,
       type_entry.results[0],
     )
+    is Some(replacement_instr) {
+    guard inlining_temp_local_types_from_signature_and_locals(
+        type_entry.params,
+        prefix.local_types,
+      )
+      is Some(temp_local_types) else {
+      return None
+    }
+    return Some({
+      replacement_instr,
+      uses_temp_locals: true,
+      temp_local_types,
+      temp_param_count: param_count.reinterpret_as_uint(),
+    })
+  }
+  if result_count == 0 &&
+    prefix.local_types.length() == 0 &&
+    extract_inlining_if_unit_wrapper_instr_raise(instr_bytes, spans)
     is Some(replacement_instr) {
     guard inlining_temp_local_types_from_signature_and_locals(
         type_entry.params,

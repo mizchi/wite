@@ -197,3 +197,24 @@ test "inlining candidate extracts if-return const wrapper" {
     content="b\" \\x00\\x04\\x7fA\\x00\\x05 \\x00 \\x01j\\x0b\"",
   )
 }
+
+///|
+test "inlining candidate extracts if unit wrapper" {
+  let body = bytes_of_ints([
+    0x00, 0x20, 0x00, 0x04, 0x40, 0x20, 0x01, 0x20, 0x01, 0x6a, 0x1a, 0x0b, 0x0b,
+  ])
+  let type_entry : FunctionTypeEntry = {
+    params: [bytes_of_ints([0x7f]), bytes_of_ints([0x7f])],
+    results: [],
+  }
+  guard extract_inlining_candidate_raise(body, type_entry) is Some(candidate) else {
+    assert_true(false)
+    return
+  }
+  assert_true(candidate.uses_temp_locals)
+  assert_eq(candidate.temp_param_count, 2U)
+  inspect(
+    candidate.replacement_instr,
+    content="b\" \\x00\\x04@ \\x01 \\x01j\\x1a\\x0b\"",
+  )
+}
