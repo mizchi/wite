@@ -175,3 +175,25 @@ test "inlining temp-local candidate remaps callee local access" {
   inspect(replacement, content="b\"!\\x01 \\x01\\x22\\x02 \\x02j\"")
   assert_eq(prefix_growth, 2U)
 }
+
+///|
+test "inlining candidate extracts if-return const wrapper" {
+  let body = bytes_of_ints([
+    0x00, 0x20, 0x00, 0x04, 0x40, 0x41, 0x00, 0x0f, 0x0b, 0x20, 0x00, 0x20, 0x01,
+    0x6a, 0x0b,
+  ])
+  let type_entry : FunctionTypeEntry = {
+    params: [bytes_of_ints([0x7f]), bytes_of_ints([0x7f])],
+    results: [bytes_of_ints([0x7f])],
+  }
+  guard extract_inlining_candidate_raise(body, type_entry) is Some(candidate) else {
+    assert_true(false)
+    return
+  }
+  assert_true(candidate.uses_temp_locals)
+  assert_eq(candidate.temp_param_count, 2U)
+  inspect(
+    candidate.replacement_instr,
+    content="b\" \\x00\\x04\\x7fA\\x00\\x05 \\x00 \\x01j\\x0b\"",
+  )
+}

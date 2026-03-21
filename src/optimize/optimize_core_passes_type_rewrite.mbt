@@ -1140,6 +1140,107 @@ priv struct InliningCandidate {
 }
 
 ///|
+priv struct InliningIfBlockSpan {
+  else_index : Int
+  end_index : Int
+}
+
+///|
+fn find_inlining_if_block_span(
+  spans : Array[InstrSpan],
+  if_index : Int,
+) -> InliningIfBlockSpan? {
+  let mut depth = 1
+  let mut else_index = -1
+  for i in (if_index + 1)..<spans.length() {
+    match spans[i].opcode {
+      0x02U | 0x03U | 0x04U => depth += 1
+      0x05U =>
+        if depth == 1 {
+          if else_index >= 0 {
+            return None
+          }
+          else_index = i
+        }
+      0x0bU => {
+        depth -= 1
+        if depth == 0 {
+          return Some({ else_index, end_index: i })
+        }
+      }
+      _ => ()
+    }
+  }
+  None
+}
+
+///|
+fn extract_inlining_if_return_const_wrapper_instr_raise(
+  instr_bytes : Bytes,
+  spans : Array[InstrSpan],
+  result_type : Bytes,
+) -> Bytes? {
+  if result_type.length() != 1 ||
+    spans.length() < 6 ||
+    spans[spans.length() - 1].opcode != 0x0bU {
+    return None
+  }
+  let mut expr_end = spans.length() - 1
+  if expr_end > 0 && spans[expr_end - 1].opcode == 0x0fU {
+    expr_end -= 1
+  }
+  if expr_end < 5 {
+    return None
+  }
+  let mut if_index = -1
+  for i in 0..<expr_end {
+    let opcode = spans[i].opcode
+    if opcode == 0x04U {
+      if_index = i
+      break
+    }
+    if is_inlining_expression_unsupported_opcode(opcode) {
+      return None
+    }
+  }
+  if if_index <= 0 {
+    return None
+  }
+  guard find_inlining_if_block_span(spans, if_index) is Some(if_block) else {
+    return None
+  }
+  if if_block.else_index >= 0 ||
+    if_block.end_index != if_index + 3 ||
+    if_block.end_index + 1 >= expr_end {
+    return None
+  }
+  let const_span = spans[if_index + 1]
+  if spans[if_index + 2].opcode != 0x0fU ||
+    !is_const_opcode_compatible_with_result(const_span.opcode, result_type) {
+    return None
+  }
+  for i in (if_block.end_index + 1)..<expr_end {
+    if is_inlining_expression_unsupported_opcode(spans[i].opcode) ||
+      spans[i].opcode == 0x05U {
+      return None
+    }
+  }
+  let out : Array[Byte] = []
+  for i in 0..<if_index {
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
+  }
+  out.push(0x04U.to_byte())
+  out.push(result_type[0])
+  append_bytes_range(out, instr_bytes, const_span.start, const_span.end_)
+  out.push(0x05U.to_byte())
+  for i in (if_block.end_index + 1)..<expr_end {
+    append_bytes_range(out, instr_bytes, spans[i].start, spans[i].end_)
+  }
+  out.push(0x0bU.to_byte())
+  Some(Bytes::from_array(out[:]))
+}
+
+///|
 fn extract_inlining_candidate_raise(
   body_bytes : Bytes,
   type_entry : FunctionTypeEntry,
@@ -1210,6 +1311,28 @@ fn extract_inlining_candidate_raise(
       uses_temp_locals: false,
       temp_local_types: [],
       temp_param_count: 0U,
+    })
+  }
+  if result_count == 1 &&
+    prefix.local_types.length() == 0 &&
+    extract_inlining_if_return_const_wrapper_instr_raise(
+      instr_bytes,
+      spans,
+      type_entry.results[0],
+    )
+    is Some(replacement_instr) {
+    guard inlining_temp_local_types_from_signature_and_locals(
+        type_entry.params,
+        prefix.local_types,
+      )
+      is Some(temp_local_types) else {
+      return None
+    }
+    return Some({
+      replacement_instr,
+      uses_temp_locals: true,
+      temp_local_types,
+      temp_param_count: param_count.reinterpret_as_uint(),
     })
   }
   guard extract_inlining_body_instr_without_end_raise(instr_bytes, spans)
@@ -1420,7 +1543,8 @@ fn rewrite_instruction_calls_for_inlining_raise(
                 )
                 if total_growth < call_span_len {
                   should_inline = true
-                } else if estimated_removed_bytes > total_growth - call_span_len {
+                } else if estimated_removed_bytes >=
+                  total_growth - call_span_len {
                   should_inline = true
                 }
               }
