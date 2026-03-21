@@ -103,6 +103,9 @@
 
 `wite` は producer 非依存の規約として、custom section 経由の optimize hint を受け付ける。
 
+`wite.cfp_const_hints` の設計意図と producer 実装指針は
+`docs/adr/0001-cfp-const-hints.md` を参照。
+
 ### `wite.cfp_const_hints` v1
 
 - section 名: `wite.cfp_const_hints`
