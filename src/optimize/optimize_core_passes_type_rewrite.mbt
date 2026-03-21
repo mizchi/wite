@@ -1164,6 +1164,8 @@ fn rewrite_instruction_calls_for_inlining_raise(
   spans : Array[InstrSpan],
   replacement_by_function_index : Map[UInt, Bytes],
   call_count_by_target : Map[UInt, UInt],
+  root_function_indices : Map[UInt, Bool],
+  body_bytes_by_function_index : Map[UInt, UInt],
 ) -> (Bytes, UInt) raise WiteError {
   let out : Array[Byte] = []
   let mut rewritten_call_count = 0U
@@ -1185,8 +1187,24 @@ fn rewrite_instruction_calls_for_inlining_raise(
           let call_span_len = (span.end_ - span.start).reinterpret_as_uint()
           let replacement_len = replacement.length().reinterpret_as_uint()
           let call_site_count = call_count_by_target.get(target).unwrap_or(0U)
-          if replacement_len <= call_span_len ||
-            (call_site_count == 1U && replacement_len <= call_span_len + 2U) {
+          let mut should_inline = replacement_len <= call_span_len ||
+            (call_site_count == 1U && replacement_len <= call_span_len + 2U)
+          if !should_inline &&
+            replacement_len > call_span_len &&
+            call_site_count > 0U &&
+            root_function_indices.get(target) is None {
+            match body_bytes_by_function_index.get(target) {
+              Some(body_bytes) =>
+                if body_bytes > 0U {
+                  let growth_per_call = replacement_len - call_span_len
+                  let max_profitable_call_count = (body_bytes - 1U) /
+                    growth_per_call
+                  should_inline = call_site_count <= max_profitable_call_count
+                }
+              None => ()
+            }
+          }
+          if should_inline {
             out.append(replacement[:].to_array())
             rewritten_call_count += 1U
           } else {
@@ -1307,7 +1325,9 @@ fn apply_inlining_optimizing_raise_with_sections(
     type_payload, function_type_indices, "inlining",
   )
   let replacement_by_function_index : Map[UInt, Bytes] = {}
+  let body_bytes_by_function_index : Map[UInt, UInt] = {}
   for i in 0..<code_bodies.length() {
+    let function_index = imported_function_count + i.reinterpret_as_uint()
     let type_index = function_type_indices[i]
     let type_entry = match function_type_entry_map.get(type_index) {
       Some(v) => v
@@ -1316,12 +1336,13 @@ fn apply_inlining_optimizing_raise_with_sections(
           "missing function type entry in inlining: " + type_index.to_string(),
         )
     }
+    body_bytes_by_function_index.set(
+      function_index,
+      code_bodies[i].length().reinterpret_as_uint(),
+    )
     match extract_inlining_replacement_instr_raise(code_bodies[i], type_entry) {
       Some(replacement) =>
-        replacement_by_function_index.set(
-          imported_function_count + i.reinterpret_as_uint(),
-          replacement,
-        )
+        replacement_by_function_index.set(function_index, replacement)
       None => ()
     }
   }
@@ -1329,6 +1350,17 @@ fn apply_inlining_optimizing_raise_with_sections(
   replacement_by_function_index.each((_, _) => has_candidate = true)
   if !has_candidate {
     return { bytes, inlined_call_count: 0U }
+  }
+  let root_function_indices : Map[UInt, Bool] = {}
+  let call_graph_result = try? analyze_call_graph_raise(bytes, None)
+  match call_graph_result {
+    Ok(call_graph) =>
+      if !call_graph.partial {
+        for index in call_graph.roots {
+          root_function_indices.set(index, true)
+        }
+      }
+    Err(_) => ()
   }
   let call_count_by_target = collect_call_count_by_target_raise(
     code_bodies, replacement_by_function_index,
@@ -1340,7 +1372,8 @@ fn apply_inlining_optimizing_raise_with_sections(
     let instr_bytes = body[prefix_end:body.length()].to_bytes()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let (rewritten_instr, rewritten_call_count) = rewrite_instruction_calls_for_inlining_raise(
-      instr_bytes, spans, replacement_by_function_index, call_count_by_target,
+      instr_bytes, spans, replacement_by_function_index, call_count_by_target, root_function_indices,
+      body_bytes_by_function_index,
     )
     inlined_call_count += rewritten_call_count
     if rewritten_call_count > 0U {

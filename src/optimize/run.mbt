@@ -124,8 +124,15 @@ pub fn optimize_for_size(
       if !changed {
         break
       }
+      let has_inlining_rewrite = round.removed_sections.any(s => {
+        s.contains("inlining:calls:")
+      })
       // Stop fixed-point rounds once a round regresses size.
       if after_round_size > before_round_size {
+        if has_inlining_rewrite && round_index + 1U < rounds {
+          prev_gain = 0U
+          continue
+        }
         break
       }
       // Skip further rounds if gain is diminishing (<1% of original)
