@@ -112,6 +112,7 @@ experimental flag が有効な場合、consumer は hint の観測結果を次�
   - 通常 optimize でも同じ hint 集計を返す
   - multi-round のときだけ `round#N:` を前置する
   - component optimize では `core#M:` を前置する
+  - `hint-section-stripped=true|false` で strip 結果も返す
 - `analyze optimize metadata`
   - DCE stage の `observations` に同じ集計を入れる
   - その stage で `cfp-const` / `cfp-const-specialize` が実際に発火したかも併記する
@@ -156,7 +157,8 @@ consumer は最終出力からその section を除去してよい。
 experimental flag が無効な場合、consumer はこの section を hint としては読まず、
 通常の custom section として扱う。
 
-rewrite が発火しなかった場合に常に strip するかは未確定であり、現状は analyze/debug 運用を見ながら決める。
+experimental flag が有効でも rewrite が発火しなかった場合、その section は保持する。
+現行 policy は「successful hint rewrite のときだけ strip」である。
 
 ## Guidance For `vibe`
 

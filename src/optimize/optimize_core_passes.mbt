@@ -374,6 +374,7 @@ pub fn collect_optimize_stage_observations(
   let cfp_const_specialize_used = removed_sections.any(s => {
     s.contains("cfp-const-specialize:calls:")
   })
+  let hint_section_stripped = cfp_const_used || cfp_const_specialize_used
   observations.push(
     "cfp-const-hints: sections=" +
     hint_section_count.to_string() +
@@ -388,7 +389,9 @@ pub fn collect_optimize_stage_observations(
     " cfp-const-used=" +
     cfp_const_used.to_string() +
     " cfp-const-specialize-used=" +
-    cfp_const_specialize_used.to_string(),
+    cfp_const_specialize_used.to_string() +
+    " hint-section-stripped=" +
+    hint_section_stripped.to_string(),
   )
   if hint_reject_reason_counts.length() > 0 {
     observations.push(

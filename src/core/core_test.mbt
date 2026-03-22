@@ -5079,6 +5079,9 @@ test "analyze optimize metadata reports experimental cfp-const hint observations
     stage_has_observation_containing(dce_stage, "cfp-const-used=true"),
   )
   assert_true(
+    stage_has_observation_containing(dce_stage, "hint-section-stripped=true"),
+  )
+  assert_true(
     stage_has_observation_containing(
       dce_stage, "cfp-const-specialize-hints: candidates=0",
     ),
@@ -5115,6 +5118,39 @@ test "optimize reports experimental cfp-const hint observations" {
     result.observations.any(obs => {
       obs.contains("cfp-const-specialize-hints: candidates=0")
     }),
+  )
+  assert_true(
+    result.observations.any(obs => obs.contains("hint-section-stripped=true")),
+  )
+}
+
+///|
+test "optimize reports retained cfp-const hint section when no hint rewrite fires" {
+  let bytes = sample_module_with_hint_only_interleaved_const_forwarding_thunk_with_hint_arg_instrs([
+      [0x20, 0x00],
+      [0x41, 0x05],
+      [0x20, 0x00],
+    ],
+  )
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_experimental_cfp_const_hints=true,
+  )
+  guard @wite_optimize.optimize_for_size(bytes, config~) is Ok(result) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    result.observations.any(obs => obs.contains("hint-section-stripped=false")),
   )
 }
 

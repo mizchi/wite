@@ -180,6 +180,7 @@ parsed entry 数・usable entry 数に加えて、次の structural reject reaso
 experimental flag が有効な場合、通常の `optimize` / `build` / `treeshake` でも
 `OptimizeResult.observations` に同じ集計を載せる。固定点 round を回す optimize では
 `round#N: ...`、component optimize ではさらに `core#M:...` が前置される。
+この observation には `hint-section-stripped=true|false` も含まれ、成功時だけ strip されたかを示す。
 
 `analyze optimize metadata` では、experimental flag が有効な場合に限り、DCE stage の
 `observations` に同じ hint 集計と、`cfp-const` / `cfp-const-specialize` がその stage で
@@ -225,7 +226,8 @@ hint entry があっても、specialize はさらに次を満たす場合だけ�
 
 experimental flag が無効な場合、`wite` はこの section を hint としては読まず、通常の custom section として扱う。
 
-rewrite が発火しなかった場合に常に strip するかは未確定で、今後の analyze/debug 運用を見て決める。
+experimental flag が有効でも rewrite が発火しなかった場合、その section は保持する。
+つまり現行 policy は「successful hint rewrite のときだけ strip」である。
 
 ## P0: Core Size ギャップ解消（最優先）
 
