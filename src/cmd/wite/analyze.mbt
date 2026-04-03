@@ -425,6 +425,23 @@ async fn run_analyze_view_command(args : Array[String]) -> Unit {
       }
     }
   }
+  // Auto-detect binary kind from magic bytes when kind is Auto
+  if kind is BinaryKind::Auto {
+    let bytes = read_bytes_or_exit(path)
+    if bytes.length() >= 8 &&
+      bytes[0] == 0x00U.to_byte() &&
+      bytes[1] == 0x61U.to_byte() &&
+      bytes[2] == 0x73U.to_byte() &&
+      bytes[3] == 0x6dU.to_byte() &&
+      bytes[4] == 0x0dU.to_byte() &&
+      bytes[5] == 0x00U.to_byte() &&
+      bytes[6] == 0x01U.to_byte() &&
+      bytes[7] == 0x00U.to_byte() {
+      kind = BinaryKind::Component
+    } else {
+      kind = BinaryKind::Core
+    }
+  }
   match kind {
     BinaryKind::Component =>
       match view {
