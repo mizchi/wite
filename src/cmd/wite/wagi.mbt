@@ -95,7 +95,7 @@ fn parse_wagi_response(raw : String) -> WagiResponse {
       None => ()
     }
   }
-  if not(headers.contains("Content-Type")) {
+  if !headers.contains("Content-Type") {
     headers["Content-Type"] = "text/plain"
   }
   { status, headers, body }
