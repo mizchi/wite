@@ -2,7 +2,7 @@
 pub(all) enum ServerExecutor {
   Wagi
   Workerd
-} derive(Eq)
+} derive(Debug, Eq)
 
 ///|
 pub impl Show for ServerExecutor with output(self, logger) {
@@ -16,7 +16,7 @@ pub impl Show for ServerExecutor with output(self, logger) {
 pub(all) struct KvNamespaceBinding {
   binding : String
   id : String
-} derive(Eq)
+} derive(Debug, Eq)
 
 ///|
 pub impl Show for KvNamespaceBinding with output(self, logger) {
@@ -31,7 +31,7 @@ pub impl Show for KvNamespaceBinding with output(self, logger) {
 pub(all) struct R2BucketBinding {
   binding : String
   bucket_name : String
-} derive(Eq)
+} derive(Debug, Eq)
 
 ///|
 pub impl Show for R2BucketBinding with output(self, logger) {
@@ -47,7 +47,7 @@ pub(all) struct D1DatabaseBinding {
   binding : String
   database_name : String
   database_id : String
-} derive(Eq)
+} derive(Debug, Eq)
 
 ///|
 pub impl Show for D1DatabaseBinding with output(self, logger) {
@@ -65,7 +65,7 @@ pub(all) struct ServerBindings {
   kv_namespaces : Array[KvNamespaceBinding]
   r2_buckets : Array[R2BucketBinding]
   d1_databases : Array[D1DatabaseBinding]
-} derive(Eq)
+} derive(Debug, Eq)
 
 ///|
 pub impl Show for ServerBindings with output(self, logger) {
@@ -88,7 +88,7 @@ pub struct ServerConfig {
   executor : ServerExecutor
   route : String
   bindings : ServerBindings
-}
+} derive(Debug)
 
 ///|
 pub impl Show for ServerConfig with output(self, logger) {
@@ -255,7 +255,7 @@ pub enum ConfigInput {
   None
   Single(String)
   Named(Map[String, String])
-}
+} derive(Debug)
 
 ///|
 pub impl Show for ConfigInput with output(self, logger) {
