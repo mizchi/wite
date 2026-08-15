@@ -105,8 +105,7 @@ pub(all) struct D1DatabaseBinding {
   binding : String
   database_name : String
   database_id : String
-}
-pub impl Eq for D1DatabaseBinding
+} derive(Eq)
 pub impl Show for D1DatabaseBinding
 
 pub struct EnvironmentConfig {
@@ -139,15 +138,13 @@ pub struct EnvironmentDef {
 pub(all) struct KvNamespaceBinding {
   binding : String
   id : String
-}
-pub impl Eq for KvNamespaceBinding
+} derive(Eq)
 pub impl Show for KvNamespaceBinding
 
 pub(all) struct R2BucketBinding {
   binding : String
   bucket_name : String
-}
-pub impl Eq for R2BucketBinding
+} derive(Eq)
 pub impl Show for R2BucketBinding
 
 pub enum RuntimeTarget {
@@ -162,8 +159,7 @@ pub(all) struct ServerBindings {
   kv_namespaces : Array[KvNamespaceBinding]
   r2_buckets : Array[R2BucketBinding]
   d1_databases : Array[D1DatabaseBinding]
-}
-pub impl Eq for ServerBindings
+} derive(Eq)
 pub impl Show for ServerBindings
 
 pub struct ServerConfig {
@@ -176,8 +172,7 @@ pub impl Show for ServerConfig
 pub(all) enum ServerExecutor {
   Wagi
   Workerd
-}
-pub impl Eq for ServerExecutor
+} derive(Eq)
 pub impl Show for ServerExecutor
 
 pub struct WiteConfigFile {

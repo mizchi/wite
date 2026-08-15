@@ -7,7 +7,7 @@
     "mizchi/mwac": "0.1.6",
     "mizchi/wit": "0.2.4",
     "mizchi/oci_wasm": "0.3.0",
-    "mizchi/x": "0.1.5"
+    "mizchi/x": "0.3.0"
   },
   "readme": "README.mbt.md",
   "repository": "https://github.com/mizchi/wite",

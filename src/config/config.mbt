@@ -2,33 +2,81 @@
 pub(all) enum ServerExecutor {
   Wagi
   Workerd
-} derive(Show, Eq)
+} derive(Eq)
+
+///|
+pub impl Show for ServerExecutor with output(self, logger) {
+  match self {
+    Wagi => logger.write_string("Wagi")
+    Workerd => logger.write_string("Workerd")
+  }
+}
 
 ///|
 pub(all) struct KvNamespaceBinding {
   binding : String
   id : String
-} derive(Show, Eq)
+} derive(Eq)
+
+///|
+pub impl Show for KvNamespaceBinding with output(self, logger) {
+  logger.write_string("{binding: ")
+  Show::output(self.binding, logger)
+  logger.write_string(", id: ")
+  Show::output(self.id, logger)
+  logger.write_string("}")
+}
 
 ///|
 pub(all) struct R2BucketBinding {
   binding : String
   bucket_name : String
-} derive(Show, Eq)
+} derive(Eq)
+
+///|
+pub impl Show for R2BucketBinding with output(self, logger) {
+  logger.write_string("{binding: ")
+  Show::output(self.binding, logger)
+  logger.write_string(", bucket_name: ")
+  Show::output(self.bucket_name, logger)
+  logger.write_string("}")
+}
 
 ///|
 pub(all) struct D1DatabaseBinding {
   binding : String
   database_name : String
   database_id : String
-} derive(Show, Eq)
+} derive(Eq)
+
+///|
+pub impl Show for D1DatabaseBinding with output(self, logger) {
+  logger.write_string("{binding: ")
+  Show::output(self.binding, logger)
+  logger.write_string(", database_name: ")
+  Show::output(self.database_name, logger)
+  logger.write_string(", database_id: ")
+  Show::output(self.database_id, logger)
+  logger.write_string("}")
+}
 
 ///|
 pub(all) struct ServerBindings {
   kv_namespaces : Array[KvNamespaceBinding]
   r2_buckets : Array[R2BucketBinding]
   d1_databases : Array[D1DatabaseBinding]
-} derive(Show, Eq)
+} derive(Eq)
+
+///|
+pub impl Show for ServerBindings with output(self, logger) {
+  logger.write_string("{kv_namespaces: ")
+  Show::output(self.kv_namespaces, logger)
+  logger.write_string(", r2_buckets: ")
+  Show::output(self.r2_buckets, logger)
+  logger.write_string(", d1_databases: ")
+  Show::output(self.d1_databases, logger)
+  logger.write_string("}")
+}
 
 ///|
 pub fn empty_server_bindings() -> ServerBindings {
@@ -40,7 +88,18 @@ pub struct ServerConfig {
   executor : ServerExecutor
   route : String
   bindings : ServerBindings
-} derive(Show)
+}
+
+///|
+pub impl Show for ServerConfig with output(self, logger) {
+  logger.write_string("{executor: ")
+  Show::output(self.executor, logger)
+  logger.write_string(", route: ")
+  Show::output(self.route, logger)
+  logger.write_string(", bindings: ")
+  Show::output(self.bindings, logger)
+  logger.write_string("}")
+}
 
 ///|
 pub fn parse_server_bindings(
@@ -196,7 +255,24 @@ pub enum ConfigInput {
   None
   Single(String)
   Named(Map[String, String])
-} derive(Show)
+}
+
+///|
+pub impl Show for ConfigInput with output(self, logger) {
+  match self {
+    None => logger.write_string("None")
+    Single(s) => {
+      logger.write_string("Single(")
+      Show::output(s, logger)
+      logger.write_string(")")
+    }
+    Named(map) => {
+      logger.write_string("Named(")
+      Show::output(map, logger)
+      logger.write_string(")")
+    }
+  }
+}
 
 ///|
 pub fn ConfigInput::new_none() -> ConfigInput {
