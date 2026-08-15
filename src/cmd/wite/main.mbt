@@ -1,6 +1,6 @@
 ///|
 async fn main {
-  let args = @sys.get_cli_args()
+  let args = @env.args()[1:].to_owned()
   if args.length() < 2 {
     print_usage()
     @sys.exit(1)

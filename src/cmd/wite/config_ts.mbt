@@ -37,7 +37,7 @@ async fn evaluate_ts_config(config_path : String) -> String {
         detail
       })
   }
-  let trimmed = output.trim().to_string()
+  let trimmed = output.trim().to_owned()
   if trimmed.is_empty() {
     return "err\tempty output from ts config evaluation"
   }

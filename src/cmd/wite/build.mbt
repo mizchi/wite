@@ -176,7 +176,7 @@ fn parse_build_flags(
       continue
     }
     if arg.strip_prefix("--out=") is Some(path) {
-      output_path = Some(path.to_string())
+      output_path = Some(path.to_owned())
       i += 1
       continue
     }
@@ -200,7 +200,7 @@ fn parse_build_flags(
       continue
     }
     if arg.strip_prefix("--kind=") is Some(value) {
-      kind = parse_binary_kind_or_exit(value.to_string(), "build kind")
+      kind = parse_binary_kind_or_exit(value.to_owned(), "build kind")
       i += 1
       continue
     }
@@ -214,7 +214,7 @@ fn parse_build_flags(
       continue
     }
     if arg.strip_prefix("--interface=") is Some(value) {
-      interface_path = Some(value.to_string())
+      interface_path = Some(value.to_owned())
       i += 1
       continue
     }
@@ -228,7 +228,7 @@ fn parse_build_flags(
       continue
     }
     if arg.strip_prefix("--world=") is Some(value) {
-      interface_world = Some(value.to_string())
+      interface_world = Some(value.to_owned())
       i += 1
       continue
     }
@@ -403,7 +403,7 @@ async fn run_chunk_build_command(
       // Parse build command: first token is the command, rest are args
       let parts : Array[String] = []
       for part in cmd.split(" ") {
-        let s = part.to_string()
+        let s = part.to_owned()
         if !s.is_empty() {
           parts.push(s)
         }

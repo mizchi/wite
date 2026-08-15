@@ -227,7 +227,7 @@ fn make_relative_path(base : String, full : String) -> String {
 fn normalize_url_path(url_path : String) -> String? {
   let parts : Array[String] = []
   for segment in url_path.split("/") {
-    let s = segment.to_string()
+    let s = segment.to_owned()
     if s == ".." {
       return None
     }
@@ -633,7 +633,7 @@ async fn run_dev_command(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--server=") is Some(v) {
-      let value = v.to_string()
+      let value = v.to_owned()
       if value != "wagi" && value != "workerd" {
         println(
           "invalid --server value: " + value + " (expected wagi or workerd)",
@@ -645,7 +645,7 @@ async fn run_dev_command(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--port=") is Some(v) {
-      port = parse_int_or_exit(v.to_string(), "port")
+      port = parse_int_or_exit(v.to_owned(), "port")
       i += 1
       continue
     }
@@ -659,7 +659,7 @@ async fn run_dev_command(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--target=") is Some(v) {
-      target = v.to_string()
+      target = v.to_owned()
       i += 1
       continue
     }
@@ -673,7 +673,7 @@ async fn run_dev_command(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--build-cmd=") is Some(v) {
-      build_cmd_str = v.to_string()
+      build_cmd_str = v.to_owned()
       i += 1
       continue
     }
@@ -687,7 +687,7 @@ async fn run_dev_command(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--watch=") is Some(v) {
-      watch_path = v.to_string()
+      watch_path = v.to_owned()
       i += 1
       continue
     }

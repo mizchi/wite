@@ -2,7 +2,7 @@
 fn split_string(s : String, delim : String) -> Array[String] {
   let out : Array[String] = []
   for part in s.split(delim) {
-    out.push(part.to_string())
+    out.push(part.to_owned())
   }
   out
 }
@@ -14,7 +14,7 @@ fn split_non_empty(s : String, delim : String) -> Array[String] {
   }
   let out : Array[String] = []
   for part in s.split(delim) {
-    let item = part.to_string()
+    let item = part.to_owned()
     if !item.is_empty() {
       out.push(item)
     }

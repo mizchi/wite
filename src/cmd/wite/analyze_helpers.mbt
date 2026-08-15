@@ -115,7 +115,7 @@ fn sanitize_filename(s : String) -> String {
 fn make_temp_wasm_path(prefix : String) -> String {
   let base = if prefix.is_empty() { "wite-diff" } else { prefix }
   let safe_base = sanitize_filename(base)
-  let tmpdir = @sys.get_env_var("TMPDIR").unwrap_or("/tmp")
+  let tmpdir = @env.get_env_var("TMPDIR").unwrap_or("/tmp")
   let rng = @random.Rand::chacha8()
   let token = rng.uint64().to_string()
   tmpdir + "/" + safe_base + "-" + token + ".wasm"

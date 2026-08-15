@@ -63,10 +63,20 @@ test "parse_wagi_response default content-type" {
 test "build_wagi_env_args basic" {
   let headers : Map[String, String] = Map([])
   let args = build_wagi_env_args("GET", "/hello", headers)
-  inspect(
+  debug_inspect(
     args,
     content=(
-      #|[--env, REQUEST_METHOD=GET, --env, PATH_INFO=/hello, --env, SERVER_PROTOCOL=HTTP/1.1, --env, GATEWAY_INTERFACE=CGI/1.1]
+      #|[
+      #|  "--env",
+      #|  "REQUEST_METHOD=GET",
+      #|  "--env",
+      #|  "PATH_INFO=/hello",
+      #|  "--env",
+      #|  "SERVER_PROTOCOL=HTTP/1.1",
+      #|  "--env",
+      #|  "GATEWAY_INTERFACE=CGI/1.1",
+      #|]
+
     ),
   )
 }
@@ -94,20 +104,20 @@ test "build_wagi_env_args header name conversion" {
 
 ///|
 test "try_parse_int valid" {
-  inspect(try_parse_int("200"), content="Some(200)")
-  inspect(try_parse_int("404"), content="Some(404)")
-  inspect(try_parse_int("0"), content="Some(0)")
+  debug_inspect(try_parse_int("200"), content="Some(200)")
+  debug_inspect(try_parse_int("404"), content="Some(404)")
+  debug_inspect(try_parse_int("0"), content="Some(0)")
 }
 
 ///|
 test "try_parse_int invalid" {
-  inspect(try_parse_int(""), content="None")
-  inspect(try_parse_int("abc"), content="None")
+  debug_inspect(try_parse_int(""), content="None")
+  debug_inspect(try_parse_int("abc"), content="None")
 }
 
 ///|
 test "try_parse_int with trailing text" {
-  inspect(try_parse_int("200 OK"), content="Some(200)")
+  debug_inspect(try_parse_int("200 OK"), content="Some(200)")
 }
 
 ///|

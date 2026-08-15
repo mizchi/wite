@@ -103,7 +103,7 @@ fn run_treeshake(args : Array[String]) -> Unit {
     }
     if arg.strip_prefix("--exports=") is Some(names) {
       for part in names.split(",") {
-        let name = part.to_string()
+        let name = part.to_owned()
         if !name.is_empty() {
           kept_exports.push(name)
         }
@@ -112,7 +112,7 @@ fn run_treeshake(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--kind=") is Some(value) {
-      kind = parse_binary_kind_or_exit(value.to_string(), "treeshake kind")
+      kind = parse_binary_kind_or_exit(value.to_owned(), "treeshake kind")
       i += 1
       continue
     }

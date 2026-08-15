@@ -66,7 +66,7 @@ fn parse_wagi_response(raw : String) -> WagiResponse {
   let headers : Map[String, String] = Map([])
   let mut status = 200
   for line in header_section.split("\n") {
-    let line_str = line.to_string().trim_end(chars="\r").to_string()
+    let line_str = line.to_owned().trim_end(chars="\r").to_owned()
     if line_str == "" {
       continue
     }
@@ -74,12 +74,12 @@ fn parse_wagi_response(raw : String) -> WagiResponse {
       Some(colon_idx) => {
         let key = line_str[:colon_idx].to_owned()
         let value = line_str[colon_idx + 1:]
-          .to_string()
+          .to_owned()
           .trim_start(chars=" ")
-          .to_string()
+          .to_owned()
         if key.to_lower() == "status" {
           for part in value.split(" ") {
-            let part_str = part.to_string()
+            let part_str = part.to_owned()
             if part_str != "" {
               match try_parse_int(part_str) {
                 Some(code) => status = code

@@ -16,23 +16,23 @@ async fn run_diff_command(args : Array[String]) -> Unit {
     let arg = args[i]
     match arg.strip_prefix("--view=") {
       Some(name) =>
-        match parse_diff_view(name.to_string()) {
+        match parse_diff_view(name.to_owned()) {
           Some(v) => view = v
           None => {
-            println("unknown diff view: " + name.to_string())
+            println("unknown diff view: " + name.to_owned())
             @sys.exit(1)
           }
         }
       None =>
         match arg.strip_prefix("--limit=") {
-          Some(value) => limit = parse_uint_or_exit(value.to_string(), "limit")
+          Some(value) => limit = parse_uint_or_exit(value.to_owned(), "limit")
           None =>
             match arg.strip_prefix("--baseline=") {
               Some(name) =>
-                match parse_diff_baseline(name.to_string()) {
+                match parse_diff_baseline(name.to_owned()) {
                   Some(v) => baseline = Some(v)
                   None => {
-                    println("unknown diff baseline: " + name.to_string())
+                    println("unknown diff baseline: " + name.to_owned())
                     @sys.exit(1)
                   }
                 }
@@ -43,19 +43,19 @@ async fn run_diff_command(args : Array[String]) -> Unit {
                       println("wasm-opt-bin must not be empty")
                       @sys.exit(1)
                     }
-                    wasm_opt_bin_override = Some(path.to_string())
+                    wasm_opt_bin_override = Some(path.to_owned())
                   }
                   None =>
                     match arg.strip_prefix("--baseline-opt-level=") {
                       Some(level) =>
                         baseline_opt_level = parse_wasm_opt_level_or_exit(
-                          level.to_string(),
+                          level.to_owned(),
                         )
                       None =>
                         match arg.strip_prefix("--baseline-arg=") {
                           Some(v) =>
                             if !v.is_empty() {
-                              wasm_opt_extra_args.push(v.to_string())
+                              wasm_opt_extra_args.push(v.to_owned())
                             }
                           None =>
                             if arg.has_prefix("--") {

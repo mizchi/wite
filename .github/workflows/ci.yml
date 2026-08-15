@@ -59,7 +59,7 @@ jobs:
       - name: Moon update
         run: moon update
       - name: Moon check
-        run: moon check --deny-warn --warn-list -20-82 --target js
+        run: moon check --deny-warn --target js
       - name: Moon test
         run: moon test --target js
       - name: Install wrangler

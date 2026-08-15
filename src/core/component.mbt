@@ -128,7 +128,7 @@ fn filter_prefixed_items(
   let out : Array[String] = []
   for item in items {
     match item.strip_prefix(prefix) {
-      Some(rest) => out.push(rest.to_string())
+      Some(rest) => out.push(rest.to_owned())
       None => ()
     }
   }
