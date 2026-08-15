@@ -10,10 +10,10 @@ extern "js" fn js_verify_wkg_package_cli(
   #|     .slice(0, 4096);
   #|   let tempDir = '';
   #|   try {
-  #|     const os = require('node:os');
-  #|     const fs = require('node:fs');
-  #|     const path = require('node:path');
-  #|     const { spawnSync } = require('node:child_process');
+  #|     const os = process.getBuiltinModule('node:os');
+  #|     const fs = process.getBuiltinModule('node:fs');
+  #|     const path = process.getBuiltinModule('node:path');
+  #|     const { spawnSync } = process.getBuiltinModule('node:child_process');
   #|     tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'wite-wkg-verify-'));
   #|     const outputPath = path.join(tempDir, 'pkg');
   #|     const args = [
@@ -43,7 +43,7 @@ extern "js" fn js_verify_wkg_package_cli(
   #|   } finally {
   #|     try {
   #|       if (tempDir) {
-  #|         const fs = require('node:fs');
+  #|         const fs = process.getBuiltinModule('node:fs');
   #|         fs.rmSync(tempDir, { recursive: true, force: true });
   #|       }
   #|     } catch (_) {
@@ -96,9 +96,9 @@ extern "js" fn js_sync_wkg_package_cli(
   #|     .replace(/\t/g, ' ')
   #|     .slice(0, 4096);
   #|   try {
-  #|     const fs = require('node:fs');
-  #|     const path = require('node:path');
-  #|     const { spawnSync } = require('node:child_process');
+  #|     const fs = process.getBuiltinModule('node:fs');
+  #|     const path = process.getBuiltinModule('node:path');
+  #|     const { spawnSync } = process.getBuiltinModule('node:child_process');
   #|     const outDir = String(outputDir || 'deps').trim();
   #|     if (!outDir) {
   #|       return 'error\targs\toutput dir must not be empty';
@@ -146,9 +146,9 @@ extern "js" fn js_sync_wkg_package_to_file_cli(
   #|     .replace(/\t/g, ' ')
   #|     .slice(0, 4096);
   #|   try {
-  #|     const fs = require('node:fs');
-  #|     const path = require('node:path');
-  #|     const { spawnSync } = require('node:child_process');
+  #|     const fs = process.getBuiltinModule('node:fs');
+  #|     const path = process.getBuiltinModule('node:path');
+  #|     const { spawnSync } = process.getBuiltinModule('node:child_process');
   #|     const outPath = String(outputPath || '').trim();
   #|     if (!outPath) {
   #|       return 'error\targs\toutput path must not be empty';
