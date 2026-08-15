@@ -49,7 +49,11 @@ fn optimize_component_for_size_round(
   bytes : Bytes,
   config : OptimizeConfig,
 ) -> Result[ComponentOptimizeRoundResult, String] {
-  let sections_result = try? parse_component_sections_raise(bytes)
+  let sections_result = try parse_component_sections_raise(bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   let sections = match sections_result {
     Ok(v) => v
     Err(e) =>
@@ -113,7 +117,7 @@ pub fn optimize_for_size(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
 ) -> Result[OptimizeResult, WiteError] {
-  try? ({
+  try {
     let rounds = if config.pass_rounds == 0U { 1U } else { config.pass_rounds }
     let mut current = bytes
     let removed_sections : Array[String] = []
@@ -175,7 +179,7 @@ pub fn optimize_for_size(
     let no_change_reasons = collect_optimize_no_change_reasons(
       bytes, current, config,
     )
-    {
+    OptimizeResult::{
       bytes: current,
       before_size: bytes.length().reinterpret_as_uint(),
       after_size: current.length().reinterpret_as_uint(),
@@ -183,7 +187,11 @@ pub fn optimize_for_size(
       observations,
       no_change_reasons,
     }
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }
 
 ///|

@@ -144,7 +144,11 @@ fn collect_optimize_no_change_reasons(
     reasons.push("no optimization pass is enabled in config")
     return reasons
   }
-  let sections_result = try? parse_core_sections_raise(before)
+  let sections_result = try parse_core_sections_raise(before) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match sections_result {
     Ok(sections) => {
       if custom_strip_pass_requested(config) {
@@ -183,7 +187,13 @@ fn collect_optimize_no_change_reasons(
   }
   if config.enable_dce {
     let export_root_names = export_root_names_from_config(config)
-    let report_result = try? analyze_call_graph_raise(before, export_root_names)
+    let report_result = try
+      analyze_call_graph_raise(before, export_root_names)
+    catch {
+      e => Err(e)
+    } noraise {
+      value => Ok(value)
+    }
     match report_result {
       Ok(report) =>
         if report.partial {

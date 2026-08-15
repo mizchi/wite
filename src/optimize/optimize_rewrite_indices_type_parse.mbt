@@ -1,6 +1,10 @@
 ///|
 pub fn parse_instruction_spans(instr_bytes : Bytes) -> Array[InstrSpan]? {
-  let result = try? parse_instruction_spans_raise(instr_bytes)
+  let result = try parse_instruction_spans_raise(instr_bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => Some(v)
     Err(_) => None
@@ -10,7 +14,11 @@ pub fn parse_instruction_spans(instr_bytes : Bytes) -> Array[InstrSpan]? {
 ///|
 fn decode_u32_leb128_bytes(bytes : Bytes) -> UInt? {
   let parser = Cursor::new(bytes)
-  let result = try? parser.read_u32_leb128()
+  let result = try parser.read_u32_leb128() catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => if parser.eof() { Some(v) } else { None }
     Err(_) => None
@@ -24,7 +32,11 @@ fn decode_u32_leb128_range(bytes : Bytes, start : Int, end_ : Int) -> UInt? {
   }
   let parser = Cursor::new(bytes)
   parser.set_pos(start)
-  let result = try? parser.read_u32_leb128()
+  let result = try parser.read_u32_leb128() catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => if parser.get_pos() == end_ { Some(v) } else { None }
     Err(_) => None

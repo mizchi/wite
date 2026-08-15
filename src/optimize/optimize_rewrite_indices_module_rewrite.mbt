@@ -28,7 +28,7 @@ fn collect_call_indirect_table_indices_from_instruction_raise(
 pub fn collect_call_indirect_table_indices_from_code_section(
   payload : Bytes,
 ) -> Array[UInt]? {
-  let result = try? ({
+  let result = try {
     let out : Array[UInt] = []
     let bodies = parse_code_bodies(payload)
     for body in bodies {
@@ -43,7 +43,11 @@ pub fn collect_call_indirect_table_indices_from_code_section(
       }
     }
     out
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => Some(v)
     Err(_) => None
@@ -105,7 +109,7 @@ fn collect_used_table_indices_from_instruction_raise(
 fn collect_used_table_indices_from_code_section(
   payload : Bytes,
 ) -> Array[UInt]? {
-  let result = try? ({
+  let result = try {
     let out : Array[UInt] = []
     let bodies = parse_code_bodies(payload)
     for body in bodies {
@@ -120,7 +124,11 @@ fn collect_used_table_indices_from_code_section(
       }
     }
     out
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => Some(v)
     Err(_) => None
@@ -212,7 +220,7 @@ fn collect_used_memory_indices_from_instruction_raise(
 fn collect_used_global_indices_from_code_section(
   payload : Bytes,
 ) -> Array[UInt]? {
-  let result = try? ({
+  let result = try {
     let out : Array[UInt] = []
     let bodies = parse_code_bodies(payload)
     for body in bodies {
@@ -227,7 +235,11 @@ fn collect_used_global_indices_from_code_section(
       }
     }
     out
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => Some(v)
     Err(_) => None
@@ -238,7 +250,7 @@ fn collect_used_global_indices_from_code_section(
 fn collect_used_memory_indices_from_code_section(
   payload : Bytes,
 ) -> Array[UInt]? {
-  let result = try? ({
+  let result = try {
     let out : Array[UInt] = []
     let bodies = parse_code_bodies(payload)
     for body in bodies {
@@ -253,7 +265,11 @@ fn collect_used_memory_indices_from_code_section(
       }
     }
     out
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => Some(v)
     Err(_) => None

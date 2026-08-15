@@ -219,7 +219,7 @@ pub fn analyze_function_size_gap(
   right_bytes : Bytes,
   top_limit? : UInt = 20U,
 ) -> Result[FunctionGapReport, WiteError] {
-  try? ({
+  try {
     let left_functions = match analyze_function_sizes(left_bytes) {
       Ok(v) => v
       Err(e) => raise e
@@ -337,7 +337,7 @@ pub fn analyze_function_size_gap(
     }
     let left_total_body_bytes = sum_function_body_bytes(left_functions)
     let right_total_body_bytes = sum_function_body_bytes(right_functions)
-    {
+    FunctionGapReport::{
       left_total_body_bytes,
       right_total_body_bytes,
       left_minus_right_total_bytes: signed_delta_from_uint(
@@ -347,5 +347,9 @@ pub fn analyze_function_size_gap(
       unmatched_right_count,
       entries: limited_entries,
     }
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }

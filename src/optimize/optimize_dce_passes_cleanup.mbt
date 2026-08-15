@@ -4,9 +4,15 @@ fn apply_remove_unused_module_elements_with_sections(
   config : OptimizeConfig,
   sections : Array[RawSection],
 ) -> RumeApplyResult {
-  let result = try? apply_remove_unused_module_elements_raise_with_sections(
-    bytes, config, sections,
-  )
+  let result = try
+    apply_remove_unused_module_elements_raise_with_sections(
+      bytes, config, sections,
+    )
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) =>
@@ -77,9 +83,13 @@ fn apply_remove_unused_module_elements_raise_with_sections(
       }
       9U => {
         element_section_payload = Some(payload)
-        let global_result = try? collect_used_global_indices_from_element_section_raise(
-          payload,
-        )
+        let global_result = try
+          collect_used_global_indices_from_element_section_raise(payload)
+        catch {
+          e => Err(e)
+        } noraise {
+          value => Ok(value)
+        }
         match global_result {
           Ok(indices) =>
             for index in indices {
@@ -115,9 +125,15 @@ fn apply_remove_unused_module_elements_raise_with_sections(
       }
       11U => {
         data_section_payload = Some(payload)
-        let data_result = try? collect_used_memory_and_global_indices_from_data_section_raise(
-          payload,
-        )
+        let data_result = try
+          collect_used_memory_and_global_indices_from_data_section_raise(
+            payload,
+          )
+        catch {
+          e => Err(e)
+        } noraise {
+          value => Ok(value)
+        }
         match data_result {
           Ok((memory_indices, global_indices)) => {
             for index in memory_indices {
@@ -445,7 +461,13 @@ fn apply_type_refining_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
 ) -> TypeRefineApplyResult {
-  let result = try? apply_type_refining_raise_with_sections(bytes, sections)
+  let result = try
+    apply_type_refining_raise_with_sections(bytes, sections)
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) => { bytes, refined_type_count: 0U }
@@ -630,7 +652,13 @@ fn apply_signature_pruning_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
 ) -> SignaturePruneApplyResult {
-  let result = try? apply_signature_pruning_raise_with_sections(bytes, sections)
+  let result = try
+    apply_signature_pruning_raise_with_sections(bytes, sections)
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) => { bytes, pruned_function_count: 0U, pruned_param_count: 0U }
@@ -880,9 +908,13 @@ fn apply_remove_unused_types_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
 ) -> RemoveUnusedTypesApplyResult {
-  let result = try? apply_remove_unused_types_raise_with_sections(
-    bytes, sections,
-  )
+  let result = try
+    apply_remove_unused_types_raise_with_sections(bytes, sections)
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) => { bytes, removed_type_count: 0U }

@@ -69,7 +69,13 @@ fn analyze_call_graph_raise(
         push_unique_u32_with_seen(roots, root_seen, start_index)
       }
       6U => {
-        let refs_result = try? parse_global_section_function_refs_raise(payload)
+        let refs_result = try
+          parse_global_section_function_refs_raise(payload)
+        catch {
+          e => Err(e)
+        } noraise {
+          value => Ok(value)
+        }
         match refs_result {
           Ok(indices) =>
             for index in indices {
@@ -79,9 +85,13 @@ fn analyze_call_graph_raise(
         }
       }
       9U => {
-        let refs_result = try? parse_element_section_table_function_refs_raise(
-          payload,
-        )
+        let refs_result = try
+          parse_element_section_table_function_refs_raise(payload)
+        catch {
+          e => Err(e)
+        } noraise {
+          value => Ok(value)
+        }
         match refs_result {
           Ok(grouped) =>
             map_merge_unique_u32_array(element_refs_by_table, grouped)
@@ -129,7 +139,11 @@ fn analyze_call_graph_raise(
     let function_index = imported_function_count + i.reinterpret_as_uint()
     let body = code_bodies[i]
     let mut direct_callees : Array[UInt] = []
-    let direct_result = try? collect_direct_callees_from_body_raise(body)
+    let direct_result = try collect_direct_callees_from_body_raise(body) catch {
+      e => Err(e)
+    } noraise {
+      value => Ok(value)
+    }
     match direct_result {
       Ok((callees, body_has_indirect)) => {
         direct_callees = callees
@@ -254,7 +268,13 @@ fn analyze_call_graph_summary_raise(
           parse_start_function_index(payload),
         )
       6U => {
-        let refs_result = try? parse_global_section_function_refs_raise(payload)
+        let refs_result = try
+          parse_global_section_function_refs_raise(payload)
+        catch {
+          e => Err(e)
+        } noraise {
+          value => Ok(value)
+        }
         match refs_result {
           Ok(indices) =>
             for index in indices {
@@ -264,9 +284,13 @@ fn analyze_call_graph_summary_raise(
         }
       }
       9U => {
-        let refs_result = try? parse_element_section_table_function_refs_raise(
-          payload,
-        )
+        let refs_result = try
+          parse_element_section_table_function_refs_raise(payload)
+        catch {
+          e => Err(e)
+        } noraise {
+          value => Ok(value)
+        }
         match refs_result {
           Ok(grouped) =>
             map_merge_unique_u32_array(element_refs_by_table, grouped)
@@ -302,7 +326,11 @@ fn analyze_call_graph_summary_raise(
   for body in code_bodies {
     local_body_bytes.push(body.length().reinterpret_as_uint())
     let mut direct_callees : Array[UInt] = []
-    let direct_result = try? collect_direct_callees_from_body_raise(body)
+    let direct_result = try collect_direct_callees_from_body_raise(body) catch {
+      e => Err(e)
+    } noraise {
+      value => Ok(value)
+    }
     match direct_result {
       Ok((callees, body_has_indirect)) => {
         direct_callees = callees
@@ -382,14 +410,22 @@ fn analyze_call_graph_summary_raise(
 
 ///|
 pub fn analyze_call_graph(bytes : Bytes) -> Result[CallGraphReport, WiteError] {
-  try? analyze_call_graph_raise(bytes, None)
+  try analyze_call_graph_raise(bytes, None) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }
 
 ///|
 pub fn analyze_call_graph_summary(
   bytes : Bytes,
 ) -> Result[CallGraphSummary, WiteError] {
-  try? analyze_call_graph_summary_raise(bytes)
+  try analyze_call_graph_summary_raise(bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }
 
 ///|
@@ -436,7 +472,7 @@ fn count_const_forwarding_arg_instrs(arg_instrs : Array[Bytes]) -> UInt {
 pub fn analyze_host_generated_code(
   bytes : Bytes,
 ) -> Result[HostGeneratedCodeReport, WiteError] {
-  try? ({
+  try {
     let sections = parse_core_sections_raise(bytes)
     let mut type_payload : Bytes? = None
     let mut import_payload : Bytes? = None
@@ -676,7 +712,7 @@ pub fn analyze_host_generated_code(
       Ok(v) => v
       Err(e) => raise e
     }
-    {
+    HostGeneratedCodeReport::{
       imported_function_count,
       local_function_count,
       param_forwarding_thunk_count,
@@ -696,5 +732,9 @@ pub fn analyze_host_generated_code(
       dce_partial: dce_report.partial,
       hints,
     }
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }

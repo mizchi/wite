@@ -66,9 +66,13 @@ fn apply_duplicate_import_elimination_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
 ) -> DuplicateImportElimApplyResult {
-  let result = try? apply_duplicate_import_elimination_raise_with_sections(
-    bytes, sections,
-  )
+  let result = try
+    apply_duplicate_import_elimination_raise_with_sections(bytes, sections)
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) =>
@@ -1092,7 +1096,13 @@ fn apply_simplify_globals_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
 ) -> SimplifyGlobalsApplyResult {
-  let result = try? apply_simplify_globals_raise_with_sections(bytes, sections)
+  let result = try
+    apply_simplify_globals_raise_with_sections(bytes, sections)
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) => { bytes, rewritten_global_get_count: 0U }
@@ -1299,7 +1309,13 @@ fn apply_reorder_globals_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
 ) -> ReorderGlobalsApplyResult {
-  let result = try? apply_reorder_globals_raise_with_sections(bytes, sections)
+  let result = try
+    apply_reorder_globals_raise_with_sections(bytes, sections)
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) => { bytes, reordered_local_count: 0U }
@@ -1510,7 +1526,13 @@ fn apply_memory_packing_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
 ) -> MemoryPackingApplyResult {
-  let result = try? apply_memory_packing_raise_with_sections(bytes, sections)
+  let result = try
+    apply_memory_packing_raise_with_sections(bytes, sections)
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) => { bytes, reordered_local_count: 0U }
