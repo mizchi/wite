@@ -3,9 +3,10 @@ import {
   "mizchi/mwac/component" @mwac_component,
   "mizchi/wite/optimize" @wite_optimize,
   "mizchi/wite/types" @wite_types,
-  "mizchi/wit" @wit,
+  "mizchi/wit",
   "moonbitlang/core/bench",
-  "moonbitlang/x/fs" @fs,
+  "moonbitlang/core/debug",
+  "moonbitlang/x/fs",
 }
 
 options(

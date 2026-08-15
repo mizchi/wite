@@ -22,7 +22,11 @@ fn load_wite_config_or_exit(path : String) -> @wite_config.WiteConfigFile {
   let text = @fs.read_file_to_string(path) catch {
     e => {
       println(
-        "failed to read config file: " + path + " (" + e.to_string() + ")",
+        "failed to read config file: " +
+        path +
+        " (" +
+        @debug.render(Repr(e)) +
+        ")",
       )
       @sys.exit(1)
       ""
@@ -121,7 +125,9 @@ fn make_temp_wasm_path(prefix : String) -> String {
 fn read_bytes_or_exit(path : String) -> Bytes {
   @fs.read_file_to_bytes(path) catch {
     e => {
-      println("failed to read file: " + path + " (" + e.to_string() + ")")
+      println(
+        "failed to read file: " + path + " (" + @debug.render(Repr(e)) + ")",
+      )
       @sys.exit(1)
       b""
     }

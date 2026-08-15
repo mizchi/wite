@@ -157,7 +157,7 @@ fn parse_sections_from(
       raise WiteError::UnexpectedEof
     }
     let custom_name = if section_id == 0U {
-      let payload = bytes[payload_start:section_end].to_bytes()
+      let payload = bytes[payload_start:section_end].to_owned()
       payload |> parse_custom_section_name |> Some
     } else {
       None
@@ -253,7 +253,7 @@ pub fn summarize_sections(
   sections : Array[RawSection],
   component : Bool,
 ) -> Array[SectionSize] {
-  let grouped : Map[String, SectionSize] = {}
+  let grouped : Map[String, SectionSize] = Map([])
   for section in sections {
     let key = section_key(section, component)
     let size = section_total_bytes(section)
@@ -389,7 +389,7 @@ pub fn parse_code_bodies(payload : Bytes) -> Array[Bytes] raise WiteError {
     if end_ > payload.length() {
       raise WiteError::UnexpectedEof
     }
-    out.push(payload[start:end_].to_bytes())
+    out.push(payload[start:end_].to_owned())
     parser.set_pos(end_)
   }
   out
@@ -510,7 +510,7 @@ fn parse_import_section_entries_raise(
         )
     }
     let end_ = parser.get_pos()
-    out.push({ bytes: payload[start:end_].to_bytes(), kind, kind_index })
+    out.push({ bytes: payload[start:end_].to_owned(), kind, kind_index })
   }
   out
 }
@@ -671,7 +671,7 @@ pub fn parse_export_function_names(
 ) -> Map[UInt, Array[String]] raise WiteError {
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
-  let out : Map[UInt, Array[String]] = {}
+  let out : Map[UInt, Array[String]] = Map([])
   for _ in 0U..<count {
     let name = read_name_string(parser)
     let kind = parser.read_byte().to_uint()
@@ -719,7 +719,7 @@ pub fn parse_export_indices_by_kind(
   let parser = Cursor::new(payload)
   let count = parser.read_u32_leb128()
   let out : Array[UInt] = []
-  let seen : Map[UInt, Bool] = {}
+  let seen : Map[UInt, Bool] = Map([])
   for _ in 0U..<count {
     skip_name_string(parser)
     let kind = parser.read_byte().to_uint()
@@ -763,7 +763,7 @@ pub fn parse_name_section_function_names(
 ) -> Map[UInt, String] raise WiteError {
   let parser = Cursor::new(payload)
   parser.set_pos(parse_custom_section_name_prefix_end(payload))
-  let out : Map[UInt, String] = {}
+  let out : Map[UInt, String] = Map([])
   while !parser.eof() {
     let subsection_id = parser.read_byte().to_uint()
     let subsection_size_u = parser.read_u32_leb128()

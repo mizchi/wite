@@ -95,10 +95,10 @@ pub fn analyze_code_block_sizes(
     let mut imported_function_count = 0U
     let mut local_function_count = 0U
     let mut code_bodies : Array[Bytes] = []
-    let export_names : Map[UInt, Array[String]] = {}
-    let function_names : Map[UInt, String] = {}
+    let export_names : Map[UInt, Array[String]] = Map([])
+    let function_names : Map[UInt, String] = Map([])
     for section in sections {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let payload = bytes[section.payload_start:section.section_end].to_owned()
       match section.section_id {
         2U => imported_function_count += parse_import_function_count(payload)
         3U => local_function_count += parse_vec_count(payload)
@@ -141,7 +141,7 @@ pub fn analyze_code_block_sizes(
       let prefix_end_result = try? parse_local_decl_prefix_end(body)
       match prefix_end_result {
         Ok(prefix_end) => {
-          let instr_bytes = body[prefix_end:body.length()].to_bytes()
+          let instr_bytes = body[prefix_end:body.length()].to_owned()
           total_instruction_bytes += instr_bytes.length().reinterpret_as_uint()
           match parse_instruction_spans(instr_bytes) {
             Some(spans) => {
@@ -200,13 +200,13 @@ fn summarize_custom_sections_raise(
   sections : Array[RawSection],
   bytes : Bytes,
 ) -> Array[CustomSectionBreakdown] raise WiteError {
-  let grouped : Map[String, CustomSectionBreakdown] = {}
+  let grouped : Map[String, CustomSectionBreakdown] = Map([])
   for section in sections {
     if section.section_id != 0U {
       continue
     }
     let name = section.custom_name.unwrap_or("(anon)")
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     let payload_bytes = payload.length().reinterpret_as_uint()
     let prefix_end = parse_custom_section_name_prefix_end(payload)
     let content_bytes = (payload.length() - prefix_end).reinterpret_as_uint()
@@ -603,16 +603,16 @@ pub fn analyze_wasm_breakdown(
     let sections = parse_core_sections_raise(bytes)
     let section_sizes = summarize_sections(sections, false)
     let custom_sections = summarize_custom_sections_raise(sections, bytes)
-    let export_names : Map[UInt, Array[String]] = {}
-    let function_names : Map[UInt, String] = {}
+    let export_names : Map[UInt, Array[String]] = Map([])
+    let function_names : Map[UInt, String] = Map([])
     let roots : Array[UInt] = []
-    let root_seen : Map[UInt, Bool] = {}
+    let root_seen : Map[UInt, Bool] = Map([])
     let mut imported_function_count = 0U
     let mut local_function_count = 0U
     let mut code_bodies : Array[Bytes] = []
     let mut callgraph_partial = false
     for section in sections {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let payload = bytes[section.payload_start:section.section_end].to_owned()
       match section.section_id {
         2U => imported_function_count += parse_import_function_count(payload)
         3U => local_function_count = parse_vec_count(payload)
@@ -679,10 +679,10 @@ pub fn analyze_wasm_breakdown(
     let top_functions : Array[FunctionSize] = []
     let top_blocks : Array[CodeBlockSize] = []
     let local_function_indices : Array[UInt] = []
-    let direct_callees_map : Map[UInt, Array[UInt]] = {}
-    let body_bytes_map : Map[UInt, UInt] = {}
-    let base_opcode_grouped : Map[UInt, OpcodeCounter] = {}
-    let prefixed_opcode_grouped : Map[String, OpcodeCounter] = {}
+    let direct_callees_map : Map[UInt, Array[UInt]] = Map([])
+    let body_bytes_map : Map[UInt, UInt] = Map([])
+    let base_opcode_grouped : Map[UInt, OpcodeCounter] = Map([])
+    let prefixed_opcode_grouped : Map[String, OpcodeCounter] = Map([])
     let mut block_count = 0U
     let mut instruction_count = 0U
     let mut instruction_bytes = 0U
@@ -712,7 +712,7 @@ pub fn analyze_wasm_breakdown(
       let prefix_result = try? parse_local_decl_prefix_end(body)
       match prefix_result {
         Ok(prefix_end) => {
-          let instr_bytes = body[prefix_end:body.length()].to_bytes()
+          let instr_bytes = body[prefix_end:body.length()].to_owned()
           instruction_bytes += instr_bytes.length().reinterpret_as_uint()
           match parse_instruction_spans(instr_bytes) {
             Some(spans) => {
@@ -774,7 +774,7 @@ pub fn analyze_wasm_breakdown(
     let opcodes = opcode_stats_from_counters(
       base_opcode_grouped, prefixed_opcode_grouped,
     )
-    let visited : Map[UInt, Bool] = {}
+    let visited : Map[UInt, Bool] = Map([])
     let queue = roots.copy()
     let mut head = 0
     while head < queue.length() {

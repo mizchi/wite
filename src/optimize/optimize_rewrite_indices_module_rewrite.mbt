@@ -9,7 +9,7 @@ fn collect_call_indirect_table_indices_from_instruction_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid call_indirect immediate")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let parser = Cursor::new(imm)
       ignore(parser.read_u32_leb128())
       let table_index = parser.read_u32_leb128()
@@ -33,7 +33,7 @@ pub fn collect_call_indirect_table_indices_from_code_section(
     let bodies = parse_code_bodies(payload)
     for body in bodies {
       let prefix_end = parse_local_decl_prefix_end(body)
-      let instr_bytes = body[prefix_end:body.length()].to_bytes()
+      let instr_bytes = body[prefix_end:body.length()].to_owned()
       let spans = parse_instruction_spans_raise(instr_bytes)
       for
         index in collect_call_indirect_table_indices_from_instruction_raise(
@@ -62,7 +62,7 @@ fn collect_used_table_indices_from_instruction_raise(
         if span.end_ <= span.start + 1 {
           raise WiteError::InvalidFormat("invalid call_indirect immediate")
         }
-        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let imm = instr_bytes[span.start + 1:span.end_].to_owned()
         let parser = Cursor::new(imm)
         ignore(parser.read_u32_leb128())
         push_unique_u32(out, parser.read_u32_leb128())
@@ -79,7 +79,7 @@ fn collect_used_table_indices_from_instruction_raise(
         if span.end_ <= span.start + 1 {
           raise WiteError::InvalidFormat("invalid 0xfc immediate")
         }
-        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let imm = instr_bytes[span.start + 1:span.end_].to_owned()
         let parser = Cursor::new(imm)
         let subopcode = parser.read_u32_leb128()
         match subopcode {
@@ -110,7 +110,7 @@ fn collect_used_table_indices_from_code_section(
     let bodies = parse_code_bodies(payload)
     for body in bodies {
       let prefix_end = parse_local_decl_prefix_end(body)
-      let instr_bytes = body[prefix_end:body.length()].to_bytes()
+      let instr_bytes = body[prefix_end:body.length()].to_owned()
       let spans = parse_instruction_spans_raise(instr_bytes)
       for
         index in collect_used_table_indices_from_instruction_raise(
@@ -176,7 +176,7 @@ fn collect_used_memory_indices_from_instruction_raise(
         if span.end_ <= span.start + 1 {
           raise WiteError::InvalidFormat("invalid 0xfc immediate")
         }
-        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let imm = instr_bytes[span.start + 1:span.end_].to_owned()
         let parser = Cursor::new(imm)
         let subopcode = parser.read_u32_leb128()
         match subopcode {
@@ -196,7 +196,7 @@ fn collect_used_memory_indices_from_instruction_raise(
         if span.end_ <= span.start + 1 {
           raise WiteError::InvalidFormat("invalid 0xfd immediate")
         }
-        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let imm = instr_bytes[span.start + 1:span.end_].to_owned()
         let parser = Cursor::new(imm)
         if opcode_fd_uses_memory(parser.read_u32_leb128()) {
           push_unique_u32(out, 0U)
@@ -217,7 +217,7 @@ fn collect_used_global_indices_from_code_section(
     let bodies = parse_code_bodies(payload)
     for body in bodies {
       let prefix_end = parse_local_decl_prefix_end(body)
-      let instr_bytes = body[prefix_end:body.length()].to_bytes()
+      let instr_bytes = body[prefix_end:body.length()].to_owned()
       let spans = parse_instruction_spans_raise(instr_bytes)
       for
         index in collect_used_global_indices_from_instruction_raise(
@@ -243,7 +243,7 @@ fn collect_used_memory_indices_from_code_section(
     let bodies = parse_code_bodies(payload)
     for body in bodies {
       let prefix_end = parse_local_decl_prefix_end(body)
-      let instr_bytes = body[prefix_end:body.length()].to_bytes()
+      let instr_bytes = body[prefix_end:body.length()].to_owned()
       let spans = parse_instruction_spans_raise(instr_bytes)
       for
         index in collect_used_memory_indices_from_instruction_raise(
@@ -277,7 +277,7 @@ fn rewrite_instruction_module_indices_raise(
         if span.end_ <= span.start + 1 {
           raise WiteError::InvalidFormat("invalid call_indirect immediate")
         }
-        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let imm = instr_bytes[span.start + 1:span.end_].to_owned()
         let parser = Cursor::new(imm)
         let type_index = parser.read_u32_leb128()
         let table_index = parser.read_u32_leb128()
@@ -355,7 +355,7 @@ fn rewrite_instruction_module_indices_raise(
         if span.end_ <= span.start + 1 {
           raise WiteError::InvalidFormat("invalid 0xfc immediate")
         }
-        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let imm = instr_bytes[span.start + 1:span.end_].to_owned()
         let parser = Cursor::new(imm)
         let subopcode = parser.read_u32_leb128()
         let rest_start = parser.get_pos()
@@ -484,7 +484,7 @@ fn rewrite_code_body_for_module_index_map_raise(
   data_index_map : Map[UInt, UInt],
 ) -> Bytes raise WiteError {
   let prefix_end = parse_local_decl_prefix_end(body)
-  let instr_bytes = body[prefix_end:body.length()].to_bytes()
+  let instr_bytes = body[prefix_end:body.length()].to_owned()
   let spans = parse_instruction_spans_raise(instr_bytes)
   let rewritten_instr = rewrite_instruction_module_indices_raise(
     instr_bytes, spans, table_index_map, memory_index_map, global_index_map, element_index_map,

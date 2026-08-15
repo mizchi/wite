@@ -99,6 +99,136 @@
 - `src/optimize`（最適化実行）と `src/bundle`（WAC compose/依存解析）を独立パッケージとして維持し、CLI 依存なしで再利用可能にする
 - `src/analyze`（解析実行/表示）, `src/component`（component 専用操作）, `src/config`（config 解決）, `src/deps`（依存解決/同期）を独立パッケージとして維持する
 
+## Optimization Hint Conventions
+
+`wite` は producer 非依存の規約として、custom section 経由の optimize hint を受け付ける。
+
+`wite.cfp_const_hints` の設計意図と producer 実装指針は
+`docs/adr/0001-cfp-const-hints.md` を参照。
+
+### `wite.cfp_const_hints` v1
+
+- section 名: `wite.cfp_const_hints`
+- 用途: `cfp-const` / `cfp-const-specialize` の seed
+- 適用対象: const-forward / interleaved-const 系 wrapper
+- 有効化条件: experimental flag が有効な optimize 実行に限る
+
+現状は default で無効であり、CLI では `--experimental-cfp-const-hints`
+または `--enable-experimental-cfp-const-hints` を指定したときだけ使う。
+
+payload schema:
+
+```text
+version: u32 = 1
+entry_count: u32
+repeat entry_count times:
+  wrapper_index: u32
+  target_index: u32
+  arg_instr_count: u32
+  repeat arg_instr_count times:
+    instr_len: u32
+    instr_bytes: byte[instr_len]
+```
+
+`wrapper_index` / `target_index` は import を含んだ absolute function index とする。  
+`instr_bytes` は target へ渡す引数 recipe を表す raw wasm instruction bytes で、v1 では次だけを対象にする。
+
+- `local.get <wrapper_param_index>`
+- `i32.const`
+- `i64.const`
+- `f32.const`
+- `f64.const`
+
+### producer 側の規約
+
+- hint は advisory であり、`wite` は常に無視してよい
+- wrapper/target index は emitted wasm に対する実 index と一致していなければならない
+- arg recipe は target の全 param を順に埋める必要がある
+- `local.get` は wrapper param を参照する。wrapper local は参照してはならない
+- wrapper の各 param は recipe 全体でちょうど 1 回ずつ使う。重複参照や未使用は不可
+- raw instruction は 1 引数 = 1 instruction とする。extra bytes や block/if/call など複合命令は不可
+- malformed な section は section 単位で無視してよい
+- unknown version は無視してよい
+
+### `cfp-const` が hint を使える条件
+
+以下を満たす entry だけが alias candidate になる。
+
+- wrapper が local function である
+- wrapper と target の function type が recipe と整合する
+- recipe 内に const arg が 1 つ以上ある
+- recipe 内の `local.get` / `*.const` は、それぞれ raw bytes 全体でちょうど 1 命令として decode できる
+- scratch local が必要な場合、その wrapper param type を 1-byte value type として再構成できる
+- 既存 auto-detect alias がある場合はそちらを優先し、hint は不足分だけ補う
+
+書き換えは既存 `cfp-const` の profitability 判定を通った場合のみ発火する。
+
+現状の `analyze host` は、section 数・unknown version section 数・malformed section 数、
+parsed entry 数・usable entry 数に加えて、次の structural reject reason を集計する。
+
+- `wrapper-not-local`
+- `self-target`
+- `wrapper-index-out-of-range`
+- `target-index-out-of-range`
+- `wrapper-type-missing`
+- `target-type-missing`
+- `recipe-type-mismatch`
+- `scratch-local-types-unsupported`
+
+ここでいう reject は `cfp-const` seed としての構造的妥当性だけを表し、profitability や root policy のような pass 固有条件は含まない。
+
+experimental flag が有効な場合、通常の `optimize` / `build` / `treeshake` でも
+`OptimizeResult.observations` に同じ集計を載せる。固定点 round を回す optimize では
+`round#N: ...`、component optimize ではさらに `core#M:...` が前置される。
+この observation には `hint-section-stripped=true|false` も含まれ、成功時だけ strip されたかを示す。
+
+`analyze optimize metadata` では、experimental flag が有効な場合に限り、DCE stage の
+`observations` に同じ hint 集計と、`cfp-const` / `cfp-const-specialize` がその stage で
+実際に発火したかどうかを併記する。
+
+### `cfp-const-specialize` が hint を使える条件
+
+hint entry があっても、specialize はさらに次を満たす場合だけ発火する。
+
+- wrapper が root ではない
+- wrapper が local decl を持たない
+- target が local function である
+- target の direct caller 数が 1
+- recipe が scratch local を必要とする
+- 既存の type / profitability / root policy をすべて通る
+
+つまり hint は「最適化を強制する契約」ではなく、「既存 heuristic の candidate を与える契約」である。
+
+現状の `analyze host` は、structural に valid な hint を対象に
+`cfp-const-specialize` 候補数と次の reject reason を集計する。
+
+- `wrapper-root`
+- `wrapper-body-missing`
+- `wrapper-index-out-of-range`
+- `wrapper-type-missing`
+- `wrapper-has-locals`
+- `self-target`
+- `target-root`
+- `target-direct-callers!=1`
+- `target-not-local`
+- `target-index-out-of-range`
+- `target-body-missing`
+- `target-type-missing`
+- `scratch-not-needed`
+- `cfp-const-still-profitable`
+- `recipe-type-mismatch`
+- `specialize-build-invalid`
+
+### strip 規約
+
+現状の実装では、`wite.cfp_const_hints` を使った `cfp-const` または
+`cfp-const-specialize` の rewrite が成功した場合、その section を最終出力から除去する。
+
+experimental flag が無効な場合、`wite` はこの section を hint としては読まず、通常の custom section として扱う。
+
+experimental flag が有効でも rewrite が発火しなかった場合、その section は保持する。
+つまり現行 policy は「successful hint rewrite のときだけ strip」である。
+
 ## P0: Core Size ギャップ解消（最優先）
 
 - `zlib.wasm` 向けに `precompute` / `local-cse` の優先実装を進める（基盤実装まで完了）

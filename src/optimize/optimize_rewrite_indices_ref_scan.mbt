@@ -76,7 +76,7 @@ fn collect_ref_func_indices_from_code_section_raise(
   let bodies = parse_code_bodies(payload)
   for body in bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     for
       index in collect_ref_func_indices_from_instruction_raise(
@@ -209,7 +209,7 @@ pub fn parse_element_section_table_function_refs_raise(
 ) -> Map[UInt, Array[UInt]] raise WiteError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
-  let grouped : Map[UInt, Array[UInt]] = {}
+  let grouped : Map[UInt, Array[UInt]] = Map([])
   for _ in 0U..<segment_count {
     let flags = parser.read_u32_leb128()
     match flags {

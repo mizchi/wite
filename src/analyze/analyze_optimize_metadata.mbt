@@ -50,6 +50,7 @@ fn make_optimize_stage_config(
     } else {
       false
     },
+    enable_experimental_cfp_const_hints=base.enable_experimental_cfp_const_hints,
     enable_remove_unused_module_elements=if include_rume {
       base.enable_remove_unused_module_elements
     } else {
@@ -91,7 +92,7 @@ fn compare_function_size_diff(
 fn map_function_sizes_by_index(
   functions : Array[FunctionSize],
 ) -> Map[UInt, FunctionSize] {
-  let out : Map[UInt, FunctionSize] = {}
+  let out : Map[UInt, FunctionSize] = Map([])
   for function in functions {
     out.set(function.function_index, function)
   }
@@ -104,7 +105,7 @@ fn collect_function_size_diff_indices(
   after_map : Map[UInt, FunctionSize],
 ) -> Array[UInt] {
   let out : Array[UInt] = []
-  let seen : Map[UInt, Bool] = {}
+  let seen : Map[UInt, Bool] = Map([])
   before_map.each((function_index, _) => {
     seen.set(function_index, true)
     out.push(function_index)
@@ -221,6 +222,12 @@ fn run_optimize_stage_raise(
     Ok(v) => v
     Err(err) => raise err
   }
+  let observations = collect_optimize_stage_observations(
+    stage_name,
+    bytes,
+    optimized.removed_sections,
+    config,
+  )
   let (function_gain_bytes, function_regression_bytes, function_diffs) = collect_function_size_diffs_raise(
     bytes,
     optimized.bytes,
@@ -239,6 +246,7 @@ fn run_optimize_stage_raise(
     function_regression_bytes,
     function_diffs,
     removed_sections: optimized.removed_sections,
+    observations,
     no_change_reasons: optimized.no_change_reasons,
   }
   { bytes: optimized.bytes, stage }

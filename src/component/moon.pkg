@@ -1,4 +1,4 @@
 import {
   "mizchi/mwac/component" @mwac_component,
-  "mizchi/wit" @wit,
+  "mizchi/wit",
 }

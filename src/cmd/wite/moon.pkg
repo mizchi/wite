@@ -6,19 +6,21 @@ import {
   "mizchi/wite/analyze" @wite_analyze,
   "mizchi/wite/optimize" @wite_optimize,
   "mizchi/wite/core" @wite_core,
-  "mizchi/wit" @wit,
+  "mizchi/wit",
   "mizchi/x/http" @xhttp,
   "mizchi/x/process" @xprocess,
   "mizchi/x/fs" @xfs,
   "moonbitlang/async",
-  "moonbitlang/async/io" @io,
-  "moonbitlang/core/random" @random,
-  "moonbitlang/x/fs" @fs,
-  "moonbitlang/x/sys" @sys,
+  "moonbitlang/async/io",
+  "moonbitlang/core/random",
+  "moonbitlang/core/debug",
+  "moonbitlang/x/fs",
+  "moonbitlang/x/sys",
 }
 
+pkgtype(kind: "executable")
+
 options(
-  "is-main": true,
   targets: {
     "dev_e2e_wbtest.mbt": [ "js" ],
     "e2e_analyze_wbtest.mbt": [ "js" ],

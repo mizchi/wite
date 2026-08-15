@@ -28,6 +28,7 @@ pub using @core {
   type ComponentFunctionSizeReport,
   type ComponentProfile,
   type ComponentRootPolicyReport,
+  type CfpConstHintRejectReasonCount,
   type ContractReport,
   type CustomSectionBreakdown,
   type DceReport,

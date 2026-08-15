@@ -295,6 +295,7 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
   let mut enable_dfe = false
   let mut enable_merge_similar_functions = false
   let mut enable_remove_unused_module_elements = false
+  let mut enable_experimental_cfp_const_hints = false
   let mut closed_world = false
   let mut safe_mode = false
   let mut verbose = false
@@ -584,6 +585,10 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
     if flag == "--remove-unused-module-elements" || flag == "--rume-apply" {
       enable_remove_unused_module_elements = true
     }
+    if flag == "--experimental-cfp-const-hints" ||
+      flag == "--enable-experimental-cfp-const-hints" {
+      enable_experimental_cfp_const_hints = true
+    }
     if flag == "-cw" {
       closed_world = true
     }
@@ -630,6 +635,7 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
     enable_dfe~,
     enable_merge_similar_functions~,
     enable_remove_unused_module_elements~,
+    enable_experimental_cfp_const_hints~,
     closed_world~,
     closed_world_root_exports~,
     safe_mode~,

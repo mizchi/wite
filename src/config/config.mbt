@@ -1,11 +1,16 @@
 ///|
+fn[T : Debug] write_debug_value(value : T, logger : &Logger) -> Unit {
+  logger.write_string(Debug::to_repr(value).to_string())
+}
+
+///|
 pub(all) enum ServerExecutor {
   Wagi
   Workerd
 } derive(Debug, Eq)
 
 ///|
-pub impl Show for ServerExecutor with output(self, logger) {
+pub impl Show for ServerExecutor with fn output(self, logger) {
   match self {
     Wagi => logger.write_string("Wagi")
     Workerd => logger.write_string("Workerd")
@@ -19,10 +24,28 @@ pub(all) struct KvNamespaceBinding {
 } derive(Debug, Eq)
 
 ///|
+pub impl Show for KvNamespaceBinding with fn output(self, logger) {
+  logger.write_string("{binding: ")
+  Show::output(self.binding, logger)
+  logger.write_string(", id: ")
+  Show::output(self.id, logger)
+  logger.write_string("}")
+}
+
+///|
 pub(all) struct R2BucketBinding {
   binding : String
   bucket_name : String
 } derive(Debug, Eq)
+
+///|
+pub impl Show for R2BucketBinding with fn output(self, logger) {
+  logger.write_string("{binding: ")
+  Show::output(self.binding, logger)
+  logger.write_string(", bucket_name: ")
+  Show::output(self.bucket_name, logger)
+  logger.write_string("}")
+}
 
 ///|
 pub(all) struct D1DatabaseBinding {
@@ -32,11 +55,33 @@ pub(all) struct D1DatabaseBinding {
 } derive(Debug, Eq)
 
 ///|
+pub impl Show for D1DatabaseBinding with fn output(self, logger) {
+  logger.write_string("{binding: ")
+  Show::output(self.binding, logger)
+  logger.write_string(", database_name: ")
+  Show::output(self.database_name, logger)
+  logger.write_string(", database_id: ")
+  Show::output(self.database_id, logger)
+  logger.write_string("}")
+}
+
+///|
 pub(all) struct ServerBindings {
   kv_namespaces : Array[KvNamespaceBinding]
   r2_buckets : Array[R2BucketBinding]
   d1_databases : Array[D1DatabaseBinding]
 } derive(Debug, Eq)
+
+///|
+pub impl Show for ServerBindings with fn output(self, logger) {
+  logger.write_string("{kv_namespaces: ")
+  write_debug_value(self.kv_namespaces, logger)
+  logger.write_string(", r2_buckets: ")
+  write_debug_value(self.r2_buckets, logger)
+  logger.write_string(", d1_databases: ")
+  write_debug_value(self.d1_databases, logger)
+  logger.write_string("}")
+}
 
 ///|
 pub fn empty_server_bindings() -> ServerBindings {
@@ -49,6 +94,17 @@ pub struct ServerConfig {
   route : String
   bindings : ServerBindings
 } derive(Debug)
+
+///|
+pub impl Show for ServerConfig with fn output(self, logger) {
+  logger.write_string("{executor: ")
+  Show::output(self.executor, logger)
+  logger.write_string(", route: ")
+  Show::output(self.route, logger)
+  logger.write_string(", bindings: ")
+  Show::output(self.bindings, logger)
+  logger.write_string("}")
+}
 
 ///|
 pub fn parse_server_bindings(
@@ -207,6 +263,23 @@ pub enum ConfigInput {
 } derive(Debug)
 
 ///|
+pub impl Show for ConfigInput with fn output(self, logger) {
+  match self {
+    None => logger.write_string("None")
+    Single(s) => {
+      logger.write_string("Single(")
+      Show::output(s, logger)
+      logger.write_string(")")
+    }
+    Named(map) => {
+      logger.write_string("Named(")
+      write_debug_value(map, logger)
+      logger.write_string(")")
+    }
+  }
+}
+
+///|
 pub fn ConfigInput::new_none() -> ConfigInput {
   ConfigInput::None
 }
@@ -281,7 +354,7 @@ pub fn parse_chunk_config(
 fn parse_chunks(json_value : Json) -> Result[Map[String, ChunkConfig], String] {
   match json_value {
     Object(obj) => {
-      let chunks : Map[String, ChunkConfig] = {}
+      let chunks : Map[String, ChunkConfig] = Map([])
       for entry in obj {
         match parse_chunk_config(entry.1, "chunks." + entry.0) {
           Ok(chunk) => chunks[entry.0] = chunk
@@ -414,7 +487,7 @@ pub fn parse_config_input(json_value : Json) -> Result[ConfigInput, String] {
   match json_value {
     String(s) => s |> ConfigInput::Single |> Ok
     Object(obj) => {
-      let map : Map[String, String] = {}
+      let map : Map[String, String] = Map([])
       for entry in obj {
         match entry.1 {
           String(v) => map[entry.0] = v
@@ -629,7 +702,7 @@ fn parse_environments(
 ) -> Result[Map[String, EnvironmentConfig], String] {
   match json_value {
     Object(obj) => {
-      let environments : Map[String, EnvironmentConfig] = {}
+      let environments : Map[String, EnvironmentConfig] = Map([])
       for entry in obj {
         match parse_environment_config(entry.1, "environments." + entry.0) {
           Ok(env) => environments[entry.0] = env
@@ -702,14 +775,14 @@ pub fn parse_wite_config_json(
           Err(msg) => return Err(msg)
         }
       }
-      let mut environments : Map[String, EnvironmentConfig] = {}
+      let mut environments : Map[String, EnvironmentConfig] = Map([])
       if object.get("environments") is Some(value) {
         match parse_environments(value) {
           Ok(parsed) => environments = parsed
           Err(msg) => return Err(msg)
         }
       }
-      let mut chunks : Map[String, ChunkConfig] = {}
+      let mut chunks : Map[String, ChunkConfig] = Map([])
       if object.get("chunks") is Some(value) {
         match parse_chunks(value) {
           Ok(parsed) => chunks = parsed
@@ -788,7 +861,7 @@ pub fn parse_config_selection_flags(
       if path.is_empty() {
         return Err("config path must not be empty")
       }
-      config_path = path.to_string()
+      config_path = path.to_owned()
       explicit_config_path = true
       use_config = true
       i += 1
@@ -815,7 +888,7 @@ pub fn parse_config_selection_flags(
       if name.is_empty() {
         return Err("environment name must not be empty")
       }
-      env_name = Some(name.to_string())
+      env_name = Some(name.to_owned())
       i += 1
       continue
     }

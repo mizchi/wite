@@ -26,7 +26,7 @@ pub fn profile_module(bytes : Bytes) -> Result[ModuleProfile, WiteError] {
     let mut code_body_count = 0U
     let mut code_body_bytes = 0U
     for section in sections {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let payload = bytes[section.payload_start:section.section_end].to_owned()
       match section.section_id {
         2U => import_count += parse_vec_count(payload)
         3U => function_count += parse_vec_count(payload)
@@ -60,10 +60,10 @@ pub fn analyze_function_sizes(
     let mut imported_function_count = 0U
     let mut local_function_count = 0U
     let mut code_body_sizes : Array[UInt] = []
-    let export_names : Map[UInt, Array[String]] = {}
-    let function_names : Map[UInt, String] = {}
+    let export_names : Map[UInt, Array[String]] = Map([])
+    let function_names : Map[UInt, String] = Map([])
     for section in sections {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let payload = bytes[section.payload_start:section.section_end].to_owned()
       match section.section_id {
         2U => imported_function_count += parse_import_function_count(payload)
         3U => local_function_count += parse_vec_count(payload)

@@ -1,6 +1,10 @@
 // Generated using `moon info`, DON'T EDIT IT
 package "mizchi/wite/config"
 
+import {
+  "moonbitlang/core/debug",
+}
+
 // Values
 pub fn binary_kind_name(BinaryKind) -> String
 
@@ -82,7 +86,7 @@ pub enum ConfigInput {
   None
   Single(String)
   Named(Map[String, String])
-}
+} derive(@debug.Debug)
 pub fn ConfigInput::new_named(Map[String, String]) -> Self
 pub fn ConfigInput::new_none() -> Self
 pub fn ConfigInput::new_single(String) -> Self
@@ -105,8 +109,7 @@ pub(all) struct D1DatabaseBinding {
   binding : String
   database_name : String
   database_id : String
-}
-pub impl Eq for D1DatabaseBinding
+} derive(Eq, @debug.Debug)
 pub impl Show for D1DatabaseBinding
 
 pub struct EnvironmentConfig {
@@ -139,15 +142,13 @@ pub struct EnvironmentDef {
 pub(all) struct KvNamespaceBinding {
   binding : String
   id : String
-}
-pub impl Eq for KvNamespaceBinding
+} derive(Eq, @debug.Debug)
 pub impl Show for KvNamespaceBinding
 
 pub(all) struct R2BucketBinding {
   binding : String
   bucket_name : String
-}
-pub impl Eq for R2BucketBinding
+} derive(Eq, @debug.Debug)
 pub impl Show for R2BucketBinding
 
 pub enum RuntimeTarget {
@@ -162,22 +163,20 @@ pub(all) struct ServerBindings {
   kv_namespaces : Array[KvNamespaceBinding]
   r2_buckets : Array[R2BucketBinding]
   d1_databases : Array[D1DatabaseBinding]
-}
-pub impl Eq for ServerBindings
+} derive(Eq, @debug.Debug)
 pub impl Show for ServerBindings
 
 pub struct ServerConfig {
   executor : ServerExecutor
   route : String
   bindings : ServerBindings
-}
+} derive(@debug.Debug)
 pub impl Show for ServerConfig
 
 pub(all) enum ServerExecutor {
   Wagi
   Workerd
-}
-pub impl Eq for ServerExecutor
+} derive(Eq, @debug.Debug)
 pub impl Show for ServerExecutor
 
 pub struct WiteConfigFile {
@@ -197,4 +196,3 @@ pub struct WiteConfigFile {
 // Type aliases
 
 // Traits
-

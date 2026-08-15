@@ -4,7 +4,11 @@ fn write_output_or_exit(output_path : String, bytes : Bytes) -> Unit {
   @fs.write_bytes_to_file(output_path, bytes) catch {
     e => {
       println(
-        "failed to write file: " + output_path + " (" + e.to_string() + ")",
+        "failed to write file: " +
+        output_path +
+        " (" +
+        @debug.render(Repr(e)) +
+        ")",
       )
       @sys.exit(1)
     }
@@ -48,6 +52,9 @@ fn run_optimize(args : Array[String]) -> Unit {
       )
       if result.removed_sections.length() > 0 {
         println("removed sections: " + result.removed_sections.join(", "))
+      }
+      if options.verbose && result.observations.length() > 0 {
+        println("observations: " + result.observations.join(" | "))
       }
       if options.verbose && result.no_change_reasons.length() > 0 {
         println("no-change reasons: " + result.no_change_reasons.join(", "))

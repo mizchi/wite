@@ -46,7 +46,7 @@ pub fn make_bool_array(Int, Bool) -> Array[Bool]
 
 pub fn make_component_optimize_config(base? : @types.OptimizeConfig, root_name_candidates? : Array[String], exclude? : Array[String]) -> @types.OptimizeConfig
 
-pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> @types.OptimizeConfig
+pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, enable_experimental_cfp_const_hints? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> @types.OptimizeConfig
 
 pub fn make_runtime_profile_scenario(String, args? : Array[Int]) -> @types.RuntimeProfileScenario
 
@@ -130,6 +130,8 @@ pub using @types {type CallGraphReport}
 pub using @types {type CallGraphSummary}
 
 pub using @optimize {type CfpConstAlias}
+
+pub using @types {type CfpConstHintRejectReasonCount}
 
 pub using @types {type CodeBlockSize}
 
@@ -224,4 +226,3 @@ pub using @types {type WasmBreakdownReport}
 pub using @types {type WiteError}
 
 // Traits
-

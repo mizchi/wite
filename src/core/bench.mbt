@@ -2,7 +2,9 @@
 fn read_fixture_or_fail(path : String) -> Bytes {
   @fs.read_file_to_bytes(path) catch {
     e => {
-      println("failed to read fixture: " + path + " (" + e.to_string() + ")")
+      println(
+        "failed to read fixture: " + path + " (" + @debug.render(Repr(e)) + ")",
+      )
       b""
     }
   }

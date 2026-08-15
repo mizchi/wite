@@ -26,7 +26,7 @@ fn map_push_uint_array(
 fn build_export_match_map(
   functions : Array[FunctionSize],
 ) -> Map[String, Array[UInt]] {
-  let grouped : Map[String, Array[UInt]] = {}
+  let grouped : Map[String, Array[UInt]] = Map([])
   for function in functions {
     for export_name in function.export_names {
       map_push_uint_array(
@@ -43,7 +43,7 @@ fn build_export_match_map(
 fn build_name_match_map(
   functions : Array[FunctionSize],
 ) -> Map[String, Array[UInt]] {
-  let grouped : Map[String, Array[UInt]] = {}
+  let grouped : Map[String, Array[UInt]] = Map([])
   for function in functions {
     match function.name {
       Some(name) =>
@@ -230,8 +230,8 @@ pub fn analyze_function_size_gap(
     }
     let left_by_index = map_function_sizes_by_index(left_functions)
     let right_by_index = map_function_sizes_by_index(right_functions)
-    let used_left : Map[UInt, Bool] = {}
-    let used_right : Map[UInt, Bool] = {}
+    let used_left : Map[UInt, Bool] = Map([])
+    let used_right : Map[UInt, Bool] = Map([])
     let entries : Array[FunctionGapEntry] = []
     let left_export_grouped = build_export_match_map(left_functions)
     let right_export_grouped = build_export_match_map(right_functions)

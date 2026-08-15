@@ -138,7 +138,7 @@ test "parse_wkg_verify_cli_result minimal error" {
 ///|
 test "parse_wkg_sync_cli_result ok" {
   let result = parse_wkg_sync_cli_result("ok\tdeps/wasi_http\t")
-  inspect(result, content="Ok(\"deps/wasi_http\")")
+  debug_inspect(result, content="Ok(\"deps/wasi_http\")")
 }
 
 ///|
@@ -218,7 +218,7 @@ test "collect_dep_entries_from_config_json empty deps" {
 
 ///|
 test "collect_dep_entries_from_config_json no deps key" {
-  let json : Json = {}
+  let json : Json = Json::empty_object()
   let result = collect_dep_entries_from_config_json(json)
   match result {
     Ok(entries) => inspect(entries.length(), content="0")

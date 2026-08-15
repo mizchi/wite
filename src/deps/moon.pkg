@@ -4,9 +4,10 @@ import {
   "mizchi/oci_wasm/types" @oci_types,
   "mizchi/wite/bundle" @wite_bundle,
   "moonbitlang/async",
-  "moonbitlang/x/fs" @fs,
-  "moonbitlang/x/json5" @json5,
-  "moonbitlang/x/sys" @sys,
+  "moonbitlang/core/debug",
+  "moonbitlang/x/fs",
+  "moonbitlang/x/json5",
+  "moonbitlang/x/sys",
 }
 
 options(

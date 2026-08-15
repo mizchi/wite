@@ -268,7 +268,7 @@ fn parse_memory_section_entries_raise(
     let start = parser.get_pos()
     parse_limits(parser)
     let end_ = parser.get_pos()
-    out.push(payload[start:end_].to_bytes())
+    out.push(payload[start:end_].to_owned())
   }
   out
 }
@@ -341,7 +341,7 @@ fn parse_table_section_entries_raise(
     parser |> read_ref_type_bytes_raise |> ignore
     parse_limits(parser)
     let end_ = parser.get_pos()
-    out.push(payload[start:end_].to_bytes())
+    out.push(payload[start:end_].to_owned())
   }
   out
 }
@@ -420,7 +420,7 @@ fn remap_data_segment_index_raise(
 
 ///|
 fn make_identity_index_map(count : UInt) -> Map[UInt, UInt] {
-  let out : Map[UInt, UInt] = {}
+  let out : Map[UInt, UInt] = Map([])
   for i in 0U..<count {
     out.set(i, i)
   }

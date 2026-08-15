@@ -50,16 +50,16 @@ fn analyze_call_graph_raise(
   let mut imported_function_count = 0U
   let mut local_function_count = 0U
   let mut code_bodies : Array[Bytes] = []
-  let export_names : Map[UInt, Array[String]] = {}
-  let function_names : Map[UInt, String] = {}
+  let export_names : Map[UInt, Array[String]] = Map([])
+  let function_names : Map[UInt, String] = Map([])
   let roots : Array[UInt] = []
-  let root_seen : Map[UInt, Bool] = {}
-  let element_refs_by_table : Map[UInt, Array[UInt]] = {}
+  let root_seen : Map[UInt, Bool] = Map([])
+  let element_refs_by_table : Map[UInt, Array[UInt]] = Map([])
   let used_table_indices : Array[UInt] = []
-  let used_table_seen : Map[UInt, Bool] = {}
+  let used_table_seen : Map[UInt, Bool] = Map([])
   let mut partial = false
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U => imported_function_count += parse_import_function_count(payload)
       3U => local_function_count += parse_vec_count(payload)
@@ -134,7 +134,7 @@ fn analyze_call_graph_raise(
     )
   }
   let nodes : Array[CallGraphNode] = []
-  let index_to_pos : Map[UInt, Int] = {}
+  let index_to_pos : Map[UInt, Int] = Map([])
   let mut has_indirect_calls = false
   for i in 0..<code_bodies.length() {
     let function_index = imported_function_count + i.reinterpret_as_uint()

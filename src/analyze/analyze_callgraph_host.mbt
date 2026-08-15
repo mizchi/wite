@@ -39,16 +39,16 @@ fn analyze_call_graph_raise(
   let mut imported_function_count = 0U
   let mut local_function_count = 0U
   let mut code_bodies : Array[Bytes] = []
-  let export_names : Map[UInt, Array[String]] = {}
-  let function_names : Map[UInt, String] = {}
+  let export_names : Map[UInt, Array[String]] = Map([])
+  let function_names : Map[UInt, String] = Map([])
   let roots : Array[UInt] = []
-  let root_seen : Map[UInt, Bool] = {}
-  let element_refs_by_table : Map[UInt, Array[UInt]] = {}
+  let root_seen : Map[UInt, Bool] = Map([])
+  let element_refs_by_table : Map[UInt, Array[UInt]] = Map([])
   let used_table_indices : Array[UInt] = []
-  let used_table_seen : Map[UInt, Bool] = {}
+  let used_table_seen : Map[UInt, Bool] = Map([])
   let mut partial = false
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U => imported_function_count += parse_import_function_count(payload)
       3U => local_function_count += parse_vec_count(payload)
@@ -123,7 +123,7 @@ fn analyze_call_graph_raise(
     )
   }
   let nodes : Array[CallGraphNode] = []
-  let index_to_pos : Map[UInt, Int] = {}
+  let index_to_pos : Map[UInt, Int] = Map([])
   let mut has_indirect_calls = false
   for i in 0..<code_bodies.length() {
     let function_index = imported_function_count + i.reinterpret_as_uint()
@@ -229,13 +229,13 @@ fn analyze_call_graph_summary_raise(
   let mut local_function_count = 0U
   let mut code_bodies : Array[Bytes] = []
   let roots : Array[UInt] = []
-  let root_seen : Map[UInt, Bool] = {}
-  let element_refs_by_table : Map[UInt, Array[UInt]] = {}
+  let root_seen : Map[UInt, Bool] = Map([])
+  let element_refs_by_table : Map[UInt, Array[UInt]] = Map([])
   let used_table_indices : Array[UInt] = []
-  let used_table_seen : Map[UInt, Bool] = {}
+  let used_table_seen : Map[UInt, Bool] = Map([])
   let mut partial = false
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U => imported_function_count += parse_import_function_count(payload)
       3U => local_function_count += parse_vec_count(payload)
@@ -422,6 +422,17 @@ fn size_regression_bytes(before_size : UInt, after_size : UInt) -> UInt {
 }
 
 ///|
+fn count_const_forwarding_arg_instrs(arg_instrs : Array[Bytes]) -> UInt {
+  let mut count = 0U
+  for instr in arg_instrs {
+    if instr.length() > 0 && instr[0] != 0x20U.to_byte() {
+      count += 1U
+    }
+  }
+  count
+}
+
+///|
 pub fn analyze_host_generated_code(
   bytes : Bytes,
 ) -> Result[HostGeneratedCodeReport, WiteError] {
@@ -431,10 +442,10 @@ pub fn analyze_host_generated_code(
     let mut import_payload : Bytes? = None
     let mut function_payload : Bytes? = None
     let mut code_payload : Bytes? = None
-    let export_names : Map[UInt, Array[String]] = {}
-    let function_names : Map[UInt, String] = {}
+    let export_names : Map[UInt, Array[String]] = Map([])
+    let function_names : Map[UInt, String] = Map([])
     for section in sections {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let payload = bytes[section.payload_start:section.section_end].to_owned()
       match section.section_id {
         1U => type_payload = Some(payload)
         2U => import_payload = Some(payload)
@@ -469,6 +480,18 @@ pub fn analyze_host_generated_code(
     let mut param_forwarding_thunk_count = 0U
     let mut const_forwarding_thunk_count = 0U
     let mut signature_refinable_thunk_count = 0U
+    let mut cfp_const_hint_section_count = 0U
+    let mut cfp_const_hint_unknown_version_section_count = 0U
+    let mut cfp_const_hint_malformed_section_count = 0U
+    let mut cfp_const_hint_entry_count = 0U
+    let mut cfp_const_hint_usable_entry_count = 0U
+    let mut cfp_const_hint_reject_reason_counts : Array[
+      CfpConstHintRejectReasonCount,
+    ] = []
+    let mut cfp_const_specialize_hint_candidate_count = 0U
+    let mut cfp_const_specialize_hint_reject_reason_counts : Array[
+      CfpConstHintRejectReasonCount,
+    ] = []
     let hints : Array[HostCodeHint] = []
     match (type_payload, function_payload, code_payload) {
       (Some(type_payload), Some(function_payload), Some(code_payload)) => {
@@ -496,7 +519,8 @@ pub fn analyze_host_generated_code(
         let gc_type_canonical_map = collect_gc_type_canonical_map_from_entries_raise(
           parsed_type_entries,
         )
-        let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+        let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = Map([],
+        )
         for i in 0..<parsed_type_entries.length() {
           if parsed_type_entries[i].form == 0x60U {
             function_type_entry_by_type_index.set(
@@ -572,9 +596,9 @@ pub fn analyze_host_generated_code(
               Some(v) => v
               None => []
             },
-            appended_i32_const_count: alias_info.appended_i32_const_instrs
-            .length()
-            .reinterpret_as_uint(),
+            appended_i32_const_count: count_const_forwarding_arg_instrs(
+              alias_info.target_arg_instrs,
+            ),
             dropped_param_count: 0U,
           })
         })
@@ -582,6 +606,49 @@ pub fn analyze_host_generated_code(
           code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
           gc_type_canonical_map,
         )
+        let call_graph = analyze_call_graph_raise(bytes, None)
+        let root_function_indices : Map[UInt, Bool] = Map([])
+        for index in call_graph.roots {
+          root_function_indices.set(index, true)
+        }
+        let direct_call_count_by_function = @wite_optimize.collect_direct_call_count_by_function_raise(
+          code_bodies,
+        )
+        let parsed_cfp_const_hint_entries = @wite_optimize.parse_cfp_const_hint_entries(
+          bytes, sections,
+        )
+        let (
+          hint_section_count,
+          hint_unknown_version_section_count,
+          hint_malformed_section_count,
+        ) = @wite_optimize.collect_cfp_const_hint_section_stats(bytes, sections)
+        cfp_const_hint_section_count = hint_section_count
+        cfp_const_hint_unknown_version_section_count = hint_unknown_version_section_count
+        cfp_const_hint_malformed_section_count = hint_malformed_section_count
+        cfp_const_hint_entry_count = parsed_cfp_const_hint_entries
+          .length()
+          .reinterpret_as_uint()
+        let cfp_const_hint_alias_map = @wite_optimize.collect_const_call_forwarding_hint_alias_map(
+          bytes, sections, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+          gc_type_canonical_map,
+        )
+        cfp_const_hint_reject_reason_counts = @wite_optimize.collect_const_call_forwarding_hint_reject_reason_counts(
+          bytes, sections, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+          gc_type_canonical_map,
+        )
+        cfp_const_hint_alias_map.each((_, _) => {
+          cfp_const_hint_usable_entry_count += 1U
+        })
+        let (
+          specialize_hint_candidate_count,
+          specialize_hint_reject_reason_counts,
+        ) = @wite_optimize.collect_const_target_specialize_hint_analysis_raise(
+          code_bodies, imported_function_count, function_type_by_index, function_type_entry_by_type_index,
+          cfp_const_hint_alias_map, direct_call_count_by_function, root_function_indices,
+          gc_type_canonical_map,
+        )
+        cfp_const_specialize_hint_candidate_count = specialize_hint_candidate_count
+        cfp_const_specialize_hint_reject_reason_counts = specialize_hint_reject_reason_counts
         signature_alias_map.each((function_index, alias_info) => {
           signature_refinable_thunk_count += 1U
           hints.push({
@@ -615,6 +682,14 @@ pub fn analyze_host_generated_code(
       param_forwarding_thunk_count,
       const_forwarding_thunk_count,
       signature_refinable_thunk_count,
+      cfp_const_hint_section_count,
+      cfp_const_hint_unknown_version_section_count,
+      cfp_const_hint_malformed_section_count,
+      cfp_const_hint_entry_count,
+      cfp_const_hint_usable_entry_count,
+      cfp_const_hint_reject_reason_counts,
+      cfp_const_specialize_hint_candidate_count,
+      cfp_const_specialize_hint_reject_reason_counts,
       directize_candidate_call_count: directize_result.rewritten_call_count,
       dce_removable_function_count: dce_report.removable_function_count,
       dce_removable_body_bytes: dce_report.removable_body_bytes,

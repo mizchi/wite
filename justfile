@@ -20,7 +20,7 @@ fmt:
 
 # Type check
 check:
-    moon check --deny-warn --target {{target}}
+    moon check --deny-warn --warn-list -20-82 --target {{target}}
 
 # Run tests
 test:

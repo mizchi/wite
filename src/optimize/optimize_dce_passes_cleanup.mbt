@@ -43,7 +43,7 @@ fn apply_remove_unused_module_elements_raise_with_sections(
   let mut removed_export_by_name_count = 0U
   let mut analysis_complete = true
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U => {
         import_section_payload = Some(payload)
@@ -204,7 +204,7 @@ fn apply_remove_unused_module_elements_raise_with_sections(
   for i in 0U..<imported_global_count {
     keep_import_globals.push(used_global_indices.contains(i))
   }
-  let table_index_map : Map[UInt, UInt] = {}
+  let table_index_map : Map[UInt, UInt] = Map([])
   let mut kept_imported_table_count = 0U
   for i in 0U..<imported_table_count {
     let index = UInt::reinterpret_as_int(i)
@@ -233,7 +233,7 @@ fn apply_remove_unused_module_elements_raise_with_sections(
       removed_table_count += 1U
     }
   }
-  let memory_index_map : Map[UInt, UInt] = {}
+  let memory_index_map : Map[UInt, UInt] = Map([])
   let mut kept_imported_memory_count = 0U
   for i in 0U..<imported_memory_count {
     let index = UInt::reinterpret_as_int(i)
@@ -262,7 +262,7 @@ fn apply_remove_unused_module_elements_raise_with_sections(
       removed_memory_count += 1U
     }
   }
-  let global_index_map : Map[UInt, UInt] = {}
+  let global_index_map : Map[UInt, UInt] = Map([])
   let mut kept_imported_global_count = 0U
   for i in 0U..<imported_global_count {
     let index = UInt::reinterpret_as_int(i)
@@ -302,7 +302,7 @@ fn apply_remove_unused_module_elements_raise_with_sections(
   }
   let mut removed_element_count = 0U
   let mut rewritten_element_payload : Bytes? = None
-  let element_index_map : Map[UInt, UInt] = {}
+  let element_index_map : Map[UInt, UInt] = Map([])
   if element_section_payload is Some(payload) {
     let (rewritten, removed_segments, segment_index_map) = rewrite_element_section_payload_for_table_index_map_raise(
       payload, table_index_map, global_index_map,
@@ -313,7 +313,7 @@ fn apply_remove_unused_module_elements_raise_with_sections(
   }
   let mut removed_data_count = 0U
   let mut rewritten_data_payload : Bytes? = None
-  let data_index_map : Map[UInt, UInt] = {}
+  let data_index_map : Map[UInt, UInt] = Map([])
   if data_section_payload is Some(payload) {
     let (rewritten, removed_segments, segment_index_map) = rewrite_data_section_payload_for_memory_global_index_map_raise(
       payload, memory_index_map, global_index_map,
@@ -351,7 +351,7 @@ fn apply_remove_unused_module_elements_raise_with_sections(
   }
   let out : Array[Byte] = bytes[0:8].to_array()
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U =>
         match rewritten_import_payload {
@@ -462,7 +462,7 @@ fn apply_type_refining_raise_with_sections(
     match section.section_id {
       1U =>
         type_section_payload = Some(
-          bytes[section.payload_start:section.section_end].to_bytes(),
+          bytes[section.payload_start:section.section_end].to_owned(),
         )
       13U =>
         raise WiteError::InvalidFormat(
@@ -481,8 +481,8 @@ fn apply_type_refining_raise_with_sections(
   if parsed_type_entries.length() <= 1 {
     return { bytes, refined_type_count: 0U }
   }
-  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
-  let gc_type_canonical_map : Map[UInt, UInt] = {}
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = Map([])
+  let gc_type_canonical_map : Map[UInt, UInt] = Map([])
   for i in 0..<parsed_type_entries.length() {
     let old_type_index = i.reinterpret_as_uint()
     let entry = parsed_type_entries[i]
@@ -512,7 +512,7 @@ fn apply_type_refining_raise_with_sections(
     gc_type_canonical_map.set(old_type_index, canonical)
   }
   let keep_types : Array[Bool] = []
-  let canonical_function_type_for_old : Map[UInt, UInt] = {}
+  let canonical_function_type_for_old : Map[UInt, UInt] = Map([])
   let mut refined_type_count = 0U
   for i in 0..<parsed_type_entries.length() {
     let old_type_index = i.reinterpret_as_uint()
@@ -560,7 +560,7 @@ fn apply_type_refining_raise_with_sections(
       refined_type_count += 1U
     }
   }
-  let type_index_map : Map[UInt, UInt] = {}
+  let type_index_map : Map[UInt, UInt] = Map([])
   let mut new_type_count = 0U
   for i in 0..<keep_types.length() {
     if keep_types[i] {
@@ -584,7 +584,7 @@ fn apply_type_refining_raise_with_sections(
   }
   let out : Array[Byte] = bytes[0:8].to_array()
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => {
         let rewritten = rewrite_type_section_payload_for_keep_raise(
@@ -648,7 +648,7 @@ fn apply_signature_pruning_raise_with_sections(
   let mut code_section_payload : Bytes? = None
   let protected_function_indices : Array[UInt] = []
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_section_payload = Some(payload)
       2U => imported_function_count += parse_import_function_count(payload)
@@ -706,7 +706,7 @@ fn apply_signature_pruning_raise_with_sections(
     type_payload, "signature-prune",
   )
   let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
-  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = Map([])
   for i in 0..<parsed_type_entries.length() {
     if parsed_type_entries[i].form == 0x60U {
       function_type_entry_by_type_index.set(
@@ -747,9 +747,9 @@ fn apply_signature_pruning_raise_with_sections(
   }
   let rewritten_function_type_indices = function_type_indices.copy()
   let rewritten_code_bodies = code_bodies.copy()
-  let old_param_count_by_local_pos : Map[UInt, UInt] = {}
-  let removed_param_count_by_local_pos : Map[UInt, UInt] = {}
-  let removed_param_count_by_function : Map[UInt, UInt] = {}
+  let old_param_count_by_local_pos : Map[UInt, UInt] = Map([])
+  let removed_param_count_by_local_pos : Map[UInt, UInt] = Map([])
+  let removed_param_count_by_function : Map[UInt, UInt] = Map([])
   let mut pruned_function_count = 0U
   let mut pruned_param_count = 0U
   for i in 0..<code_bodies.length() {
@@ -772,7 +772,7 @@ fn apply_signature_pruning_raise_with_sections(
     }
     let body = code_bodies[i]
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let used_param_indices = collect_used_param_indices_from_instruction_raise(
       instr_bytes, spans, old_param_count,
@@ -899,7 +899,7 @@ fn apply_remove_unused_types_raise_with_sections(
   let mut function_section_payload : Bytes? = None
   let mut code_section_payload : Bytes? = None
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_section_payload = Some(payload)
       2U => import_section_payload = Some(payload)
@@ -974,7 +974,7 @@ fn apply_remove_unused_types_raise_with_sections(
     }
   }
   let keep_types : Array[Bool] = []
-  let type_index_map : Map[UInt, UInt] = {}
+  let type_index_map : Map[UInt, UInt] = Map([])
   let mut kept_type_count = 0U
   for i in 0..<type_entries.length() {
     let old_type_index = i.reinterpret_as_uint()
@@ -991,7 +991,7 @@ fn apply_remove_unused_types_raise_with_sections(
   }
   let out : Array[Byte] = bytes[0:8].to_array()
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => {
         let rewritten = rewrite_type_section_payload_for_keep_raise(
@@ -1061,7 +1061,7 @@ fn apply_dce_raise_with_sections(
     )
   }
   let keep_local : Array[Bool] = []
-  let index_map : Map[UInt, UInt] = {}
+  let index_map : Map[UInt, UInt] = Map([])
   for i in 0U..<call_graph.imported_function_count {
     index_map.set(i, i)
   }
@@ -1090,7 +1090,7 @@ fn apply_dce_raise_with_sections(
   let out : Array[Byte] = bytes[0:8].to_array()
   let mut dropped_name_section = false
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       3U => {
         let rewritten = rewrite_function_section_payload_for_dce_raise(
@@ -1170,7 +1170,7 @@ fn apply_dfe_raise_with_sections(
   let mut function_type_indices : Array[UInt] = []
   let mut code_bodies : Array[Bytes] = []
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U => imported_function_count += parse_import_function_count(payload)
       3U => function_type_indices = parse_function_type_indices(payload)
@@ -1187,7 +1187,7 @@ fn apply_dfe_raise_with_sections(
     )
   }
   let keep_local : Array[Bool] = []
-  let index_map : Map[UInt, UInt] = {}
+  let index_map : Map[UInt, UInt] = Map([])
   for i in 0U..<imported_function_count {
     index_map.set(i, i)
   }
@@ -1235,7 +1235,7 @@ fn apply_dfe_raise_with_sections(
   let out : Array[Byte] = bytes[0:8].to_array()
   let mut dropped_name_section = false
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       3U =>
         append_encoded_section(

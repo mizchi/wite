@@ -166,6 +166,7 @@ test "make_optimize_config uses defaults" {
   assert_true(c.strip_name_section)
   assert_true(c.strip_producers_section)
   assert_false(c.enable_dce)
+  assert_false(c.enable_experimental_cfp_const_hints)
   assert_false(c.closed_world)
   assert_eq(c.pass_rounds, 1U)
 }

@@ -72,6 +72,114 @@ fn append_named_custom_section(
 }
 
 ///|
+fn append_named_custom_section_bytes(
+  out : Array[Byte],
+  name : String,
+  body : Array[Byte],
+) -> Unit {
+  let name_bytes = ascii_bytes(name)
+  let payload : Array[Byte] = []
+  payload.append(
+    encode_u32_leb128(name_bytes.length().reinterpret_as_uint())[:],
+  )
+  payload.append(name_bytes[:])
+  payload.append(body[:])
+  append_section(out, 0U, payload)
+}
+
+///|
+fn append_wite_cfp_const_hint_section(
+  out : Array[Byte],
+  wrapper_index : UInt,
+  target_index : UInt,
+  arg_instrs : Array[Array[Int]],
+) -> Unit {
+  let body : Array[Byte] = []
+  body.append(encode_u32_leb128(1U)[:])
+  body.append(encode_u32_leb128(1U)[:])
+  body.append(encode_u32_leb128(wrapper_index)[:])
+  body.append(encode_u32_leb128(target_index)[:])
+  body.append(encode_u32_leb128(arg_instrs.length().reinterpret_as_uint())[:])
+  for instr in arg_instrs {
+    let instr_bytes = bytes_of(instr)
+    body.append(
+      encode_u32_leb128(instr_bytes.length().reinterpret_as_uint())[:],
+    )
+    body.append(instr_bytes[:])
+  }
+  append_named_custom_section_bytes(out, "wite.cfp_const_hints", body)
+}
+
+///|
+fn append_wite_cfp_const_hint_section_body(
+  out : Array[Byte],
+  body : Array[Int],
+) -> Unit {
+  append_named_custom_section_bytes(out, "wite.cfp_const_hints", bytes_of(body))
+}
+
+///|
+fn sample_module_with_hint_only_interleaved_const_forwarding_thunk_with_hint_arg_instrs(
+  arg_instrs : Array[Array[Int]],
+) -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 (func (param i32 i32) (result i32))
+  //   #1 (func (param i32 i32 i32) (result i32))
+  append_section(
+    out,
+    1U,
+    bytes_of([
+      0x02, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f, 0x01,
+      0x7f,
+    ]),
+  )
+  // function section: 3 local functions (indices 0..2) with type idx [0,0,1]
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x01]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0; local.get 1; call 1; end
+  // #1: local.get 0; i32.const 5; local.get 1; call 2; nop; end
+  //     auto-detect cfp-const では拾えないが、hint があれば書き換え可能
+  // #2: local.get 0; local.get 1; i32.add; local.get 2; i32.add; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x0b, 0x00, 0x20,
+      0x00, 0x41, 0x05, 0x20, 0x01, 0x10, 0x02, 0x01, 0x0b, 0x0a, 0x00, 0x20, 0x00,
+      0x20, 0x01, 0x6a, 0x20, 0x02, 0x6a, 0x0b,
+    ]),
+  )
+  append_wite_cfp_const_hint_section(out, 1U, 2U, arg_instrs)
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_valid_and_invalid_cfp_const_hint_sections_bytes() -> Bytes {
+  let out = sample_module_with_hint_only_interleaved_const_forwarding_thunk_bytes().to_array()
+  append_wite_cfp_const_hint_section_body(
+    out,
+    [
+      0x02, // version = 2
+       0x00,
+    ], // entry_count = 0
+  )
+  append_wite_cfp_const_hint_section_body(out, [
+    0x01, // version = 1
+     0x01, // entry_count = 1
+     0x01, // wrapper_index = 1
+     0x02, // target_index = 2
+     0x01, // arg_instr_count = 1
+     0x04, // instr_len = 4 (truncated on purpose)
+     0x20, 0x00,
+  ])
+  Bytes::from_array(out[:])
+}
+
+///|
 fn find_keep_reason_entry(
   entries : Array[KeepReasonEntry],
   function_index : UInt,
@@ -1409,6 +1517,173 @@ fn sample_module_with_inlining_unused_local_noop_callee_bytes() -> Bytes {
 }
 
 ///|
+fn sample_module_with_inlining_unique_growth_positive_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 2 local functions with type idx 0
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0, call 1, end
+  // #1: local.get 0, i32.const 65535, i32.add, end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x06, 0x00, 0x20, 0x00, 0x10, 0x01, 0x0b, 0x09, 0x00, 0x20, 0x00, 0x41,
+      0xff, 0xff, 0x03, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_inlining_param_reread_callee_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 2 local functions with type idx 0
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0, call 1, end
+  // #1: local.get 0, local.get 0, i32.add, end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x06, 0x00, 0x20, 0x00, 0x10, 0x01, 0x0b, 0x07, 0x00, 0x20, 0x00, 0x20,
+      0x00, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_inlining_repeated_growth_positive_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type () -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x00, 0x01, 0x7f]))
+  // function section: 2 local functions with type idx 0
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: call 1, call 1, i32.add, call 1, i32.add, end
+  // #1: i32.const 65535, end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x0a, 0x00, 0x10, 0x01, 0x10, 0x01, 0x6a, 0x10, 0x01, 0x6a, 0x0b, 0x06,
+      0x00, 0x41, 0xff, 0xff, 0x03, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_inlining_local_reread_callee_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 2 local functions with type idx 0
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0, call 1, end
+  // #1: (local i32), local.get 0, local.tee 1, local.get 1, i32.add, end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x06, 0x00, 0x20, 0x00, 0x10, 0x01, 0x0b, 0x0b, 0x01, 0x01, 0x7f, 0x20,
+      0x00, 0x22, 0x01, 0x20, 0x01, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_inlining_if_return_const_callee_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32, i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f]))
+  // function section: 2 local functions with type idx 0
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0, local.get 1, call 1, end
+  // #1: local.get 0, if, i32.const 0, return, end, local.get 0, local.get 1, i32.add, end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x0f, 0x00, 0x20,
+      0x00, 0x04, 0x40, 0x41, 0x00, 0x0f, 0x0b, 0x20, 0x00, 0x20, 0x01, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_inlining_if_unit_wrapper_callee_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  // #0 (i32, i32) -> ()
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x02, 0x7f, 0x7f, 0x00]))
+  // function section: 2 local functions with type idx 0
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x00]))
+  // export section: export func 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0, local.get 1, call 1, end
+  // #1: local.get 0, if, local.get 1, local.get 1, i32.add, drop, end, end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x0d, 0x00, 0x20,
+      0x00, 0x04, 0x40, 0x20, 0x01, 0x20, 0x01, 0x6a, 0x1a, 0x0b, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_inlining_local_control_flow_callee_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+  append_section(
+    out,
+    1U,
+    bytes_of([0x02, 0x60, 0x00, 0x01, 0x7f, 0x60, 0x01, 0x7f, 0x01, 0x7f]),
+  )
+  append_section(out, 3U, bytes_of([0x02, 0x00, 0x01]))
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x02, 0x06, 0x00, 0x41, 0x00, 0x10, 0x01, 0x0b, 0x14, 0x01, 0x01, 0x7f, 0x41,
+      0x07, 0x21, 0x01, 0x02, 0x40, 0x20, 0x00, 0x0d, 0x00, 0x41, 0x01, 0x0f, 0x0b,
+      0x20, 0x01, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
 fn sample_module_with_runtime_imported_zero_arg_export_bytes() -> Bytes {
   let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
 
@@ -1953,6 +2228,32 @@ fn sample_module_with_optimize_instructions_const_first_bytes() -> Bytes {
       0x01, 0x19, 0x00, 0x41, 0x00, 0x20, 0x00, 0x46, 0x1a, 0x41, 0x00, 0x20, 0x00,
       0x47, 0x1a, 0x41, 0x00, 0x20, 0x00, 0x72, 0x1a, 0x41, 0x7f, 0x20, 0x00, 0x71,
       0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_optimize_instructions_get_first_mul_or_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section: 1 func type (i32) -> (i32)
+  append_section(out, 1U, bytes_of([0x01, 0x60, 0x01, 0x7f, 0x01, 0x7f]))
+  // function section: 1 local function
+  append_section(out, 3U, bytes_of([0x01, 0x00]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section body:
+  // local decl count=0
+  // local.get 0; i32.const 0; i32.mul; drop
+  // local.get 0; i32.const -1; i32.or
+  // end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x01, 0x0d, 0x00, 0x20, 0x00, 0x41, 0x00, 0x6c, 0x1a, 0x20, 0x00, 0x41, 0x7f,
+      0x72, 0x0b,
     ]),
   )
   Bytes::from_array(out[:])
@@ -2851,6 +3152,133 @@ fn sample_module_with_const_forwarding_thunk_bytes() -> Bytes {
       0x01, 0x6a, 0x20, 0x02, 0x6a, 0x0b,
     ]),
   )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_interleaved_const_forwarding_thunk_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 (func (param i32 i32) (result i32))
+  //   #1 (func (param i32 i32 i32) (result i32))
+  append_section(
+    out,
+    1U,
+    bytes_of([
+      0x02, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03, 0x7f, 0x7f, 0x7f, 0x01,
+      0x7f,
+    ]),
+  )
+  // function section: 3 local functions (indices 0..2) with type idx [0,0,1]
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x00, 0x01]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: local.get 0; local.get 1; call 1; end
+  // #1: local.get 0; i32.const 5; local.get 1; call 2; end
+  // #2: local.get 0; local.get 1; i32.add; local.get 2; i32.add; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x08, 0x00, 0x20, 0x00, 0x20, 0x01, 0x10, 0x01, 0x0b, 0x0a, 0x00, 0x20,
+      0x00, 0x41, 0x05, 0x20, 0x01, 0x10, 0x02, 0x0b, 0x0a, 0x00, 0x20, 0x00, 0x20,
+      0x01, 0x6a, 0x20, 0x02, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_hint_only_interleaved_const_forwarding_thunk_bytes() -> Bytes {
+  sample_module_with_hint_only_interleaved_const_forwarding_thunk_with_hint_arg_instrs([
+      [0x20, 0x00],
+      [0x41, 0x05],
+      [0x20, 0x01],
+    ],
+  )
+}
+
+///|
+fn sample_module_with_interleaved_const_target_specialization_thunk_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 (func (result i32))
+  //   #1 (func (param i32 i32) (result i32))
+  //   #2 (func (param i32 i32 i32) (result i32))
+  append_section(
+    out,
+    1U,
+    bytes_of([
+      0x03, 0x60, 0x00, 0x01, 0x7f, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03,
+      0x7f, 0x7f, 0x7f, 0x01, 0x7f,
+    ]),
+  )
+  // function section: 3 local functions (indices 0..2) with type idx [0,1,2]
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x01, 0x02]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: i32.const 10; i32.const 11; call 1; i32.const 1; i32.const 2; call 1; i32.add; end
+  // #1: local.get 0; i32.const 5; local.get 1; call 2; end
+  // #2: local.get 1; i32.const 1; i32.add; local.set 1;
+  //     local.get 0; local.get 1; i32.add; local.get 2; i32.add; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x0f, 0x00, 0x41, 0x0a, 0x41, 0x0b, 0x10, 0x01, 0x41, 0x01, 0x41, 0x02,
+      0x10, 0x01, 0x6a, 0x0b, 0x0a, 0x00, 0x20, 0x00, 0x41, 0x05, 0x20, 0x01, 0x10,
+      0x02, 0x0b, 0x11, 0x00, 0x20, 0x01, 0x41, 0x01, 0x6a, 0x21, 0x01, 0x20, 0x00,
+      0x20, 0x01, 0x6a, 0x20, 0x02, 0x6a, 0x0b,
+    ]),
+  )
+  Bytes::from_array(out[:])
+}
+
+///|
+fn sample_module_with_hint_only_interleaved_const_target_specialization_thunk_bytes() -> Bytes {
+  let out = bytes_of([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00])
+
+  // type section:
+  //   #0 (func (result i32))
+  //   #1 (func (param i32 i32) (result i32))
+  //   #2 (func (param i32 i32 i32) (result i32))
+  append_section(
+    out,
+    1U,
+    bytes_of([
+      0x03, 0x60, 0x00, 0x01, 0x7f, 0x60, 0x02, 0x7f, 0x7f, 0x01, 0x7f, 0x60, 0x03,
+      0x7f, 0x7f, 0x7f, 0x01, 0x7f,
+    ]),
+  )
+  // function section: 3 local functions (indices 0..2) with type idx [0,1,2]
+  append_section(out, 3U, bytes_of([0x03, 0x00, 0x01, 0x02]))
+  // export section: export index 0 as "run"
+  append_section(out, 7U, bytes_of([0x01, 0x03, 0x72, 0x75, 0x6e, 0x00, 0x00]))
+  // code section:
+  // #0: i32.const 10; i32.const 11; call 1; i32.const 1; i32.const 2; call 1; i32.add; end
+  // #1: local.get 0; i32.const 5; local.get 1; call 2; nop; end
+  //     auto-detect const-target-specialize では拾えないが、hint があれば特化可能
+  // #2: local.get 1; i32.const 1; i32.add; local.set 1;
+  //     local.get 0; local.get 1; i32.add; local.get 2; i32.add; end
+  append_section(
+    out,
+    10U,
+    bytes_of([
+      0x03, 0x0f, 0x00, 0x41, 0x0a, 0x41, 0x0b, 0x10, 0x01, 0x41, 0x01, 0x41, 0x02,
+      0x10, 0x01, 0x6a, 0x0b, 0x0b, 0x00, 0x20, 0x00, 0x41, 0x05, 0x20, 0x01, 0x10,
+      0x02, 0x01, 0x0b, 0x11, 0x00, 0x20, 0x01, 0x41, 0x01, 0x6a, 0x21, 0x01, 0x20,
+      0x00, 0x20, 0x01, 0x6a, 0x20, 0x02, 0x6a, 0x0b,
+    ]),
+  )
+  append_wite_cfp_const_hint_section(out, 1U, 2U, [
+    [0x20, 0x00],
+    [0x41, 0x05],
+    [0x20, 0x01],
+  ])
   Bytes::from_array(out[:])
 }
 
@@ -3826,6 +4254,19 @@ fn find_opcode_stat(stats : Array[OpcodeStat], key : String) -> OpcodeStat? {
 }
 
 ///|
+fn find_cfp_const_hint_reject_reason_count(
+  entries : Array[CfpConstHintRejectReasonCount],
+  reason : String,
+) -> CfpConstHintRejectReasonCount? {
+  for entry in entries {
+    if entry.reason == reason {
+      return Some(entry)
+    }
+  }
+  None
+}
+
+///|
 fn find_host_code_hint(
   hints : Array[HostCodeHint],
   kind : String,
@@ -3849,6 +4290,14 @@ fn find_optimize_stage(
     }
   }
   None
+}
+
+///|
+fn stage_has_observation_containing(
+  stage : OptimizeStageMetadata,
+  needle : String,
+) -> Bool {
+  stage.observations.any(obs => obs.contains(needle))
 }
 
 ///|
@@ -4432,6 +4881,109 @@ test "analyze host-generated code detects forwarding thunks" {
 }
 
 ///|
+test "analyze host-generated code detects interleaved const forwarding thunk" {
+  let bytes = sample_module_with_interleaved_const_forwarding_thunk_bytes()
+  guard @wite_analyze.analyze_host_generated_code(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.imported_function_count, 0U)
+  assert_eq(report.local_function_count, 3U)
+  assert_eq(report.param_forwarding_thunk_count, 1U)
+  assert_eq(report.const_forwarding_thunk_count, 1U)
+  assert_eq(report.signature_refinable_thunk_count, 0U)
+  guard find_host_code_hint(report.hints, "const-forward") is Some(const_hint) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(const_hint.function_index, 1U)
+  assert_eq(const_hint.target_function_index, 2U)
+  assert_eq(const_hint.appended_i32_const_count, 1U)
+}
+
+///|
+test "analyze host-generated code reports explicit cfp-const hint usability" {
+  let hinted_bytes = sample_module_with_hint_only_interleaved_const_forwarding_thunk_bytes()
+  guard @wite_analyze.analyze_host_generated_code(hinted_bytes)
+    is Ok(hinted_report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(hinted_report.cfp_const_hint_entry_count, 1U)
+  assert_eq(hinted_report.cfp_const_hint_usable_entry_count, 1U)
+  assert_eq(hinted_report.cfp_const_hint_reject_reason_counts.length(), 0)
+
+  let invalid_bytes = sample_module_with_hint_only_interleaved_const_forwarding_thunk_with_hint_arg_instrs([
+      [0x20, 0x00],
+      [0x41, 0x05],
+      [0x20, 0x00],
+    ],
+  )
+  guard @wite_analyze.analyze_host_generated_code(invalid_bytes)
+    is Ok(invalid_report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(invalid_report.cfp_const_hint_entry_count, 1U)
+  assert_eq(invalid_report.cfp_const_hint_usable_entry_count, 0U)
+  guard find_cfp_const_hint_reject_reason_count(
+      invalid_report.cfp_const_hint_reject_reason_counts,
+      "recipe-type-mismatch",
+    )
+    is Some(reason_count) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(reason_count.count, 1U)
+}
+
+///|
+test "analyze host-generated code reports cfp-const-specialize hint candidates" {
+  let profitable_bytes = sample_module_with_hint_only_interleaved_const_forwarding_thunk_bytes()
+  guard @wite_analyze.analyze_host_generated_code(profitable_bytes)
+    is Ok(profitable_report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profitable_report.cfp_const_specialize_hint_candidate_count, 0U)
+  guard find_cfp_const_hint_reject_reason_count(
+      profitable_report.cfp_const_specialize_hint_reject_reason_counts,
+      "cfp-const-still-profitable",
+    )
+    is Some(profitable_reason_count) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profitable_reason_count.count, 1U)
+
+  let specialize_bytes = sample_module_with_hint_only_interleaved_const_target_specialization_thunk_bytes()
+  guard @wite_analyze.analyze_host_generated_code(specialize_bytes)
+    is Ok(specialize_report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(specialize_report.cfp_const_specialize_hint_candidate_count, 1U)
+  assert_eq(
+    specialize_report.cfp_const_specialize_hint_reject_reason_counts.length(),
+    0,
+  )
+}
+
+///|
+test "analyze host-generated code reports malformed and unknown-version hint sections" {
+  let bytes = sample_module_with_valid_and_invalid_cfp_const_hint_sections_bytes()
+  guard @wite_analyze.analyze_host_generated_code(bytes) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(report.cfp_const_hint_section_count, 3U)
+  assert_eq(report.cfp_const_hint_unknown_version_section_count, 1U)
+  assert_eq(report.cfp_const_hint_malformed_section_count, 1U)
+  assert_eq(report.cfp_const_hint_entry_count, 1U)
+  assert_eq(report.cfp_const_hint_usable_entry_count, 1U)
+}
+
+///|
 test "analyze host-generated code detects signature-refine thunk" {
   let bytes = sample_module_with_gc_signature_refining_thunk_bytes()
   guard @wite_analyze.analyze_host_generated_code(bytes) is Ok(report) else {
@@ -4501,6 +5053,105 @@ test "analyze optimize metadata reports stage waterfall" {
     return
   }
   assert_true(rume_stage.after_size <= rume_stage.before_size)
+}
+
+///|
+test "analyze optimize metadata reports experimental cfp-const hint observations" {
+  let bytes = sample_module_with_valid_and_invalid_cfp_const_hint_sections_bytes()
+  let config = make_optimize_config(
+    enable_dce=true,
+    enable_experimental_cfp_const_hints=true,
+  )
+  guard @wite_analyze.analyze_optimize_metadata(bytes, config~) is Ok(report) else {
+    assert_true(false)
+    return
+  }
+  guard find_optimize_stage(report.stages, "dce") is Some(dce_stage) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    stage_has_observation_containing(
+      dce_stage, "cfp-const-hints: sections=3 unknown-version=1 malformed=1 entries=1 usable=1",
+    ),
+  )
+  assert_true(
+    stage_has_observation_containing(dce_stage, "cfp-const-used=true"),
+  )
+  assert_true(
+    stage_has_observation_containing(dce_stage, "hint-section-stripped=true"),
+  )
+  assert_true(
+    stage_has_observation_containing(
+      dce_stage, "cfp-const-specialize-hints: candidates=0",
+    ),
+  )
+  assert_true(
+    stage_has_observation_containing(
+      dce_stage, "cfp-const-specialize-hints/rejects: cfp-const-still-profitable=1",
+    ),
+  )
+}
+
+///|
+test "optimize reports experimental cfp-const hint observations" {
+  let bytes = sample_module_with_valid_and_invalid_cfp_const_hint_sections_bytes()
+  let config = make_optimize_config(
+    enable_dce=true,
+    enable_experimental_cfp_const_hints=true,
+  )
+  guard @wite_optimize.optimize_for_size(bytes, config~) is Ok(result) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    result.observations.any(obs => {
+      obs.contains(
+        "cfp-const-hints: sections=3 unknown-version=1 malformed=1 entries=1 usable=1",
+      )
+    }),
+  )
+  assert_true(
+    result.observations.any(obs => obs.contains("cfp-const-used=true")),
+  )
+  assert_true(
+    result.observations.any(obs => {
+      obs.contains("cfp-const-specialize-hints: candidates=0")
+    }),
+  )
+  assert_true(
+    result.observations.any(obs => obs.contains("hint-section-stripped=true")),
+  )
+}
+
+///|
+test "optimize reports retained cfp-const hint section when no hint rewrite fires" {
+  let bytes = sample_module_with_hint_only_interleaved_const_forwarding_thunk_with_hint_arg_instrs([
+      [0x20, 0x00],
+      [0x41, 0x05],
+      [0x20, 0x00],
+    ],
+  )
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_experimental_cfp_const_hints=true,
+  )
+  guard @wite_optimize.optimize_for_size(bytes, config~) is Ok(result) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    result.observations.any(obs => obs.contains("hint-section-stripped=false")),
+  )
 }
 
 ///|
@@ -5932,6 +6583,279 @@ test "optimize inlining-optimizing accepts unused locals in noop callee" {
 }
 
 ///|
+test "optimize inlining-optimizing accepts unique private callee when total size shrinks" {
+  let bytes = sample_module_with_inlining_unique_growth_positive_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("inlining:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
+  assert_true(
+    bytes_contains_seq(optimized.bytes, [
+      0x20, 0x00, 0x41, 0xff, 0xff, 0x03, 0x6a,
+    ]),
+  )
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 1U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [0, 1, 7, 11]),
+  )
+}
+
+///|
+test "optimize inlining-optimizing inlines param reread callee via temp locals" {
+  let bytes = sample_module_with_inlining_param_reread_callee_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("inlining:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 1U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [0, 1, 7, 11]),
+  )
+}
+
+///|
+test "optimize inlining-optimizing accepts repeated positive-growth private callee" {
+  let bytes = sample_module_with_inlining_repeated_growth_positive_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("inlining:calls:3")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 1U)
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
+test "optimize inlining-optimizing inlines callee local reread via temp locals" {
+  let bytes = sample_module_with_inlining_local_reread_callee_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("inlining:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 1U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [0, 1, 7, 11]),
+  )
+}
+
+///|
+test "optimize inlining-optimizing inlines if-return const wrapper callee" {
+  let bytes = sample_module_with_inlining_if_return_const_callee_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("inlining:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 1U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [0, 7]),
+  )
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [11, 7]),
+  )
+}
+
+///|
+test "optimize inlining-optimizing inlines if unit wrapper callee" {
+  let bytes = sample_module_with_inlining_if_unit_wrapper_callee_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("inlining:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 1U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [0, 7]),
+  )
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [1, 7]),
+  )
+}
+
+///|
+test "optimize inlining-optimizing inlines local control-flow callee" {
+  let bytes = sample_module_with_inlining_local_control_flow_callee_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    pass_rounds=2U,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("inlining:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(!bytes_contains_seq(optimized.bytes, [0x10, 0x01]))
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(profile.function_count, 1U)
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
 test "optimize dae-optimizing removes pure expression for dropped argument" {
   let bytes = sample_module_with_dae_expression_drop_bytes()
   let config = make_optimize_config(
@@ -6046,6 +6970,8 @@ test "optimize vacuum works even when peephole is disabled" {
     strip_producers_section=false,
     pass_rounds=1U,
     enable_peephole=false,
+    peephole_remove_nop=false,
+    peephole_remove_const_drop=false,
     enable_vacuum=true,
     enable_merge_blocks=false,
     enable_remove_unused_brs=false,
@@ -6510,6 +7436,318 @@ test "optimize cfp-const rewrites const-forwarding thunk and enables dce" {
       -7, -1, 0, 1, 42, 123456,
     ]),
   )
+}
+
+///|
+test "optimize cfp-const rewrites interleaved const-forwarding thunk and enables dce" {
+  let bytes = sample_module_with_interleaved_const_forwarding_thunk_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 3U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("cfp-const:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
+test "optimize cfp-const rewrites hinted interleaved const thunk and strips hint section" {
+  let bytes = sample_module_with_hint_only_interleaved_const_forwarding_thunk_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_experimental_cfp_const_hints=true,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("cfp-const:calls:1")),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  guard @wite_analyze.analyze_section_sizes(optimized.bytes)
+    is Ok(sections_after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(!sections_after.any(s => s.key == "custom:wite.cfp_const_hints"))
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
+test "optimize cfp-const ignores hinted interleaved const thunk unless experimental flag is enabled" {
+  let bytes = sample_module_with_hint_only_interleaved_const_forwarding_thunk_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    !optimized.removed_sections.any(s => s.contains("cfp-const:calls:")),
+  )
+  guard @wite_analyze.analyze_section_sizes(optimized.bytes)
+    is Ok(sections_after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(sections_after.any(s => s.key == "custom:wite.cfp_const_hints"))
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
+test "optimize cfp-const ignores hinted thunk when a wrapper param is reused twice" {
+  let bytes = sample_module_with_hint_only_interleaved_const_forwarding_thunk_with_hint_arg_instrs([
+      [0x20, 0x00],
+      [0x41, 0x05],
+      [0x20, 0x00],
+    ],
+  )
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_experimental_cfp_const_hints=true,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    !optimized.removed_sections.any(s => s.contains("cfp-const:calls:")),
+  )
+  guard @wite_analyze.analyze_section_sizes(optimized.bytes)
+    is Ok(sections_after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(sections_after.any(s => s.key == "custom:wite.cfp_const_hints"))
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
+test "optimize cfp-const ignores hinted thunk when arg bytes contain extra instructions" {
+  let bytes = sample_module_with_hint_only_interleaved_const_forwarding_thunk_with_hint_arg_instrs([
+      [0x20, 0x00],
+      [0x41, 0x05, 0x01],
+      [0x20, 0x01],
+    ],
+  )
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_experimental_cfp_const_hints=true,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    !optimized.removed_sections.any(s => s.contains("cfp-const:calls:")),
+  )
+  guard @wite_analyze.analyze_section_sizes(optimized.bytes)
+    is Ok(sections_after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(sections_after.any(s => s.key == "custom:wite.cfp_const_hints"))
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
+test "optimize const-target-specialize rewrites interleaved const thunk with mutable const param" {
+  let bytes = sample_module_with_interleaved_const_target_specialization_thunk_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before_profile.function_count, 3U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => {
+      s.contains("cfp-const-specialize:calls:2 funcs:1")
+    }),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(
+    !optimized.removed_sections.any(s => s.contains("cfp-const:calls:")),
+  )
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after_profile) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(after_profile.function_count, 2U)
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
+test "optimize const-target-specialize rewrites hinted interleaved const thunk and strips hint section" {
+  let bytes = sample_module_with_hint_only_interleaved_const_target_specialization_thunk_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_experimental_cfp_const_hints=true,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    optimized.removed_sections.any(s => {
+      s.contains("cfp-const-specialize:calls:2 funcs:1")
+    }),
+  )
+  assert_true(
+    optimized.removed_sections.any(s => s.contains("dce:functions:1")),
+  )
+  assert_true(
+    !optimized.removed_sections.any(s => s.contains("cfp-const:calls:")),
+  )
+  guard @wite_analyze.analyze_section_sizes(optimized.bytes)
+    is Ok(sections_after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(!sections_after.any(s => s.key == "custom:wite.cfp_const_hints"))
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
+}
+
+///|
+test "optimize const-target-specialize ignores hinted thunk unless experimental flag is enabled" {
+  let bytes = sample_module_with_hint_only_interleaved_const_target_specialization_thunk_bytes()
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=false,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=true,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  assert_true(
+    !optimized.removed_sections.any(s => s.contains("cfp-const-specialize:")),
+  )
+  guard @wite_analyze.analyze_section_sizes(optimized.bytes)
+    is Ok(sections_after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(sections_after.any(s => s.key == "custom:wite.cfp_const_hints"))
+  assert_true(runtime_export_outputs_equal(bytes, optimized.bytes, "run", []))
 }
 
 ///|
@@ -7778,6 +9016,49 @@ test "optimize-instructions simplifies const-first bitwise and cmp patterns" {
   )
   assert_true(
     !bytes_contains_seq(optimized.bytes, [0x41, 0x7f, 0x20, 0x00, 0x71]),
+  )
+  assert_true(
+    runtime_export_outputs_equal(bytes, optimized.bytes, "run", [
+      -7, -1, 0, 1, 42, 123456,
+    ]),
+  )
+}
+
+///|
+test "optimize-instructions simplifies get-first mul-zero and or-minus-one patterns" {
+  let bytes = sample_module_with_optimize_instructions_get_first_mul_or_bytes()
+  guard @wite_analyze.profile_module(bytes) is Ok(before) else {
+    assert_true(false)
+    return
+  }
+  assert_eq(before.code_body_bytes, 13U)
+  let config = make_optimize_config(
+    strip_all_custom=false,
+    strip_name_section=false,
+    strip_producers_section=false,
+    enable_peephole=true,
+    enable_vacuum=false,
+    enable_merge_blocks=false,
+    enable_remove_unused_brs=false,
+    enable_dce=false,
+    enable_dfe=false,
+    enable_merge_similar_functions=false,
+    enable_remove_unused_module_elements=false,
+  )
+  guard @wite_analyze.optimize_for_size(bytes, config~) is Ok(optimized) else {
+    assert_true(false)
+    return
+  }
+  guard @wite_analyze.profile_module(optimized.bytes) is Ok(after) else {
+    assert_true(false)
+    return
+  }
+  assert_true(after.code_body_bytes < before.code_body_bytes)
+  assert_true(
+    !bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x41, 0x00, 0x6c]),
+  )
+  assert_true(
+    !bytes_contains_seq(optimized.bytes, [0x20, 0x00, 0x41, 0x7f, 0x72]),
   )
   assert_true(
     runtime_export_outputs_equal(bytes, optimized.bytes, "run", [

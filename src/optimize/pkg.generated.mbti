@@ -20,13 +20,25 @@ pub fn collect_call_forwarding_alias_map(Array[Bytes], UInt, Array[UInt], Map[UI
 
 pub fn collect_call_indirect_table_indices_from_code_section(Bytes) -> Array[UInt]?
 
+pub fn collect_cfp_const_hint_section_stats(Bytes, Array[RawSection]) -> (UInt, UInt, UInt)
+
 pub fn collect_const_call_forwarding_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, FunctionTypeEntry], Map[UInt, UInt]) -> Map[UInt, CfpConstAlias]
+
+pub fn collect_const_call_forwarding_hint_alias_map(Bytes, Array[RawSection], UInt, Array[UInt], Map[UInt, FunctionTypeEntry], Map[UInt, UInt]) -> Map[UInt, CfpConstAlias]
+
+pub fn collect_const_call_forwarding_hint_reject_reason_counts(Bytes, Array[RawSection], UInt, Array[UInt], Map[UInt, FunctionTypeEntry], Map[UInt, UInt]) -> Array[@types.CfpConstHintRejectReasonCount]
+
+pub fn collect_const_target_specialize_hint_analysis_raise(Array[Bytes], UInt, Array[UInt], Map[UInt, FunctionTypeEntry], Map[UInt, CfpConstAlias], Map[UInt, UInt], Map[UInt, Bool], Map[UInt, UInt]) -> (UInt, Array[@types.CfpConstHintRejectReasonCount]) raise @types.WiteError
+
+pub fn collect_direct_call_count_by_function_raise(Array[Bytes]) -> Map[UInt, UInt] raise @types.WiteError
 
 pub fn collect_direct_callees(Bytes, Array[InstrSpan]) -> (Array[UInt], Bool)
 
 pub fn collect_direct_callees_from_body_raise(Bytes) -> (Array[UInt], Bool) raise @types.WiteError
 
 pub fn collect_gc_type_canonical_map_from_entries_raise(Array[ParsedTypeSectionEntry]) -> Map[UInt, UInt] raise @types.WiteError
+
+pub fn collect_optimize_stage_observations(String, Bytes, Array[String], @types.OptimizeConfig) -> Array[String]
 
 pub fn collect_signature_refine_alias_map(Array[Bytes], UInt, Array[UInt], Map[UInt, FunctionTypeEntry], Map[UInt, UInt]) -> Map[UInt, SignatureRefineAlias]
 
@@ -38,7 +50,7 @@ pub fn make_bool_array(Int, Bool) -> Array[Bool]
 
 pub fn make_component_optimize_config(base? : @types.OptimizeConfig, root_name_candidates? : Array[String], exclude? : Array[String]) -> @types.OptimizeConfig
 
-pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> @types.OptimizeConfig
+pub fn make_optimize_config(strip_all_custom? : Bool, strip_name_section? : Bool, strip_producers_section? : Bool, strip_debug_sections? : Bool, strip_dwarf_sections? : Bool, strip_target_features_section? : Bool, keep_custom_sections? : Array[String], pass_rounds? : UInt, enable_peephole? : Bool, peephole_remove_nop? : Bool, peephole_remove_const_drop? : Bool, enable_vacuum? : Bool, enable_merge_blocks? : Bool, enable_remove_unused_brs? : Bool, enable_dce? : Bool, enable_dfe? : Bool, enable_merge_similar_functions? : Bool, enable_remove_unused_module_elements? : Bool, enable_experimental_cfp_const_hints? : Bool, closed_world? : Bool, closed_world_root_exports? : Array[String], safe_mode? : Bool) -> @types.OptimizeConfig
 
 pub fn make_runtime_profile_scenario(String, args? : Array[Int]) -> @types.RuntimeProfileScenario
 
@@ -71,6 +83,8 @@ pub fn optimize_kind_core() -> OptimizeKind
 pub fn optimize_kind_name(OptimizeKind) -> String
 
 pub fn optimize_with_kind(Bytes, OptimizeKind, @types.OptimizeConfig, exclude? : Array[String]) -> Result[@types.OptimizeResult, String]
+
+pub fn parse_cfp_const_hint_entries(Bytes, Array[RawSection]) -> Array[(UInt, UInt, Array[Bytes])]
 
 pub fn parse_code_bodies(Bytes) -> Array[Bytes] raise @types.WiteError
 
@@ -129,7 +143,10 @@ pub fn unique_sorted(Array[String]) -> Array[String]
 // Types and methods
 pub(all) struct CfpConstAlias {
   target : UInt
-  appended_i32_const_instrs : Array[Bytes]
+  target_arg_instrs : Array[Bytes]
+  wrapper_param_count : UInt
+  wrapper_param_local_types : Array[Byte]
+  uses_scratch_locals : Bool
 }
 
 pub(all) struct Cursor {
@@ -199,6 +216,8 @@ pub using @types {type CallGraphNode}
 pub using @types {type CallGraphReport}
 
 pub using @types {type CallGraphSummary}
+
+pub using @types {type CfpConstHintRejectReasonCount}
 
 pub using @types {type CodeBlockSize}
 
@@ -277,4 +296,3 @@ pub using @types {type WasmBreakdownReport}
 pub using @types {type WiteError}
 
 // Traits
-
