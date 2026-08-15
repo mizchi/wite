@@ -49,21 +49,21 @@ fn parse_wagi_response(raw : String) -> WagiResponse {
   let header_end = raw.find("\r\n\r\n")
   let (header_section, body) = match header_end {
     Some(i) => {
-      let h = raw[:i].to_string()
-      let b = raw[i + 4:].to_string()
+      let h = raw[:i].to_owned()
+      let b = raw[i + 4:].to_owned()
       (h, b)
     }
     None =>
       match raw.find("\n\n") {
         Some(i) => {
-          let h = raw[:i].to_string()
-          let b = raw[i + 2:].to_string()
+          let h = raw[:i].to_owned()
+          let b = raw[i + 2:].to_owned()
           (h, b)
         }
         None => (raw, "")
       }
   }
-  let headers : Map[String, String] = {}
+  let headers : Map[String, String] = Map([])
   let mut status = 200
   for line in header_section.split("\n") {
     let line_str = line.to_string().trim_end(chars="\r").to_string()
@@ -72,7 +72,7 @@ fn parse_wagi_response(raw : String) -> WagiResponse {
     }
     match line_str.find(":") {
       Some(colon_idx) => {
-        let key = line_str[:colon_idx].to_string()
+        let key = line_str[:colon_idx].to_owned()
         let value = line_str[colon_idx + 1:]
           .to_string()
           .trim_start(chars=" ")
@@ -172,7 +172,7 @@ async fn handle_wagi_request(
 ) -> Unit {
   let meth_str = request_method_string(req.meth)
   let response = execute_wagi(wasm_path, meth_str, req.path, req.headers)
-  let extra_headers : Map[String, String] = {}
+  let extra_headers : Map[String, String] = Map([])
   for entry in response.headers {
     extra_headers[entry.0] = entry.1
   }

@@ -246,7 +246,7 @@ pub fn parse_type_section_entries_with_refs_raise(
     }
     let end_ = parser.get_pos()
     out.push({
-      raw: payload[start:end_].to_bytes(),
+      raw: payload[start:end_].to_owned(),
       form,
       referenced_type_indices,
     })
@@ -284,7 +284,7 @@ fn parse_function_type_entry_map_for_function_indices_raise(
     payload, context,
   )
   let parsed_type_count = parsed_type_entries.length()
-  let out : Map[UInt, FunctionTypeEntry] = {}
+  let out : Map[UInt, FunctionTypeEntry] = Map([])
   for type_index in function_type_indices {
     match out.get(type_index) {
       Some(_) => continue
@@ -612,7 +612,7 @@ fn rewrite_instruction_function_indices_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid call/ref.func immediate")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let old_index = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -639,7 +639,7 @@ fn rewrite_code_body_for_dce_raise(
   index_map : Map[UInt, UInt],
 ) -> Bytes raise WiteError {
   let prefix_end = parse_local_decl_prefix_end(body_bytes)
-  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_owned()
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => raise WiteError::InvalidFormat("unsupported opcode in dce apply")
@@ -715,7 +715,7 @@ fn collect_used_type_indices_from_instruction_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid call_indirect immediate")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       match decode_call_indirect_immediate(imm) {
         Some((type_index, _table_index)) => push_unique_u32(out, type_index)
         None =>
@@ -736,7 +736,7 @@ fn collect_used_type_indices_from_code_section_raise(
   let bodies = parse_code_bodies(payload)
   for body in bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     for
       type_index in collect_used_type_indices_from_instruction_raise(
@@ -760,7 +760,7 @@ fn rewrite_instruction_type_indices_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid call_indirect immediate")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let (old_type_index, table_index) = match
         decode_call_indirect_immediate(imm) {
         Some(v) => v
@@ -792,7 +792,7 @@ fn rewrite_code_body_for_type_index_map_raise(
   type_index_map : Map[UInt, UInt],
 ) -> Bytes raise WiteError {
   let prefix_end = parse_local_decl_prefix_end(body_bytes)
-  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_owned()
   let spans = parse_instruction_spans_raise(instr_bytes)
   let rewritten_instr = rewrite_instruction_type_indices_raise(
     instr_bytes, spans, type_index_map,
@@ -908,7 +908,7 @@ fn rewrite_instruction_local_indices_for_signature_pruning_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid local immediate")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let local_index = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -939,7 +939,7 @@ fn rewrite_code_body_for_signature_pruning_raise(
     return body_bytes
   }
   let prefix_end = parse_local_decl_prefix_end(body_bytes)
-  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_owned()
   let spans = parse_instruction_spans_raise(instr_bytes)
   let rewritten_instr = rewrite_instruction_local_indices_for_signature_pruning_raise(
     instr_bytes, spans, old_param_count, removed_param_count,
@@ -961,7 +961,7 @@ fn rewrite_instruction_calls_for_signature_pruning_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid call immediate")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -987,7 +987,7 @@ fn rewrite_code_body_calls_for_signature_pruning_raise(
   removed_param_count_by_function : Map[UInt, UInt],
 ) -> Bytes raise WiteError {
   let prefix_end = parse_local_decl_prefix_end(body_bytes)
-  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_owned()
   let spans = parse_instruction_spans_raise(instr_bytes)
   let rewritten_instr = rewrite_instruction_calls_for_signature_pruning_raise(
     instr_bytes, spans, removed_param_count_by_function,
@@ -1079,7 +1079,7 @@ fn extract_inlining_prefix_param_expression_instr_raise(
       return None
     }
   }
-  Some(instr_bytes[spans[expr_start].start:spans[expr_end - 1].end_].to_bytes())
+  Some(instr_bytes[spans[expr_start].start:spans[expr_end - 1].end_].to_owned())
 }
 
 ///|
@@ -1097,7 +1097,7 @@ fn extract_inlining_body_instr_without_end_raise(
   if expr_end == 0 {
     return None
   }
-  Some(instr_bytes[spans[0].start:spans[expr_end - 1].end_].to_bytes())
+  Some(instr_bytes[spans[0].start:spans[expr_end - 1].end_].to_owned())
 }
 
 ///|
@@ -1144,7 +1144,7 @@ fn can_inline_temp_local_control_flow_raise(
         if span.end_ <= span.start + 1 {
           raise WiteError::InvalidFormat("invalid branch immediate in inlining")
         }
-        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let imm = instr_bytes[span.start + 1:span.end_].to_owned()
         let target_depth = match decode_u32_leb128_bytes(imm) {
           Some(v) => v.reinterpret_as_int()
           None =>
@@ -1334,7 +1334,7 @@ fn extract_inlining_if_unit_wrapper_instr_raise(
       return None
     }
   }
-  Some(instr_bytes[spans[0].start:spans[if_block.end_index].end_].to_bytes())
+  Some(instr_bytes[spans[0].start:spans[if_block.end_index].end_].to_owned())
 }
 
 ///|
@@ -1343,7 +1343,7 @@ fn extract_inlining_candidate_raise(
   type_entry : FunctionTypeEntry,
 ) -> InliningCandidate? raise WiteError {
   let prefix = parse_local_decl_prefix_raise(body_bytes)
-  let instr_bytes = body_bytes[prefix.prefix_end:body_bytes.length()].to_bytes()
+  let instr_bytes = body_bytes[prefix.prefix_end:body_bytes.length()].to_owned()
   let spans = parse_instruction_spans_raise(instr_bytes)
   let param_count = type_entry.params.length()
   let result_count = type_entry.results.length()
@@ -1516,7 +1516,7 @@ fn rewrite_instruction_local_indices_for_inlining_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid local immediate in inlining")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let local_index = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -1559,7 +1559,7 @@ fn rewrite_instruction_local_indices_for_block_wrapped_inlining_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid local immediate in inlining")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let local_index = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -1703,7 +1703,7 @@ fn rewrite_instruction_calls_for_inlining_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid call immediate in inlining")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -1802,10 +1802,10 @@ fn collect_call_count_by_target_raise(
   code_bodies : Array[Bytes],
   candidate_by_function_index : Map[UInt, InliningCandidate],
 ) -> Map[UInt, UInt] raise WiteError {
-  let counts : Map[UInt, UInt] = {}
+  let counts : Map[UInt, UInt] = Map([])
   for body in code_bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     for span in spans {
       if span.opcode != 0x10U {
@@ -1814,7 +1814,7 @@ fn collect_call_count_by_target_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid call immediate in inlining")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -1861,7 +1861,7 @@ fn apply_inlining_optimizing_raise_with_sections(
   let mut code_section_payload : Bytes? = None
   let mut imported_function_count = 0U
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_section_payload = Some(payload)
       2U => imported_function_count += parse_import_function_count(payload)
@@ -1895,8 +1895,8 @@ fn apply_inlining_optimizing_raise_with_sections(
   let function_type_entry_map = parse_function_type_entry_map_for_function_indices_raise(
     type_payload, function_type_indices, "inlining",
   )
-  let candidate_by_function_index : Map[UInt, InliningCandidate] = {}
-  let body_bytes_by_function_index : Map[UInt, UInt] = {}
+  let candidate_by_function_index : Map[UInt, InliningCandidate] = Map([])
+  let body_bytes_by_function_index : Map[UInt, UInt] = Map([])
   for i in 0..<code_bodies.length() {
     let function_index = imported_function_count + i.reinterpret_as_uint()
     let type_index = function_type_indices[i]
@@ -1922,7 +1922,7 @@ fn apply_inlining_optimizing_raise_with_sections(
   if !has_candidate {
     return { bytes, inlined_call_count: 0U }
   }
-  let root_function_indices : Map[UInt, Bool] = {}
+  let root_function_indices : Map[UInt, Bool] = Map([])
   let call_graph_result = try? analyze_call_graph_raise(bytes, None)
   match call_graph_result {
     Ok(call_graph) =>
@@ -1941,7 +1941,7 @@ fn apply_inlining_optimizing_raise_with_sections(
   for i in 0..<code_bodies.length() {
     let body = code_bodies[i]
     let prefix = parse_local_decl_prefix_raise(body)
-    let instr_bytes = body[prefix.prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix.prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let caller_type_index = function_type_indices[i]
     let caller_type_entry = match

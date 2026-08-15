@@ -216,4 +216,3 @@ pub using @config {type WiteConfigFile}
 pub using @types {type WiteError}
 
 // Traits
-

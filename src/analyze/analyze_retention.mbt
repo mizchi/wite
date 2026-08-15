@@ -14,11 +14,11 @@ fn collect_root_reasons_raise(
   bytes : Bytes,
   export_root_names : Array[String]?,
 ) -> (Map[UInt, Array[String]], Bool) raise WiteError {
-  let reasons_map : Map[UInt, Array[String]] = {}
+  let reasons_map : Map[UInt, Array[String]] = Map([])
   let sections = parse_core_sections_raise(bytes)
   let mut partial = false
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       7U => {
         let exports = parse_export_function_names(payload)
@@ -105,12 +105,12 @@ pub fn analyze_keep_reasons(
     let (reasons_map, reasons_partial) = collect_root_reasons_raise(
       bytes, export_root_names,
     )
-    let index_to_pos : Map[UInt, Int] = {}
+    let index_to_pos : Map[UInt, Int] = Map([])
     for i in 0..<graph.nodes.length() {
       index_to_pos.set(graph.nodes[i].function_index, i)
     }
-    let visited : Map[UInt, Bool] = {}
-    let parent_map : Map[UInt, UInt] = {}
+    let visited : Map[UInt, Bool] = Map([])
+    let parent_map : Map[UInt, UInt] = Map([])
     let queue = graph.roots.copy()
     let mut head = 0
     while head < queue.length() {
@@ -180,12 +180,12 @@ pub fn analyze_retain_paths(
     let (root_reasons_map, root_reason_partial) = collect_root_reasons_raise(
       bytes, export_root_names,
     )
-    let index_to_pos : Map[UInt, Int] = {}
+    let index_to_pos : Map[UInt, Int] = Map([])
     for i in 0..<graph.nodes.length() {
       index_to_pos.set(graph.nodes[i].function_index, i)
     }
-    let visited : Map[UInt, Bool] = {}
-    let parent_map : Map[UInt, UInt] = {}
+    let visited : Map[UInt, Bool] = Map([])
+    let parent_map : Map[UInt, UInt] = Map([])
     let queue = graph.roots.copy()
     let mut head = 0
     while head < queue.length() {

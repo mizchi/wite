@@ -64,17 +64,17 @@ test "apply inlining optimizing rewrites param reread callee" {
   )
   let module_bytes = Bytes::from_array(out[:])
   let sections = parse_core_sections_raise(module_bytes)
-  let function_payload = module_bytes[sections[1].payload_start:sections[1].section_end].to_bytes()
-  let code_payload = module_bytes[sections[3].payload_start:sections[3].section_end].to_bytes()
+  let function_payload = module_bytes[sections[1].payload_start:sections[1].section_end].to_owned()
+  let code_payload = module_bytes[sections[3].payload_start:sections[3].section_end].to_owned()
   let function_type_indices = parse_function_type_indices(function_payload)
   let code_bodies = parse_code_bodies(code_payload)
   let function_type_entry_map = parse_function_type_entry_map_for_function_indices_raise(
-    module_bytes[sections[0].payload_start:sections[0].section_end].to_bytes(),
+    module_bytes[sections[0].payload_start:sections[0].section_end].to_owned(),
     function_type_indices,
     "wbtest-inlining",
   )
-  let candidate_by_function_index : Map[UInt, InliningCandidate] = {}
-  let body_bytes_by_function_index : Map[UInt, UInt] = {}
+  let candidate_by_function_index : Map[UInt, InliningCandidate] = Map([])
+  let body_bytes_by_function_index : Map[UInt, UInt] = Map([])
   for i in 0..<code_bodies.length() {
     let function_index = i.reinterpret_as_uint()
     let type_entry = function_type_entry_map
@@ -99,7 +99,7 @@ test "apply inlining optimizing rewrites param reread callee" {
     code_bodies, candidate_by_function_index,
   )
   let caller_prefix = parse_local_decl_prefix_raise(code_bodies[0])
-  let caller_instr = code_bodies[0][caller_prefix.prefix_end:code_bodies[0].length()].to_bytes()
+  let caller_instr = code_bodies[0][caller_prefix.prefix_end:code_bodies[0].length()].to_owned()
   let caller_spans = parse_instruction_spans_raise(caller_instr)
   let (_rewritten, rewritten_call_count, _added_locals) = rewrite_instruction_calls_for_inlining_raise(
     caller_instr,
@@ -129,10 +129,10 @@ test "rewrite instruction calls inlines temp-local param reread candidate" {
     assert_true(false)
     return
   }
-  let candidate_by_function_index : Map[UInt, InliningCandidate] = {}
+  let candidate_by_function_index : Map[UInt, InliningCandidate] = Map([])
   candidate_by_function_index.set(1U, candidate)
   let call_count_by_target : Map[UInt, UInt] = { 1U: 1U }
-  let root_function_indices : Map[UInt, Bool] = {}
+  let root_function_indices : Map[UInt, Bool] = Map([])
   let body_bytes_by_function_index : Map[UInt, UInt] = { 1U: 7U }
   let instr_bytes = bytes_of_ints([0x20, 0x00, 0x10, 0x01, 0x0b])
   let spans = parse_instruction_spans_raise(instr_bytes)
@@ -273,8 +273,8 @@ test "apply inlining optimizing rewrites local control-flow callee" {
   )
   let module_bytes = Bytes::from_array(out[:])
   let sections = parse_core_sections_raise(module_bytes)
-  let function_payload = module_bytes[sections[1].payload_start:sections[1].section_end].to_bytes()
-  let code_payload = module_bytes[sections[3].payload_start:sections[3].section_end].to_bytes()
+  let function_payload = module_bytes[sections[1].payload_start:sections[1].section_end].to_owned()
+  let code_payload = module_bytes[sections[3].payload_start:sections[3].section_end].to_owned()
   let function_type_indices = parse_function_type_indices(function_payload)
   let code_bodies = parse_code_bodies(code_payload)
   inspect(
@@ -282,12 +282,12 @@ test "apply inlining optimizing rewrites local control-flow callee" {
     content="b\"\\x01\\x01\\x7fA\\x07!\\x01\\x02@ \\x00\\x0d\\x00A\\x01\\x0f\\x0b \\x01\\x0b\"",
   )
   let function_type_entry_map = parse_function_type_entry_map_for_function_indices_raise(
-    module_bytes[sections[0].payload_start:sections[0].section_end].to_bytes(),
+    module_bytes[sections[0].payload_start:sections[0].section_end].to_owned(),
     function_type_indices,
     "wbtest-inlining-control-flow",
   )
-  let candidate_by_function_index : Map[UInt, InliningCandidate] = {}
-  let body_bytes_by_function_index : Map[UInt, UInt] = {}
+  let candidate_by_function_index : Map[UInt, InliningCandidate] = Map([])
+  let body_bytes_by_function_index : Map[UInt, UInt] = Map([])
   for i in 0..<code_bodies.length() {
     let function_index = i.reinterpret_as_uint()
     let type_entry = function_type_entry_map
@@ -313,7 +313,7 @@ test "apply inlining optimizing rewrites local control-flow callee" {
   )
   assert_eq(call_count_by_target.get(1U).unwrap_or(0U), 1U)
   let caller_prefix = parse_local_decl_prefix_raise(code_bodies[0])
-  let caller_instr = code_bodies[0][caller_prefix.prefix_end:code_bodies[0].length()].to_bytes()
+  let caller_instr = code_bodies[0][caller_prefix.prefix_end:code_bodies[0].length()].to_owned()
   let caller_spans = parse_instruction_spans_raise(caller_instr)
   let (_rewritten, rewritten_call_count, _added_locals) = rewrite_instruction_calls_for_inlining_raise(
     caller_instr,

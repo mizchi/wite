@@ -6,7 +6,7 @@ pub fn collect_const_call_forwarding_alias_map(
   function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
   gc_type_canonical_map : Map[UInt, UInt],
 ) -> Map[UInt, CfpConstAlias] {
-  let alias_candidate : Map[UInt, CfpConstAlias] = {}
+  let alias_candidate : Map[UInt, CfpConstAlias] = Map([])
   for i in 0..<code_bodies.length() {
     let old_index = imported_function_count + i.reinterpret_as_uint()
     let old_pos = UInt::reinterpret_as_int(old_index)
@@ -64,12 +64,12 @@ pub fn collect_const_call_forwarding_alias_map(
       None => ()
     }
   }
-  let resolved_alias : Map[UInt, CfpConstAlias] = {}
+  let resolved_alias : Map[UInt, CfpConstAlias] = Map([])
   for i in 0..<code_bodies.length() {
     let old_index = imported_function_count + i.reinterpret_as_uint()
     match alias_candidate.get(old_index) {
       Some(initial_alias) => {
-        let seen : Map[UInt, Bool] = {}
+        let seen : Map[UInt, Bool] = Map([])
         let mut current_target = initial_alias.target
         let mut target_arg_instrs = initial_alias.target_arg_instrs.copy()
         let mut valid = true
@@ -204,7 +204,7 @@ pub fn collect_const_call_forwarding_hint_alias_map(
   function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
   gc_type_canonical_map : Map[UInt, UInt],
 ) -> Map[UInt, CfpConstAlias] {
-  let alias_map : Map[UInt, CfpConstAlias] = {}
+  let alias_map : Map[UInt, CfpConstAlias] = Map([])
   for entry in parse_cfp_const_hint_entries(bytes, sections) {
     let (wrapper_index, target, target_arg_instrs) = entry
     match
@@ -242,7 +242,7 @@ pub fn collect_const_call_forwarding_hint_reject_reason_counts(
   function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
   gc_type_canonical_map : Map[UInt, UInt],
 ) -> Array[CfpConstHintRejectReasonCount] {
-  let counts : Map[String, UInt] = {}
+  let counts : Map[String, UInt] = Map([])
   for entry in parse_cfp_const_hint_entries(bytes, sections) {
     let (wrapper_index, target, target_arg_instrs) = entry
     match
@@ -294,10 +294,10 @@ fn collect_direct_call_count_by_const_alias_raise(
   code_bodies : Array[Bytes],
   alias_map : Map[UInt, CfpConstAlias],
 ) -> Map[UInt, UInt] raise WiteError {
-  let counts : Map[UInt, UInt] = {}
+  let counts : Map[UInt, UInt] = Map([])
   for body in code_bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     for span in spans {
       if span.opcode != 0x10U {
@@ -306,7 +306,7 @@ fn collect_direct_call_count_by_const_alias_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid call immediate in cfp-const")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -348,10 +348,10 @@ priv struct ConstTargetSpecializePlan {
 pub fn collect_direct_call_count_by_function_raise(
   code_bodies : Array[Bytes],
 ) -> Map[UInt, UInt] raise WiteError {
-  let counts : Map[UInt, UInt] = {}
+  let counts : Map[UInt, UInt] = Map([])
   for body in code_bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     for span in spans {
       if span.opcode != 0x10U {
@@ -362,7 +362,7 @@ pub fn collect_direct_call_count_by_function_raise(
           "invalid call immediate in cfp-const-specialize",
         )
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -396,7 +396,7 @@ fn rewrite_instruction_local_indices_for_const_target_specialize_raise(
           "invalid local immediate in cfp-const-specialize",
         )
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let local_index = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -438,11 +438,11 @@ fn build_const_target_specialized_body_raise(
   target_arg_instrs : Array[Bytes],
 ) -> Bytes raise WiteError {
   let prefix = parse_local_decl_prefix_raise(body_bytes)
-  let instr_bytes = body_bytes[prefix.prefix_end:body_bytes.length()].to_bytes()
+  let instr_bytes = body_bytes[prefix.prefix_end:body_bytes.length()].to_owned()
   let spans = parse_instruction_spans_raise(instr_bytes)
   let old_param_count = target_arg_instrs.length().reinterpret_as_uint()
-  let forwarded_param_index_by_old_param : Map[UInt, UInt] = {}
-  let temp_local_index_by_old_param : Map[UInt, UInt] = {}
+  let forwarded_param_index_by_old_param : Map[UInt, UInt] = Map([])
+  let temp_local_index_by_old_param : Map[UInt, UInt] = Map([])
   let temp_local_types : Array[Byte] = []
   let mut wrapper_param_count = 0U
   for instr in target_arg_instrs {
@@ -634,7 +634,7 @@ pub fn collect_const_target_specialize_hint_analysis_raise(
   gc_type_canonical_map : Map[UInt, UInt],
 ) -> (UInt, Array[CfpConstHintRejectReasonCount]) raise WiteError {
   let mut candidate_count = 0U
-  let counts : Map[String, UInt] = {}
+  let counts : Map[String, UInt] = Map([])
   hint_alias_map.each((wrapper_index, alias_info) => {
     match
       validate_const_target_specialize_hint_alias_raise(
@@ -666,7 +666,7 @@ fn collect_const_target_specialize_plan_raise(
   root_function_indices : Map[UInt, Bool],
   gc_type_canonical_map : Map[UInt, UInt],
 ) -> Map[UInt, ConstTargetSpecializePlan] raise WiteError {
-  let plans : Map[UInt, ConstTargetSpecializePlan] = {}
+  let plans : Map[UInt, ConstTargetSpecializePlan] = Map([])
   for i in 0..<code_bodies.length() {
     let wrapper_index = imported_function_count + i.reinterpret_as_uint()
     if root_function_indices.get(wrapper_index) is Some(_) {
@@ -805,7 +805,7 @@ pub fn collect_call_forwarding_alias_map(
   function_param_count_by_index : Array[UInt],
   gc_type_canonical_map : Map[UInt, UInt],
 ) -> Map[UInt, UInt] {
-  let alias_candidate : Map[UInt, UInt] = {}
+  let alias_candidate : Map[UInt, UInt] = Map([])
   for i in 0..<code_bodies.length() {
     let old_index = imported_function_count + i.reinterpret_as_uint()
     let old_pos = UInt::reinterpret_as_int(old_index)
@@ -839,12 +839,12 @@ pub fn collect_call_forwarding_alias_map(
       None => ()
     }
   }
-  let resolved_alias : Map[UInt, UInt] = {}
+  let resolved_alias : Map[UInt, UInt] = Map([])
   for i in 0..<code_bodies.length() {
     let old_index = imported_function_count + i.reinterpret_as_uint()
     match alias_candidate.get(old_index) {
       Some(initial_target) => {
-        let seen : Map[UInt, Bool] = {}
+        let seen : Map[UInt, Bool] = Map([])
         let mut current = initial_target
         let mut valid = true
         while true {
@@ -885,7 +885,7 @@ fn rewrite_instruction_calls_for_call_forwarding_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid call immediate in cfp")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -927,7 +927,7 @@ fn rewrite_instruction_calls_for_const_call_forwarding_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid call immediate in cfp-const")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -1042,7 +1042,7 @@ fn rewrite_code_section_payload_for_const_call_forwarding_raise(
   for i in 0..<bodies.length() {
     let body = bodies[i]
     let prefix = parse_local_decl_prefix_raise(body)
-    let instr_bytes = body[prefix.prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix.prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let (rewritten_instr, rewritten_count, added_local_types) = rewrite_instruction_calls_for_const_call_forwarding_raise(
       instr_bytes,
@@ -1086,7 +1086,7 @@ fn apply_const_call_forwarding_target_specialization_raise_with_sections(
   let mut function_payload : Bytes? = None
   let mut code_payload : Bytes? = None
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_payload = Some(payload)
       2U => import_payload = Some(payload)
@@ -1134,7 +1134,7 @@ fn apply_const_call_forwarding_target_specialization_raise_with_sections(
   let gc_type_canonical_map = collect_gc_type_canonical_map_from_entries_raise(
     parsed_type_entries,
   )
-  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = Map([])
   for i in 0..<parsed_type_entries.length() {
     if parsed_type_entries[i].form == 0x60U {
       function_type_entry_by_type_index.set(
@@ -1158,7 +1158,7 @@ fn apply_const_call_forwarding_target_specialization_raise_with_sections(
   if call_graph.partial {
     return { bytes, rewritten_call_count: 0U, specialized_function_count: 0U }
   }
-  let root_function_indices : Map[UInt, Bool] = {}
+  let root_function_indices : Map[UInt, Bool] = Map([])
   for index in call_graph.roots {
     root_function_indices.set(index, true)
   }
@@ -1178,7 +1178,7 @@ fn apply_const_call_forwarding_target_specialization_raise_with_sections(
     hint_alias_map, direct_call_count_by_function, root_function_indices, gc_type_canonical_map,
   )
   let mut specialized_function_count = 0U
-  let wrapper_to_target : Map[UInt, UInt] = {}
+  let wrapper_to_target : Map[UInt, UInt] = Map([])
   let rewritten_local_function_type_indices = local_function_type_indices.copy()
   let rewritten_code_bodies = code_bodies.copy()
   for i in 0..<code_bodies.length() {
@@ -1249,7 +1249,7 @@ fn apply_const_call_forwarding_propagation_raise_with_sections(
   let mut function_payload : Bytes? = None
   let mut code_payload : Bytes? = None
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_payload = Some(payload)
       2U => import_payload = Some(payload)
@@ -1294,7 +1294,7 @@ fn apply_const_call_forwarding_propagation_raise_with_sections(
   let gc_type_canonical_map = collect_gc_type_canonical_map_from_entries_raise(
     parsed_type_entries,
   )
-  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = Map([])
   for i in 0..<parsed_type_entries.length() {
     if parsed_type_entries[i].form == 0x60U {
       function_type_entry_by_type_index.set(
@@ -1348,7 +1348,7 @@ fn apply_const_call_forwarding_propagation_raise_with_sections(
   let direct_call_count_by_target = collect_direct_call_count_by_const_alias_raise(
     code_bodies, merged_alias_map,
   )
-  let filtered_alias_map : Map[UInt, CfpConstAlias] = {}
+  let filtered_alias_map : Map[UInt, CfpConstAlias] = Map([])
   for i in 0..<code_bodies.length() {
     let old_index = imported_function_count + i.reinterpret_as_uint()
     match merged_alias_map.get(old_index) {
@@ -1399,7 +1399,7 @@ fn rewrite_code_section_payload_for_call_forwarding_raise(
   let mut rewritten_call_count = 0U
   for body in bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let (rewritten_instr, rewritten_count) = rewrite_instruction_calls_for_call_forwarding_raise(
       instr_bytes, spans, alias_map,
@@ -1429,7 +1429,7 @@ fn apply_call_forwarding_propagation_raise_with_sections(
   let mut function_payload : Bytes? = None
   let mut code_payload : Bytes? = None
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_payload = Some(payload)
       2U => import_payload = Some(payload)
@@ -1473,7 +1473,7 @@ fn apply_call_forwarding_propagation_raise_with_sections(
     type_payload, "cfp",
   )
   let type_count_u = parsed_type_entries.length().reinterpret_as_uint()
-  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = Map([])
   for i in 0..<parsed_type_entries.length() {
     if parsed_type_entries[i].form == 0x60U {
       function_type_entry_by_type_index.set(
@@ -1554,7 +1554,7 @@ pub fn collect_signature_refine_alias_map(
   function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry],
   gc_type_canonical_map : Map[UInt, UInt],
 ) -> Map[UInt, SignatureRefineAlias] {
-  let alias_candidate : Map[UInt, SignatureRefineAlias] = {}
+  let alias_candidate : Map[UInt, SignatureRefineAlias] = Map([])
   for i in 0..<code_bodies.length() {
     let old_index = imported_function_count + i.reinterpret_as_uint()
     let old_pos = UInt::reinterpret_as_int(old_index)
@@ -1604,12 +1604,12 @@ pub fn collect_signature_refine_alias_map(
       None => ()
     }
   }
-  let resolved_alias : Map[UInt, SignatureRefineAlias] = {}
+  let resolved_alias : Map[UInt, SignatureRefineAlias] = Map([])
   for i in 0..<code_bodies.length() {
     let old_index = imported_function_count + i.reinterpret_as_uint()
     match alias_candidate.get(old_index) {
       Some(initial_alias) => {
-        let seen : Map[UInt, Bool] = {}
+        let seen : Map[UInt, Bool] = Map([])
         let mut current_target = initial_alias.target
         let mut dropped_param_count = initial_alias.dropped_param_count
         let mut dropped_result_count = initial_alias.dropped_result_count
@@ -1667,7 +1667,7 @@ fn rewrite_instruction_calls_for_signature_refining_raise(
           "invalid call immediate in signature-refine",
         )
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let target = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -1709,7 +1709,7 @@ fn rewrite_code_section_payload_for_signature_refining_raise(
   let mut rewritten_call_count = 0U
   for body in bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let (rewritten_instr, rewritten_count) = rewrite_instruction_calls_for_signature_refining_raise(
       instr_bytes, spans, alias_map,
@@ -1739,7 +1739,7 @@ fn apply_signature_refining_raise_with_sections(
   let mut function_payload : Bytes? = None
   let mut code_payload : Bytes? = None
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_payload = Some(payload)
       2U => import_payload = Some(payload)
@@ -1783,7 +1783,7 @@ fn apply_signature_refining_raise_with_sections(
   let gc_type_canonical_map = collect_gc_type_canonical_map_from_entries_raise(
     parsed_type_entries,
   )
-  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = Map([])
   for i in 0..<parsed_type_entries.length() {
     if parsed_type_entries[i].form == 0x60U {
       let type_index = i.reinterpret_as_uint()

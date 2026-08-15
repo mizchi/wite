@@ -247,7 +247,7 @@ pub fn collect_optimize_stage_observations(
   let mut function_section_payload : Bytes? = None
   let mut code_section_payload : Bytes? = None
   for section in sections {
-    let payload = before_bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = before_bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_section_payload = Some(payload)
       2U => import_section_payload = Some(payload)
@@ -313,7 +313,7 @@ pub fn collect_optimize_stage_observations(
   } noraise {
     v => v
   }
-  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = {}
+  let function_type_entry_by_type_index : Map[UInt, FunctionTypeEntry] = Map([])
   for i in 0..<parsed_type_entries.length() {
     if parsed_type_entries[i].form == 0x60U {
       let entry = try
@@ -345,7 +345,7 @@ pub fn collect_optimize_stage_observations(
   } noraise {
     v => v
   }
-  let root_function_indices : Map[UInt, Bool] = {}
+  let root_function_indices : Map[UInt, Bool] = Map([])
   let export_root_names = export_root_names_from_config(config)
   let call_graph = try
     analyze_call_graph_raise(before_bytes, export_root_names)
@@ -430,7 +430,7 @@ fn optimize_for_size_round_raise(
     if section.section_id == 0U && !keep_custom_section(section, config) {
       removed_sections.push(section_key(section, false))
     } else if section.section_id == 10U && should_optimize_code_section(config) {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let payload = bytes[section.payload_start:section.section_end].to_owned()
       let optimized_payload = optimize_code_section_payload(payload, config)
       append_encoded_section(stage1_out, section.section_id, optimized_payload)
     } else {

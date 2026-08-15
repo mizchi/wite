@@ -61,11 +61,13 @@ test "parse_wagi_response default content-type" {
 
 ///|
 test "build_wagi_env_args basic" {
-  let headers : Map[String, String] = {}
+  let headers : Map[String, String] = Map([])
   let args = build_wagi_env_args("GET", "/hello", headers)
   inspect(
     args,
-    content="[\"--env\", \"REQUEST_METHOD=GET\", \"--env\", \"PATH_INFO=/hello\", \"--env\", \"SERVER_PROTOCOL=HTTP/1.1\", \"--env\", \"GATEWAY_INTERFACE=CGI/1.1\"]",
+    content=(
+      #|[--env, REQUEST_METHOD=GET, --env, PATH_INFO=/hello, --env, SERVER_PROTOCOL=HTTP/1.1, --env, GATEWAY_INTERFACE=CGI/1.1]
+    ),
   )
 }
 

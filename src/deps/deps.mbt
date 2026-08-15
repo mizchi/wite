@@ -52,14 +52,14 @@ fn parse_dependency_protocol(name : String) -> DependencyProtocol? {
 
 ///|
 fn normalize_dependency_host(raw : String) -> String {
-  let mut host = raw.trim().to_string()
+  let mut host = raw.trim().to_owned()
   if host.has_prefix("https://") {
-    host = host[8:].to_string()
+    host = host[8:].to_owned()
   } else if host.has_prefix("http://") {
-    host = host[7:].to_string()
+    host = host[7:].to_owned()
   }
   if host.has_suffix("/") {
-    host = host[:host.length() - 1].to_string()
+    host = host[:host.length() - 1].to_owned()
   }
   host
 }
@@ -71,11 +71,11 @@ fn default_dependency_host(_protocol : DependencyProtocol) -> String {
 
 ///|
 fn parse_versioned_segment(raw : String) -> (String, String) {
-  let text = raw.trim().to_string()
+  let text = raw.trim().to_owned()
   match text.rev_find("@") {
     Some(index) if index > 0 && index + 1 < text.length() => {
-      let base = text[:index].to_string()
-      let version = text[index + 1:].to_string()
+      let base = text[:index].to_owned()
+      let version = text[index + 1:].to_owned()
       (base, version)
     }
     _ => (text, "latest")
@@ -95,8 +95,8 @@ fn parse_wasm_dependency_spec(raw : String) -> WasmDependencySpec? {
       (Some(first), Some(last)) if first == last &&
         first > 0 &&
         first + 1 < base.length() => {
-        let ns = base[:first].to_string()
-        let name = base[first + 1:].to_string()
+        let ns = base[:first].to_owned()
+        let name = base[first + 1:].to_owned()
         if ns.contains(":") || name.contains(":") {
           return None
         }
@@ -128,11 +128,11 @@ pub fn is_local_dep_url(url : String) -> Bool {
 
 ///|
 fn parse_https_dependency_url(raw : String) -> (String, WasmDependencySpec)? {
-  let text = raw.trim().to_string()
+  let text = raw.trim().to_owned()
   let rest = if text.has_prefix("https://") {
-    text[8:].to_string()
+    text[8:].to_owned()
   } else if text.has_prefix("http://") {
-    text[7:].to_string()
+    text[7:].to_owned()
   } else {
     return None
   }
@@ -143,16 +143,16 @@ fn parse_https_dependency_url(raw : String) -> (String, WasmDependencySpec)? {
     Some(i) if i > 0 && i + 1 < rest.length() => i
     _ => return None
   }
-  let host = normalize_dependency_host(rest[:slash].to_string())
+  let host = normalize_dependency_host(rest[:slash].to_owned())
   if host.is_empty() {
     return None
   }
-  let mut spec_text = rest[slash + 1:].to_string()
+  let mut spec_text = rest[slash + 1:].to_owned()
   if spec_text.find("?") is Some(i) {
-    spec_text = spec_text[:i].to_string()
+    spec_text = spec_text[:i].to_owned()
   }
   if spec_text.find("#") is Some(i) {
-    spec_text = spec_text[:i].to_string()
+    spec_text = spec_text[:i].to_owned()
   }
   parse_wasm_dependency_spec(spec_text).map(spec => (host, spec))
 }
@@ -165,17 +165,17 @@ fn parse_dependency_input(
   if parse_https_dependency_url(raw) is Some((host, spec)) {
     return Some({ protocol: default_protocol, spec, host: Some(host) })
   }
-  let text = raw.trim().to_string()
+  let text = raw.trim().to_owned()
   if text.is_empty() {
     return None
   }
   let first_colon = text.find(":")
   match first_colon {
     Some(i) if i > 0 && i + 1 < text.length() => {
-      let candidate = text[:i].to_string()
+      let candidate = text[:i].to_owned()
       match parse_dependency_protocol(candidate) {
         Some(protocol) => {
-          let body = text[i + 1:].to_string()
+          let body = text[i + 1:].to_owned()
           parse_wasm_dependency_spec(body).map(spec => {
             protocol,
             spec,
@@ -263,7 +263,7 @@ fn exit_process(code : Int) -> Unit {
 fn parse_wkg_verify_cli_result(raw : String) -> Result[Unit, String] {
   let parts : Array[String] = []
   for part in raw.split("\t") {
-    parts.push(part.to_string())
+    parts.push(part.to_owned())
   }
   if parts.length() > 0 && parts[0] == "ok" {
     return Ok(())
@@ -279,9 +279,9 @@ fn normalize_dep_sync_output_dir(raw : String) -> String {
   if text.is_empty() {
     "deps"
   } else if text.has_suffix("/") {
-    text[:text.length() - 1].to_string()
+    text[:text.length() - 1].to_owned()
   } else {
-    text.to_string()
+    text.to_owned()
   }
 }
 
@@ -303,7 +303,7 @@ fn build_dep_sync_target_dir(
 fn parse_wkg_sync_cli_result(raw : String) -> Result[String, String] {
   let parts : Array[String] = []
   for part in raw.split("\t") {
-    parts.push(part.to_string())
+    parts.push(part.to_owned())
   }
   if parts.length() > 0 && parts[0] == "ok" {
     return Ok(if parts.length() >= 2 { parts[1] } else { "" })
@@ -447,25 +447,25 @@ fn parse_add_command_options(
       continue
     }
     if arg.strip_prefix("--config=") is Some(value) {
-      config_path = value.to_string()
+      config_path = value.to_owned()
       i += 1
       continue
     }
     if arg.strip_prefix("--name=") is Some(value) {
-      dependency_name = Some(value.to_string())
+      dependency_name = Some(value.to_owned())
       i += 1
       continue
     }
     if arg.strip_prefix("--protocol=") is Some(value) {
-      if parse_dependency_protocol(value.to_string()) is Some(p) {
+      if parse_dependency_protocol(value.to_owned()) is Some(p) {
         protocol_override = Some(p)
         i += 1
         continue
       }
-      return Err("unknown protocol: " + value.to_string())
+      return Err("unknown protocol: " + value.to_owned())
     }
     if arg.strip_prefix("--registry=") is Some(value) {
-      registry_host = Some(value.to_string())
+      registry_host = Some(value.to_owned())
       i += 1
       continue
     }
@@ -473,7 +473,7 @@ fn parse_add_command_options(
       match value.to_lower() {
         "true" | "1" | "yes" | "on" => verify = true
         "false" | "0" | "no" | "off" => verify = false
-        _ => return Err("invalid value for --verify: " + value.to_string())
+        _ => return Err("invalid value for --verify: " + value.to_owned())
       }
       i += 1
       continue
@@ -718,7 +718,7 @@ fn parse_deps_verify_command_options(
       continue
     }
     if arg.strip_prefix("--config=") is Some(value) {
-      config_path = value.to_string()
+      config_path = value.to_owned()
       i += 1
       continue
     }
@@ -781,22 +781,22 @@ fn parse_deps_sync_command_options(
       continue
     }
     if arg.strip_prefix("--config=") is Some(value) {
-      config_path = value.to_string()
+      config_path = value.to_owned()
       i += 1
       continue
     }
     if arg.strip_prefix("--dir=") is Some(value) {
-      output_dir = value.to_string()
+      output_dir = value.to_owned()
       i += 1
       continue
     }
     if arg.strip_prefix("--output-dir=") is Some(value) {
-      output_dir = value.to_string()
+      output_dir = value.to_owned()
       i += 1
       continue
     }
     if arg.strip_prefix("--out-dir=") is Some(value) {
-      output_dir = value.to_string()
+      output_dir = value.to_owned()
       i += 1
       continue
     }
@@ -855,7 +855,11 @@ fn load_config_json_for_add(path : String) -> Json {
   let text = @fs.read_file_to_string(path) catch {
     e => {
       println(
-        "failed to read config file: " + path + " (" + e.to_string() + ")",
+        "failed to read config file: " +
+        path +
+        " (" +
+        @debug.render(Repr(e)) +
+        ")",
       )
       exit_process(1)
       "{}"
@@ -878,7 +882,11 @@ fn write_config_json_for_add(path : String, config : Json) -> Unit {
   @fs.write_string_to_file(path, text) catch {
     e => {
       println(
-        "failed to write config file: " + path + " (" + e.to_string() + ")",
+        "failed to write config file: " +
+        path +
+        " (" +
+        @debug.render(Repr(e)) +
+        ")",
       )
       exit_process(1)
     }
@@ -896,7 +904,7 @@ fn path_dirname(path : String) -> String {
     (None, None) => None
   }
   match index {
-    Some(i) if i > 0 => path[:i].to_string()
+    Some(i) if i > 0 => path[:i].to_owned()
     Some(_) => "."
     None => "."
   }
@@ -936,7 +944,7 @@ pub struct WacConfiguredDependency {
 fn build_wac_dependency_lookup(
   entries : Array[DepConfigEntry],
 ) -> Result[Map[String, WacConfiguredDependency], String] {
-  let lookup : Map[String, WacConfiguredDependency] = {}
+  let lookup : Map[String, WacConfiguredDependency] = Map([])
   for entry in entries {
     if is_local_dep_url(entry.url) {
       continue
@@ -982,7 +990,11 @@ pub fn materialize_wac_dependencies_from_config(
   let source = @fs.read_file_to_string(wac_path) catch {
     e =>
       return Err(
-        "failed to read wac file: " + wac_path + " (" + e.to_string() + ")",
+        "failed to read wac file: " +
+        wac_path +
+        " (" +
+        @debug.render(Repr(e)) +
+        ")",
       )
   }
   let required_packages = match collect_wac_new_package_names(source) {
@@ -1216,7 +1228,7 @@ fn validate_dep_sync_targets(
   entries : Array[DepConfigEntry],
   output_dir : String,
 ) -> Result[Unit, String] {
-  let seen : Map[String, String] = {}
+  let seen : Map[String, String] = Map([])
   for entry in entries {
     if is_local_dep_url(entry.url) {
       continue

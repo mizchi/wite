@@ -297,7 +297,7 @@ pub fn parse_wasm_metadata(bytes : Bytes) -> String {
   let mut exports : Array[ExportEntry] = []
   let mut functions : Array[UInt] = []
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U =>
         try {
@@ -402,7 +402,7 @@ pub fn extract_first_core_module(bytes : Bytes) -> Bytes {
   }
   for section in sections {
     if section.section_id == 1U {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let payload = bytes[section.payload_start:section.section_end].to_owned()
       if is_core_module_header(payload) {
         return payload
       }

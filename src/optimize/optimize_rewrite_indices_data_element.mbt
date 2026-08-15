@@ -8,7 +8,7 @@ fn read_function_index_vector_bytes_raise(
     ignore(parser.read_u32_leb128())
   }
   let end_ = parser.get_pos()
-  parser.bytes[start:end_].to_bytes()
+  parser.bytes[start:end_].to_owned()
 }
 
 ///|
@@ -38,7 +38,7 @@ fn rewrite_element_section_payload_for_table_index_map_raise(
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let kept_segments : Array[Bytes] = []
-  let element_index_map : Map[UInt, UInt] = {}
+  let element_index_map : Map[UInt, UInt] = Map([])
   let mut removed_segment_count = 0U
   for old_segment_index in 0U..<segment_count {
     let flags = parser.read_u32_leb128()
@@ -210,7 +210,7 @@ fn read_data_init_bytes_raise(
   }
   parser.skip(size)
   let end_ = parser.get_pos()
-  payload[start:end_].to_bytes()
+  payload[start:end_].to_owned()
 }
 
 ///|
@@ -260,7 +260,7 @@ fn rewrite_data_section_payload_for_memory_global_index_map_raise(
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
   let kept_segments : Array[Bytes] = []
-  let data_index_map : Map[UInt, UInt] = {}
+  let data_index_map : Map[UInt, UInt] = Map([])
   let mut removed_segment_count = 0U
   for old_segment_index in 0U..<segment_count {
     let flags = parser.read_u32_leb128()

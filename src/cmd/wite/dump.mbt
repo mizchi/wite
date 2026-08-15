@@ -178,7 +178,7 @@ fn dump_core(bytes : Bytes, show_headers : Bool, show_details : Bool) -> Unit {
     let mut func_count = 0U
     let mut export_count = 0U
     for section in sections {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let payload = bytes[section.payload_start:section.section_end].to_owned()
       match section.section_id {
         1U => {
           // Type section
@@ -522,7 +522,7 @@ fn dump_disassemble(bytes : Bytes, section_filter : Int?) -> Unit {
   let mut imported_count = 0U
   for section in sections {
     if section.section_id == 2U {
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let payload = bytes[section.payload_start:section.section_end].to_owned()
       let count_result = try? @wite_analyze.parse_import_function_count(payload)
       match count_result {
         Ok(c) => imported_count = c
@@ -536,15 +536,15 @@ fn dump_disassemble(bytes : Bytes, section_filter : Int?) -> Unit {
     }
     if section.section_id == 10U {
       // Code section: parse bodies and disassemble each
-      let payload = bytes[section.payload_start:section.section_end].to_bytes()
+      let payload = bytes[section.payload_start:section.section_end].to_owned()
       let bodies = @wite_analyze.parse_code_bodies(payload) catch {
         _ => return
       }
       // Get function names if available
-      let func_names : Map[UInt, String] = {}
+      let func_names : Map[UInt, String] = Map([])
       for s in sections {
         if s.section_id == 0U && s.custom_name == Some("name") {
-          let name_payload = bytes[s.payload_start:s.section_end].to_bytes()
+          let name_payload = bytes[s.payload_start:s.section_end].to_owned()
           let parsed = try? @wite_analyze.parse_name_section_function_names(
             name_payload,
           )
@@ -555,10 +555,10 @@ fn dump_disassemble(bytes : Bytes, section_filter : Int?) -> Unit {
         }
       }
       // Get export names
-      let export_names : Map[UInt, Array[String]] = {}
+      let export_names : Map[UInt, Array[String]] = Map([])
       for s in sections {
         if s.section_id == 7U {
-          let exp_payload = bytes[s.payload_start:s.section_end].to_bytes()
+          let exp_payload = bytes[s.payload_start:s.section_end].to_owned()
           let parsed = try? @wite_analyze.parse_export_function_names(
             exp_payload,
           )
@@ -600,7 +600,7 @@ fn dump_disassemble(bytes : Bytes, section_filter : Int?) -> Unit {
             continue
           }
         }
-        let instr_bytes = body[prefix_end:body.length()].to_bytes()
+        let instr_bytes = body[prefix_end:body.length()].to_owned()
         match @wite_optimize.parse_instruction_spans(instr_bytes) {
           Some(spans) => {
             let mut depth = 0

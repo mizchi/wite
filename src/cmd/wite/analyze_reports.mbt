@@ -510,15 +510,15 @@ fn collect_section_gap_entries(
   left_sections : Array[@wite_core.SectionSize],
   right_sections : Array[@wite_core.SectionSize],
 ) -> Array[SectionGapEntry] {
-  let left_map : Map[String, UInt] = {}
+  let left_map : Map[String, UInt] = Map([])
   for section in left_sections {
     left_map.set(section.key, section.total_bytes)
   }
-  let right_map : Map[String, UInt] = {}
+  let right_map : Map[String, UInt] = Map([])
   for section in right_sections {
     right_map.set(section.key, section.total_bytes)
   }
-  let seen : Map[String, Bool] = {}
+  let seen : Map[String, Bool] = Map([])
   let entries : Array[SectionGapEntry] = []
   let add_entry = fn(key : String) {
     if seen.contains(key) {
@@ -644,15 +644,15 @@ fn collect_block_gap_entries(
   left_blocks : Array[@wite_core.CodeBlockSize],
   right_blocks : Array[@wite_core.CodeBlockSize],
 ) -> Array[BlockGapEntry] {
-  let left_map : Map[String, @wite_core.CodeBlockSize] = {}
+  let left_map : Map[String, @wite_core.CodeBlockSize] = Map([])
   for block in left_blocks {
     left_map.set(block_gap_key(block), block)
   }
-  let right_map : Map[String, @wite_core.CodeBlockSize] = {}
+  let right_map : Map[String, @wite_core.CodeBlockSize] = Map([])
   for block in right_blocks {
     right_map.set(block_gap_key(block), block)
   }
-  let seen : Map[String, Bool] = {}
+  let seen : Map[String, Bool] = Map([])
   let entries : Array[BlockGapEntry] = []
   let add_entry = fn(key : String) {
     if seen.contains(key) {

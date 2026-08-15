@@ -206,7 +206,7 @@ fn apply_dae_optimizing_raise_with_sections(
   for section in sections {
     if section.section_id == 10U {
       code_section_payload = Some(
-        bytes[section.payload_start:section.section_end].to_bytes(),
+        bytes[section.payload_start:section.section_end].to_owned(),
       )
       break
     }
@@ -220,7 +220,7 @@ fn apply_dae_optimizing_raise_with_sections(
   let mut removed_instr_count = 0U
   for body in code_bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let (rewritten_instr, removed) = apply_dae_instruction_bytes_raise(
       instr_bytes,
     )
@@ -355,7 +355,7 @@ fn decode_i32_const_nonnegative_from_span(
   if span.opcode != 0x41U || span.end_ <= span.start + 1 {
     return None
   }
-  let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+  let imm = instr_bytes[span.start + 1:span.end_].to_owned()
   decode_nonnegative_i32_leb128_bytes(imm)
 }
 
@@ -367,7 +367,7 @@ fn decode_i32_const_signed_from_span(
   if span.opcode != 0x41U || span.end_ <= span.start + 1 {
     return None
   }
-  let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+  let imm = instr_bytes[span.start + 1:span.end_].to_owned()
   decode_i32_leb128_bytes(imm)
 }
 
@@ -634,7 +634,7 @@ fn apply_precompute_local_bool_double_eqz(instr_bytes : Bytes) -> Bytes {
   }
   let out : Array[Byte] = []
   let mut changed = false
-  let mut known_local_bool : Map[UInt, Bool] = {}
+  let mut known_local_bool : Map[UInt, Bool] = Map([])
   let mut i = 0
   while i < spans.length() {
     if i + 2 < spans.length() &&
@@ -727,8 +727,8 @@ fn apply_precompute_local_const_propagation(instr_bytes : Bytes) -> Bytes {
   }
   let out : Array[Byte] = []
   let mut changed = false
-  let mut known_local_consts : Map[UInt, Int] = {}
-  let mut known_local_unknown : Map[UInt, Bool] = {}
+  let mut known_local_consts : Map[UInt, Int] = Map([])
+  let mut known_local_unknown : Map[UInt, Bool] = Map([])
   for i in 0..<spans.length() {
     let span = spans[i]
     if span.opcode == 0x20U {
@@ -812,9 +812,9 @@ fn apply_precompute_local_dead_set_overwrite(instr_bytes : Bytes) -> Bytes {
     Some(v) => v
     None => return instr_bytes
   }
-  let mut pending_local_set_span : Map[UInt, Int] = {}
-  let mut pending_local_set_active : Map[UInt, Bool] = {}
-  let replacements : Map[Int, Bool] = {}
+  let mut pending_local_set_span : Map[UInt, Int] = Map([])
+  let mut pending_local_set_active : Map[UInt, Bool] = Map([])
+  let replacements : Map[Int, Bool] = Map([])
   for i in 0..<spans.length() {
     let span = spans[i]
     if span.opcode == 0x21U {
@@ -977,7 +977,7 @@ fn apply_vacuum_to_spans(spans : Array[InstrSpan]) -> Array[InstrSpan] {
 
 ///|
 fn compute_matching_end_indices(spans : Array[InstrSpan]) -> Map[Int, Int] {
-  let out : Map[Int, Int] = {}
+  let out : Map[Int, Int] = Map([])
   let stack : Array[Int] = []
   for i in 0..<spans.length() {
     let opcode = spans[i].opcode
@@ -1926,7 +1926,7 @@ fn optimize_code_body_bytes(
     Ok(v) => v
     Err(_) => return body_bytes
   }
-  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_owned()
   let optimized_instr = optimize_instruction_bytes(instr_bytes, config)
   if optimized_instr.length() >= instr_bytes.length() {
     return body_bytes
@@ -1956,7 +1956,7 @@ fn optimize_code_section_payload_raise(
     if end_ > payload.length() {
       raise WiteError::UnexpectedEof
     }
-    let body_bytes = payload[start:end_].to_bytes()
+    let body_bytes = payload[start:end_].to_owned()
     let optimized_body = optimize_code_body_bytes(body_bytes, config)
     out.append(
       encode_u32_leb128(optimized_body.length().reinterpret_as_uint())[:],
@@ -2012,7 +2012,7 @@ fn rewrite_instruction_local_indices_for_coalesce_raise(
       if span.end_ <= span.start + 1 {
         raise WiteError::InvalidFormat("invalid local immediate")
       }
-      let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+      let imm = instr_bytes[span.start + 1:span.end_].to_owned()
       let old_index = match decode_u32_leb128_bytes(imm) {
         Some(v) => v
         None =>
@@ -2059,7 +2059,7 @@ fn apply_coalesce_locals_raise_with_sections(
   let mut function_section_payload : Bytes? = None
   let mut code_section_payload : Bytes? = None
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_section_payload = Some(payload)
       3U => function_section_payload = Some(payload)
@@ -2110,13 +2110,13 @@ fn apply_coalesce_locals_raise_with_sections(
     if prefix.local_types.length() == 0 {
       continue
     }
-    let instr_bytes = body[prefix.prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix.prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let used_local_indices = collect_used_local_indices_from_instruction_raise(
       instr_bytes, spans,
     )
     let kept_local_types : Array[Byte] = []
-    let local_index_map : Map[UInt, UInt] = {}
+    let local_index_map : Map[UInt, UInt] = Map([])
     let mut next_local = 0U
     for j in 0..<prefix.local_types.length() {
       let old_local_index = param_count + j.reinterpret_as_uint()

@@ -4,7 +4,11 @@ fn write_output_or_exit(output_path : String, bytes : Bytes) -> Unit {
   @fs.write_bytes_to_file(output_path, bytes) catch {
     e => {
       println(
-        "failed to write file: " + output_path + " (" + e.to_string() + ")",
+        "failed to write file: " +
+        output_path +
+        " (" +
+        @debug.render(Repr(e)) +
+        ")",
       )
       @sys.exit(1)
     }

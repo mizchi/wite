@@ -143,7 +143,7 @@ fn run_treeshake(args : Array[String]) -> Unit {
     Some(p) => p
     None =>
       if input_path.has_suffix(".wasm") {
-        input_path[:input_path.length() - 5].to_string() + ".treeshake.wasm"
+        input_path[:input_path.length() - 5].to_owned() + ".treeshake.wasm"
       } else {
         input_path + ".treeshake.wasm"
       }

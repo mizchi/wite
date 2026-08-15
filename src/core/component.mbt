@@ -367,7 +367,7 @@ fn average_u32(values : Array[UInt]) -> UInt {
 fn map_export_name_to_function_index(
   functions : Array[FunctionSize],
 ) -> Map[String, UInt] {
-  let out : Map[String, UInt] = {}
+  let out : Map[String, UInt] = Map([])
   for function in functions {
     for export_name in function.export_names {
       if out.get(export_name) is None {
@@ -382,7 +382,7 @@ fn map_export_name_to_function_index(
 fn map_function_size_by_index(
   functions : Array[FunctionSize],
 ) -> Map[UInt, FunctionSize] {
-  let out : Map[UInt, FunctionSize] = {}
+  let out : Map[UInt, FunctionSize] = Map([])
   for function in functions {
     out.set(function.function_index, function)
   }
@@ -393,7 +393,7 @@ fn map_function_size_by_index(
 fn map_runtime_unresolved_by_export_name(
   unresolved_exports : Array[RuntimeUnresolvedExport],
 ) -> Map[String, RuntimeUnresolvedExport] {
-  let out : Map[String, RuntimeUnresolvedExport] = {}
+  let out : Map[String, RuntimeUnresolvedExport] = Map([])
   for entry in unresolved_exports {
     if out.get(entry.export_name) is None {
       out.set(entry.export_name, entry)
@@ -406,7 +406,7 @@ fn map_runtime_unresolved_by_export_name(
 fn map_runtime_scenario_display_to_export_name(
   scenarios : Array[RuntimeProfileScenario],
 ) -> Map[String, String] {
-  let out : Map[String, String] = {}
+  let out : Map[String, String] = Map([])
   for scenario in scenarios {
     let display_name = runtime_profile_scenario_display_name(scenario)
     if out.get(display_name) is None {
@@ -492,7 +492,7 @@ fn collect_hotness_size_buckets(
   let order = [
     "hot-large", "hot-small", "cold-large", "cold-small", "unresolved",
   ]
-  let grouped : Map[String, HotnessSizeBucket] = {}
+  let grouped : Map[String, HotnessSizeBucket] = Map([])
   for bucket in order {
     grouped.set(bucket, { bucket, count: 0U, body_bytes: 0U, total_ns: 0UL })
   }
@@ -531,7 +531,7 @@ fn collect_hotness_size_buckets(
 fn collect_hotness_unresolved_reason_counts(
   entries : Array[HotnessSizeEntry],
 ) -> Array[HotnessUnresolvedReasonCount] {
-  let counts : Map[String, UInt] = {}
+  let counts : Map[String, UInt] = Map([])
   for entry in entries {
     if entry.bucket != "unresolved" {
       continue

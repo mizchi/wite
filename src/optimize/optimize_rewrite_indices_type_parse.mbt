@@ -88,7 +88,7 @@ fn read_name_bytes(parser : Cursor) -> Bytes raise WiteError {
     raise WiteError::UnexpectedEof
   }
   parser.set_pos(end_)
-  parser.bytes[start:end_].to_bytes()
+  parser.bytes[start:end_].to_owned()
 }
 
 ///|
@@ -141,7 +141,7 @@ fn read_val_type_bytes_raise(parser : Cursor) -> Bytes raise WiteError {
       )
   }
   let end_ = parser.get_pos()
-  parser.bytes[start:end_].to_bytes()
+  parser.bytes[start:end_].to_owned()
 }
 
 ///|
@@ -157,7 +157,7 @@ fn read_ref_type_bytes_raise(parser : Cursor) -> Bytes raise WiteError {
       )
   }
   let end_ = parser.get_pos()
-  parser.bytes[start:end_].to_bytes()
+  parser.bytes[start:end_].to_owned()
 }
 
 ///|
@@ -182,7 +182,7 @@ fn decode_ref_type_index_from_type_bytes(type_bytes : Bytes) -> UInt? {
   if code != 0x63U && code != 0x64U {
     return None
   }
-  decode_heap_type_ref_index_bytes(type_bytes[1:type_bytes.length()].to_bytes())
+  decode_heap_type_ref_index_bytes(type_bytes[1:type_bytes.length()].to_owned())
 }
 
 ///|
@@ -242,7 +242,7 @@ fn read_storage_type_bytes_raise(
       )
   }
   let end_ = parser.get_pos()
-  parser.bytes[start:end_].to_bytes()
+  parser.bytes[start:end_].to_owned()
 }
 
 ///|
@@ -352,7 +352,7 @@ fn read_const_expr_bytes_raise(
     skip_instruction_immediate_raise(parser, opcode)
     if opcode == 0x0bU {
       let end_ = parser.get_pos()
-      return payload[start:end_].to_bytes()
+      return payload[start:end_].to_owned()
     }
   }
   b""

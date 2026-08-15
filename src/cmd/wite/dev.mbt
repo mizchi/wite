@@ -124,7 +124,7 @@ fn path_extension(path : String) -> String {
     }
   }
   if last_dot > last_slash {
-    path[last_dot:].to_string()
+    path[last_dot:].to_owned()
   } else {
     ""
   }
@@ -217,7 +217,7 @@ async fn find_js_in_build_dirs(
 fn make_relative_path(base : String, full : String) -> String {
   let prefix = if base.has_suffix("/") { base } else { base + "/" }
   if full.has_prefix(prefix) {
-    full[prefix.length():].to_string()
+    full[prefix.length():].to_owned()
   } else {
     full
   }
@@ -513,7 +513,7 @@ async fn handle_request(
   conn : @xhttp.ServerConnection,
 ) -> Unit {
   let url_path = match req.path.find("?") {
-    Some(i) => req.path[:i].to_string()
+    Some(i) => req.path[:i].to_owned()
     None => req.path
   }
   let request_path = if url_path == "/" { "/index.html" } else { url_path }

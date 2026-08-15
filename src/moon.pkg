@@ -1,6 +1,6 @@
 import {
-  "mizchi/wite/analyze" @analyze,
-  "mizchi/wite/bundle" @bundle,
-  "mizchi/wite/config" @config,
-  "mizchi/wite/core" @core,
+  "mizchi/wite/analyze",
+  "mizchi/wite/bundle",
+  "mizchi/wite/config",
+  "mizchi/wite/core",
 }

@@ -14,7 +14,7 @@ fn read_import_name_bytes_raise(
     raise WiteError::UnexpectedEof
   }
   parser.set_pos(end_)
-  parser.bytes[start:end_].to_bytes()
+  parser.bytes[start:end_].to_owned()
 }
 
 ///|
@@ -98,7 +98,7 @@ fn apply_duplicate_import_elimination_raise_with_sections(
   let mut element_section_payload : Bytes? = None
   let mut data_section_payload : Bytes? = None
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_section_payload = Some(payload)
       2U => import_section_payload = Some(payload)
@@ -136,7 +136,7 @@ fn apply_duplicate_import_elimination_raise_with_sections(
       dropped_name_section: false,
     }
   }
-  let function_type_raw_by_index : Map[UInt, Bytes] = {}
+  let function_type_raw_by_index : Map[UInt, Bytes] = Map([])
   if type_section_payload is Some(payload) {
     let type_entries = parse_type_section_entries_with_refs_raise(
       payload, "dup-imports",
@@ -179,16 +179,16 @@ fn apply_duplicate_import_elimination_raise_with_sections(
   }
   let unique_function_import_keys : Array[Bytes] = []
   let unique_function_import_indices : Array[UInt] = []
-  let canonical_function_import_index : Map[UInt, UInt] = {}
+  let canonical_function_import_index : Map[UInt, UInt] = Map([])
   let unique_table_import_entries : Array[Bytes] = []
   let unique_table_import_indices : Array[UInt] = []
-  let canonical_table_import_index : Map[UInt, UInt] = {}
+  let canonical_table_import_index : Map[UInt, UInt] = Map([])
   let unique_memory_import_entries : Array[Bytes] = []
   let unique_memory_import_indices : Array[UInt] = []
-  let canonical_memory_import_index : Map[UInt, UInt] = {}
+  let canonical_memory_import_index : Map[UInt, UInt] = Map([])
   let unique_global_import_entries : Array[Bytes] = []
   let unique_global_import_indices : Array[UInt] = []
-  let canonical_global_import_index : Map[UInt, UInt] = {}
+  let canonical_global_import_index : Map[UInt, UInt] = Map([])
   let mut removed_function_import_count = 0U
   let mut removed_table_import_count = 0U
   let mut removed_memory_import_count = 0U
@@ -342,7 +342,7 @@ fn apply_duplicate_import_elimination_raise_with_sections(
       .reinterpret_as_uint()
     None => 0U
   }
-  let function_index_map : Map[UInt, UInt] = {}
+  let function_index_map : Map[UInt, UInt] = Map([])
   let mut kept_function_import_count = 0U
   for i in 0U..<imported_function_count {
     let i_pos = UInt::reinterpret_as_int(i)
@@ -378,7 +378,7 @@ fn apply_duplicate_import_elimination_raise_with_sections(
     let old_index = imported_function_count + i
     function_index_map.set(old_index, kept_function_import_count + i)
   }
-  let table_index_map : Map[UInt, UInt] = {}
+  let table_index_map : Map[UInt, UInt] = Map([])
   let mut kept_table_import_count = 0U
   for i in 0U..<imported_table_count {
     let i_pos = UInt::reinterpret_as_int(i)
@@ -414,7 +414,7 @@ fn apply_duplicate_import_elimination_raise_with_sections(
     let old_index = imported_table_count + i
     table_index_map.set(old_index, kept_table_import_count + i)
   }
-  let memory_index_map : Map[UInt, UInt] = {}
+  let memory_index_map : Map[UInt, UInt] = Map([])
   let mut kept_memory_import_count = 0U
   for i in 0U..<imported_memory_count {
     let i_pos = UInt::reinterpret_as_int(i)
@@ -450,7 +450,7 @@ fn apply_duplicate_import_elimination_raise_with_sections(
     let old_index = imported_memory_count + i
     memory_index_map.set(old_index, kept_memory_import_count + i)
   }
-  let global_index_map : Map[UInt, UInt] = {}
+  let global_index_map : Map[UInt, UInt] = Map([])
   let mut kept_global_import_count = 0U
   for i in 0U..<imported_global_count {
     let i_pos = UInt::reinterpret_as_int(i)
@@ -509,7 +509,7 @@ fn apply_duplicate_import_elimination_raise_with_sections(
   let out : Array[Byte] = bytes[0:8].to_array()
   let mut dropped_name_section = false
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U =>
         if parse_vec_count(rewritten_import_payload) > 0U {
@@ -627,7 +627,7 @@ fn collect_static_table_function_map_from_element_section_raise(
 ) -> Map[UInt, UInt]? raise WiteError {
   let parser = Cursor::new(payload)
   let segment_count = parser.read_u32_leb128()
-  let table_map : Map[UInt, UInt] = {}
+  let table_map : Map[UInt, UInt] = Map([])
   for _ in 0U..<segment_count {
     let flags = parser.read_u32_leb128()
     let (table_index, offset_expr, function_count) = match flags {
@@ -681,7 +681,7 @@ fn has_disallowed_table_ops_in_instruction_raise(
         if span.end_ <= span.start + 1 {
           raise WiteError::InvalidFormat("invalid 0xfc immediate in directize")
         }
-        let imm = instr_bytes[span.start + 1:span.end_].to_bytes()
+        let imm = instr_bytes[span.start + 1:span.end_].to_owned()
         let parser = Cursor::new(imm)
         let subopcode = parser.read_u32_leb128()
         if subopcode >= 12U && subopcode <= 17U {
@@ -711,7 +711,7 @@ fn rewrite_instruction_call_indirect_to_direct_raise(
       match decode_i32_const_nonnegative_from_span(instr_bytes, spans[i]) {
         Some(slot) =>
           if spans[i + 1].end_ > spans[i + 1].start + 1 {
-            let imm = instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_bytes()
+            let imm = instr_bytes[spans[i + 1].start + 1:spans[i + 1].end_].to_owned()
             match decode_call_indirect_immediate(imm) {
               Some((type_index, table_index)) =>
                 if table_index == 0U {
@@ -757,7 +757,7 @@ fn rewrite_code_section_payload_for_directize_raise(
   let mut rewritten_call_count = 0U
   for body in bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let (rewritten_instr, rewritten_count) = rewrite_instruction_call_indirect_to_direct_raise(
       instr_bytes, spans, table_map, function_type_by_index,
@@ -821,7 +821,7 @@ pub fn apply_directize_raise_with_sections(
   let mut code_payload : Bytes? = None
   let mut imported_table_count = 0U
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U => {
         import_payload = Some(payload)
@@ -885,7 +885,7 @@ pub fn apply_directize_raise_with_sections(
   let code_bodies = parse_code_bodies(code_payload)
   for body in code_bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     if has_disallowed_table_ops_in_instruction_raise(instr_bytes, spans) {
       return { bytes, rewritten_call_count: 0U }
@@ -933,7 +933,7 @@ fn collect_global_usage_counts_from_code_section_raise(
   let bodies = parse_code_bodies(payload)
   for body in bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     for span in spans {
       if span.opcode == 0x23U || span.opcode == 0x24U {
@@ -991,7 +991,7 @@ fn rewrite_code_section_payload_for_simplify_globals_raise(
   let mut rewritten_global_get_count = 0U
   for body in bodies {
     let prefix_end = parse_local_decl_prefix_end(body)
-    let instr_bytes = body[prefix_end:body.length()].to_bytes()
+    let instr_bytes = body[prefix_end:body.length()].to_owned()
     let spans = parse_instruction_spans_raise(instr_bytes)
     let (rewritten_instr, rewritten_count) = rewrite_instruction_global_get_to_i32_const_raise(
       instr_bytes, spans, global_i32_const_map,
@@ -1020,7 +1020,7 @@ fn apply_simplify_globals_raise_with_sections(
   let mut global_payload : Bytes? = None
   let mut code_payload : Bytes? = None
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U => import_payload = Some(payload)
       6U => global_payload = Some(payload)
@@ -1047,7 +1047,7 @@ fn apply_simplify_globals_raise_with_sections(
   if local_global_entries.length() == 0 {
     return { bytes, rewritten_global_get_count: 0U }
   }
-  let global_i32_const_map : Map[UInt, UInt] = {}
+  let global_i32_const_map : Map[UInt, UInt] = Map([])
   let mut candidate_count = 0U
   for i in 0..<local_global_entries.length() {
     let entry = local_global_entries[i]
@@ -1113,7 +1113,7 @@ fn apply_reorder_globals_raise_with_sections(
   let mut code_payload : Bytes? = None
   let mut data_payload : Bytes? = None
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U => import_payload = Some(payload)
       4U => table_payload = Some(payload)
@@ -1207,7 +1207,7 @@ fn apply_reorder_globals_raise_with_sections(
   if reordered_local_count == 0U {
     return { bytes, reordered_local_count: 0U }
   }
-  let global_index_map : Map[UInt, UInt] = {}
+  let global_index_map : Map[UInt, UInt] = Map([])
   for i in 0U..<imported_global_count {
     global_index_map.set(i, i)
   }
@@ -1244,7 +1244,7 @@ fn apply_reorder_globals_raise_with_sections(
   }
   let out : Array[Byte] = bytes[0:8].to_array()
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       6U => {
         let rewritten = rewrite_global_section_payload_for_local_order_and_global_index_map_raise(
@@ -1325,7 +1325,7 @@ fn apply_memory_packing_raise_with_sections(
   let mut code_payload : Bytes? = None
   let mut data_payload : Bytes? = None
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       2U => import_payload = Some(payload)
       4U => table_payload = Some(payload)
@@ -1424,7 +1424,7 @@ fn apply_memory_packing_raise_with_sections(
   if reordered_local_count == 0U {
     return { bytes, reordered_local_count: 0U }
   }
-  let memory_index_map : Map[UInt, UInt] = {}
+  let memory_index_map : Map[UInt, UInt] = Map([])
   for i in 0U..<imported_memory_count {
     memory_index_map.set(i, i)
   }
@@ -1463,7 +1463,7 @@ fn apply_memory_packing_raise_with_sections(
   }
   let out : Array[Byte] = bytes[0:8].to_array()
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       5U => {
         let rewritten = rewrite_memory_section_payload_for_local_order_raise(

@@ -9,7 +9,7 @@ fn wb_bytes_of_ints(values : Array[Int]) -> Bytes {
 
 ///|
 test "cfp-const rewrite uses scratch locals for interleaved const args" {
-  let alias_map : Map[UInt, CfpConstAlias] = {}
+  let alias_map : Map[UInt, CfpConstAlias] = Map([])
   alias_map.set(1U, {
     target: 2U,
     target_arg_instrs: [
@@ -31,7 +31,12 @@ test "cfp-const rewrite uses scratch locals for interleaved const args" {
     [],
   )
   assert_eq(rewritten_call_count, 1U)
-  inspect(added_local_types, content="[b'\\x7F', b'\\x7F']")
+  debug_inspect(
+    added_local_types,
+    content=(
+      #|[0x7f, 0x7f]
+    ),
+  )
   inspect(
     rewritten,
     content="b\" \\x00 \\x01!\\x03!\\x02 \\x02A\\x05 \\x03\\x10\\x02\\x0b\"",

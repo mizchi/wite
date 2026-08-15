@@ -422,4 +422,3 @@ pub(all) struct WasmBreakdownReport {
 // Type aliases
 
 // Traits
-

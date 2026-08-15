@@ -46,7 +46,9 @@ fn write_init_file(path : String, content : String, force : Bool) -> Bool {
   ensure_parent_dir(path)
   @fs.write_string_to_file(path, content) catch {
     e => {
-      println("failed to write file: " + path + " (" + e.to_string() + ")")
+      println(
+        "failed to write file: " + path + " (" + @debug.render(Repr(e)) + ")",
+      )
       @sys.exit(1)
     }
   }

@@ -59,7 +59,7 @@ fn parse_forward_call_target_with_param_count(
     Ok(v) => if v != prefix_end { return None }
     Err(_) => return None
   }
-  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_owned()
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return None
@@ -94,7 +94,7 @@ fn parse_local_get_param_index_instr(instr : Bytes) -> UInt? {
   if !is_single_instruction_with_opcode(instr, 0x20U) {
     return None
   }
-  decode_u32_leb128_bytes(instr[1:instr.length()].to_bytes())
+  decode_u32_leb128_bytes(instr[1:instr.length()].to_owned())
 }
 
 ///|
@@ -140,7 +140,7 @@ fn parse_forward_call_target_with_prefix_param_count(
     Ok(v) => if v != prefix_end { return None }
     Err(_) => return None
   }
-  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_owned()
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return None
@@ -192,7 +192,7 @@ fn parse_forward_call_target_with_prefix_param_count(
       return None
     }
     appended_i32_const_instrs.push(
-      instr_bytes[spans[i].start:spans[i].end_].to_bytes(),
+      instr_bytes[spans[i].start:spans[i].end_].to_owned(),
     )
   }
   if forwarded_param_count == 0 && appended_i32_const_instrs.length() == 0 {
@@ -224,7 +224,7 @@ fn parse_forward_call_target_with_const_arg_instrs(
     Ok(v) => if v != prefix_end { return None }
     Err(_) => return None
   }
-  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_bytes()
+  let instr_bytes = body_bytes[prefix_end:body_bytes.length()].to_owned()
   let spans = match parse_instruction_spans(instr_bytes) {
     Some(v) => v
     None => return None
@@ -261,7 +261,7 @@ fn parse_forward_call_target_with_const_arg_instrs(
     } else {
       return None
     }
-    target_arg_instrs.push(instr_bytes[span.start:span.end_].to_bytes())
+    target_arg_instrs.push(instr_bytes[span.start:span.end_].to_owned())
   }
   if expected_param_index != wrapper_param_count_i || const_count == 0U {
     return None
@@ -301,7 +301,7 @@ fn is_i32_value_type(value_type : Bytes) -> Bool {
 pub fn collect_gc_type_canonical_map_from_entries_raise(
   parsed_type_entries : Array[ParsedTypeSectionEntry],
 ) -> Map[UInt, UInt] raise WiteError {
-  let gc_type_canonical_map : Map[UInt, UInt] = {}
+  let gc_type_canonical_map : Map[UInt, UInt] = Map([])
   for i in 0..<parsed_type_entries.length() {
     let old_type_index = i.reinterpret_as_uint()
     let entry = parsed_type_entries[i]
@@ -607,7 +607,7 @@ fn collect_cfp_const_hint_entries_and_section_stats(
       continue
     }
     section_count += 1U
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     let prefix_end = try parse_custom_section_name_prefix_end(payload) catch {
       _ => {
         malformed_section_count += 1U
@@ -616,7 +616,7 @@ fn collect_cfp_const_hint_entries_and_section_stats(
     } noraise {
       v => v
     }
-    let body = payload[prefix_end:payload.length()].to_bytes()
+    let body = payload[prefix_end:payload.length()].to_owned()
     let cursor = Cursor::new(body)
     let version = try cursor.read_u32_leb128() catch {
       _ => {
@@ -692,7 +692,7 @@ fn collect_cfp_const_hint_entries_and_section_stats(
         }
         let instr_start = cursor.get_pos()
         let instr_end = instr_start + instr_len
-        target_arg_instrs.push(body[instr_start:instr_end].to_bytes())
+        target_arg_instrs.push(body[instr_start:instr_end].to_owned())
         cursor.set_pos(instr_end)
       }
       if malformed {

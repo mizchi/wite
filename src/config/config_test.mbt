@@ -49,7 +49,12 @@ test "empty_wite_config_file defaults" {
 test "parse_json_string_array normal" {
   let json : Json = ["--flag1", "--flag2"]
   let result = @config.parse_json_string_array(json, "test")
-  inspect(result, content="Ok([\"--flag1\", \"--flag2\"])")
+  inspect(
+    result,
+    content=(
+      #|Ok([--flag1, --flag2])
+    ),
+  )
 }
 
 ///|
@@ -63,14 +68,24 @@ test "parse_json_string_array empty" {
 test "parse_json_string_array non-string element" {
   let json : Json = ["ok", 42]
   let result = @config.parse_json_string_array(json, "flags")
-  inspect(result, content="Err(\"config flags[1] must be string\")")
+  inspect(
+    result,
+    content=(
+      #|Err(config flags[1] must be string)
+    ),
+  )
 }
 
 ///|
 test "parse_json_string_array non-array" {
   let json : Json = "not-array"
   let result = @config.parse_json_string_array(json, "flags")
-  inspect(result, content="Err(\"config flags must be string array\")")
+  inspect(
+    result,
+    content=(
+      #|Err(config flags must be string array)
+    ),
+  )
 }
 
 ///|
@@ -79,7 +94,12 @@ test "parse_wite_config_section array form" {
   let result = @config.parse_wite_config_section(json, "build")
   match result {
     Ok((flags, kind)) => {
-      inspect(flags, content="[\"--opt-level=3\"]")
+      inspect(
+        flags,
+        content=(
+          #|[--opt-level=3]
+        ),
+      )
       inspect(@config.binary_kind_name(kind), content="auto")
     }
     Err(msg) => fail("unexpected error: " + msg)
@@ -92,7 +112,12 @@ test "parse_wite_config_section object form with flags" {
   let result = @config.parse_wite_config_section(json, "build")
   match result {
     Ok((flags, kind)) => {
-      inspect(flags, content="[\"--opt-level=3\"]")
+      inspect(
+        flags,
+        content=(
+          #|[--opt-level=3]
+        ),
+      )
       inspect(@config.binary_kind_name(kind), content="auto")
     }
     Err(msg) => fail("unexpected error: " + msg)
@@ -105,7 +130,12 @@ test "parse_wite_config_section object form with kind" {
   let result = @config.parse_wite_config_section(json, "build")
   match result {
     Ok((flags, kind)) => {
-      inspect(flags, content="[\"--flag\"]")
+      inspect(
+        flags,
+        content=(
+          #|[--flag]
+        ),
+      )
       inspect(@config.binary_kind_name(kind), content="core")
     }
     Err(msg) => fail("unexpected error: " + msg)
@@ -189,9 +219,19 @@ test "parse_wite_config_json with all sections" {
   let result = @config.parse_wite_config_json(json)
   match result {
     Ok(config) => {
-      inspect(config.build_flags, content="[\"--b\"]")
+      inspect(
+        config.build_flags,
+        content=(
+          #|[--b]
+        ),
+      )
       inspect(@config.binary_kind_name(config.build_kind), content="core")
-      inspect(config.analyze_flags, content="[\"--a\"]")
+      inspect(
+        config.analyze_flags,
+        content=(
+          #|[--a]
+        ),
+      )
       inspect(@config.binary_kind_name(config.analyze_kind), content="auto")
       inspect(config.profile_flags.length(), content="0")
       inspect(
@@ -208,7 +248,12 @@ test "merge_command_flags combines arrays" {
   let defaults : Array[String] = ["--opt-level=3"]
   let cli : Array[String] = ["--debug"]
   let merged = @config.merge_command_flags(defaults, cli)
-  inspect(merged, content="[\"--opt-level=3\", \"--debug\"]")
+  inspect(
+    merged,
+    content=(
+      #|[--opt-level=3, --debug]
+    ),
+  )
 }
 
 ///|
@@ -232,7 +277,9 @@ test "build_auto_sync_deps_command_args" {
   let args = @config.build_auto_sync_deps_command_args("custom.jsonc")
   inspect(
     args,
-    content="[\"wite\", \"deps\", \"sync\", \"--config=custom.jsonc\", \"--fail-fast\"]",
+    content=(
+      #|[wite, deps, sync, --config=custom.jsonc, --fail-fast]
+    ),
   )
 }
 
@@ -257,7 +304,12 @@ test "parse_config_selection_flags no-config" {
 test "parse_config_selection_flags remaining flags preserved" {
   let flags : Array[String] = ["--no-config", "--other", "value"]
   let result = @config.parse_config_selection_flags(flags).unwrap()
-  inspect(result.remaining_flags, content="[\"--other\", \"value\"]")
+  inspect(
+    result.remaining_flags,
+    content=(
+      #|[--other, value]
+    ),
+  )
 }
 
 ///|
@@ -411,7 +463,7 @@ test "config_input_entries Named preserves key-value pairs" {
 
 ///|
 test "config_input_entries Named empty map" {
-  let map : Map[String, String] = {}
+  let map : Map[String, String] = Map([])
   let entries = @config.config_input_entries(
     @config.ConfigInput::new_named(map),
   )
@@ -455,7 +507,12 @@ test "parse_wite_config_json with named input and output" {
       let entries = @config.config_input_entries(config.input)
       inspect(entries.length(), content="2")
       inspect(config.output.dir, content="out")
-      inspect(config.build_flags, content="[\"-Oz\"]")
+      inspect(
+        config.build_flags,
+        content=(
+          #|[-Oz]
+        ),
+      )
     }
     Err(msg) => fail("unexpected error: " + msg)
   }
@@ -758,12 +815,16 @@ test "config_input_single_path" {
   )
   inspect(
     @config.config_input_single_path(@config.ConfigInput::new_single("a.wasm")),
-    content="Some(\"a.wasm\")",
+    content=(
+      #|Some(a.wasm)
+    ),
   )
   let map : Map[String, String] = { "app": "b.wasm" }
   inspect(
     @config.config_input_single_path(@config.ConfigInput::new_named(map)),
-    content="Some(\"b.wasm\")",
+    content=(
+      #|Some(b.wasm)
+    ),
   )
 }
 

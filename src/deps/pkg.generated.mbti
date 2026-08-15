@@ -45,4 +45,3 @@ pub struct WasmDependencySpec {
 // Type aliases
 
 // Traits
-

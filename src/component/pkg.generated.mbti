@@ -11,4 +11,3 @@ pub fn verify_component_interface(Bytes, String, world? : String) -> Result[Unit
 // Type aliases
 
 // Traits
-

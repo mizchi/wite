@@ -92,7 +92,7 @@ fn compare_function_size_diff(
 fn map_function_sizes_by_index(
   functions : Array[FunctionSize],
 ) -> Map[UInt, FunctionSize] {
-  let out : Map[UInt, FunctionSize] = {}
+  let out : Map[UInt, FunctionSize] = Map([])
   for function in functions {
     out.set(function.function_index, function)
   }
@@ -105,7 +105,7 @@ fn collect_function_size_diff_indices(
   after_map : Map[UInt, FunctionSize],
 ) -> Array[UInt] {
   let out : Array[UInt] = []
-  let seen : Map[UInt, Bool] = {}
+  let seen : Map[UInt, Bool] = Map([])
   before_map.each((function_index, _) => {
     seen.set(function_index, true)
     out.push(function_index)

@@ -61,7 +61,7 @@ fn optimize_component_for_size_round(
   let no_change_reasons : Array[String] = []
   let mut core_module_index = 0
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     if section.section_id == 1U && is_core_module_payload(payload) {
       let optimized = match optimize_for_size(payload, config~) {
         Ok(v) => v

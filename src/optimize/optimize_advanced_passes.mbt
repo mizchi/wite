@@ -8,7 +8,7 @@ fn apply_merge_similar_functions_raise_with_sections(
   let mut local_function_type_indices : Array[UInt] = []
   let mut code_bodies : Array[Bytes] = []
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       1U => type_payload = Some(payload)
       2U =>
@@ -69,7 +69,7 @@ fn apply_merge_similar_functions_raise_with_sections(
       )
     }
   }
-  let alias_candidate : Map[UInt, UInt] = {}
+  let alias_candidate : Map[UInt, UInt] = Map([])
   for i in 0..<code_bodies.length() {
     let old_index = imported_function_count + i.reinterpret_as_uint()
     let old_pos = UInt::reinterpret_as_int(old_index)
@@ -114,7 +114,7 @@ fn apply_merge_similar_functions_raise_with_sections(
     let old_index = imported_function_count + i.reinterpret_as_uint()
     match alias_candidate.get(old_index) {
       Some(initial_target) => {
-        let seen : Map[UInt, Bool] = {}
+        let seen : Map[UInt, Bool] = Map([])
         let mut current = initial_target
         let mut valid = true
         while true {
@@ -146,7 +146,7 @@ fn apply_merge_similar_functions_raise_with_sections(
       }
     }
   }
-  let index_map : Map[UInt, UInt] = {}
+  let index_map : Map[UInt, UInt] = Map([])
   for i in 0U..<imported_function_count {
     index_map.set(i, i)
   }
@@ -187,7 +187,7 @@ fn apply_merge_similar_functions_raise_with_sections(
   let out : Array[Byte] = bytes[0:8].to_array()
   let mut dropped_name_section = false
   for section in sections {
-    let payload = bytes[section.payload_start:section.section_end].to_bytes()
+    let payload = bytes[section.payload_start:section.section_end].to_owned()
     match section.section_id {
       3U =>
         append_encoded_section(

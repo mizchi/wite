@@ -307,7 +307,7 @@ test "is_visited_function_index checks bounds" {
 
 ///|
 test "map_push_string_array creates and appends" {
-  let map : Map[UInt, Array[String]] = {}
+  let map : Map[UInt, Array[String]] = Map([])
   @analyze.map_push_string_array(map, 0U, "a")
   @analyze.map_push_string_array(map, 0U, "b")
   @analyze.map_push_string_array(map, 1U, "c")
@@ -317,9 +317,9 @@ test "map_push_string_array creates and appends" {
 
 ///|
 test "merge_export_function_names merges into target" {
-  let target : Map[UInt, Array[String]] = {}
+  let target : Map[UInt, Array[String]] = Map([])
   target[0U] = ["run"]
-  let source : Map[UInt, Array[String]] = {}
+  let source : Map[UInt, Array[String]] = Map([])
   source[0U] = ["execute"]
   source[1U] = ["init"]
   @analyze.merge_export_function_names(target, source)

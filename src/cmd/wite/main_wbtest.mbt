@@ -630,7 +630,8 @@ extern "js" fn js_prepare_build_bundle_fixture_workspace() -> String =
   #|   const findRepoRoot = () => {
   #|     let dir = process.cwd();
   #|     while (true) {
-  #|       if (fs.existsSync(path.join(dir, 'moon.mod.json')) &&
+  #|       if ((fs.existsSync(path.join(dir, 'moon.mod')) ||
+  #|            fs.existsSync(path.join(dir, 'moon.mod.json'))) &&
   #|           fs.existsSync(path.join(dir, 'src', 'cmd', 'wite', 'main.mbt'))) {
   #|         return dir;
   #|       }
@@ -687,7 +688,8 @@ extern "js" fn js_prepare_example_sample_app_workspace() -> String =
   #|   const findRepoRoot = () => {
   #|     let dir = process.cwd();
   #|     while (true) {
-  #|       if (fs.existsSync(path.join(dir, 'moon.mod.json')) &&
+  #|       if ((fs.existsSync(path.join(dir, 'moon.mod')) ||
+  #|            fs.existsSync(path.join(dir, 'moon.mod.json'))) &&
   #|           fs.existsSync(path.join(dir, 'src', 'cmd', 'wite', 'main.mbt'))) {
   #|         return dir;
   #|       }
@@ -866,21 +868,21 @@ test "optimize command writes zlib output on auto and core kinds" {
   let input_bytes = @fs.read_file_to_bytes(input_path) catch {
     e => {
       js_remove_dir_recursive(temp_dir)
-      fail("failed to read optimize input fixture: " + e.to_string())
+      fail("failed to read optimize input fixture: " + @debug.render(Repr(e)))
       b""
     }
   }
   let auto_bytes = @fs.read_file_to_bytes(output_auto) catch {
     e => {
       js_remove_dir_recursive(temp_dir)
-      fail("failed to read optimize auto output: " + e.to_string())
+      fail("failed to read optimize auto output: " + @debug.render(Repr(e)))
       b""
     }
   }
   let core_bytes = @fs.read_file_to_bytes(output_core) catch {
     e => {
       js_remove_dir_recursive(temp_dir)
-      fail("failed to read optimize core output: " + e.to_string())
+      fail("failed to read optimize core output: " + @debug.render(Repr(e)))
       b""
     }
   }
@@ -941,7 +943,7 @@ async test "build command composes local fixture deps and keeps implicit output 
         raise e
       }
       js_remove_dir_recursive(parsed.temp_dir)
-      fail("failed to read composed output: " + e.to_string())
+      fail("failed to read composed output: " + @debug.render(Repr(e)))
       b""
     }
   }
@@ -951,7 +953,7 @@ async test "build command composes local fixture deps and keeps implicit output 
         raise e
       }
       js_remove_dir_recursive(parsed.temp_dir)
-      fail("failed to read explicit output: " + e.to_string())
+      fail("failed to read explicit output: " + @debug.render(Repr(e)))
       b""
     }
   }
@@ -998,7 +1000,7 @@ async test "new --moonbit workspace can bundle sample app fixture" {
         raise e
       }
       js_remove_dir_recursive(parsed.temp_dir)
-      fail("failed to read sample main.wac: " + e.to_string())
+      fail("failed to read sample main.wac: " + @debug.render(Repr(e)))
       ""
     }
   }
@@ -1016,7 +1018,10 @@ async test "new --moonbit workspace can bundle sample app fixture" {
       }
       let _ = js_set_process_cwd(original_cwd)
       js_remove_dir_recursive(parsed.temp_dir)
-      fail("failed to restore sample main.wac after wite new: " + e.to_string())
+      fail(
+        "failed to restore sample main.wac after wite new: " +
+        @debug.render(Repr(e)),
+      )
     }
   }
   run_build([
@@ -1033,7 +1038,7 @@ async test "new --moonbit workspace can bundle sample app fixture" {
         raise e
       }
       js_remove_dir_recursive(parsed.temp_dir)
-      fail("failed to read sample app output: " + e.to_string())
+      fail("failed to read sample app output: " + @debug.render(Repr(e)))
       b""
     }
   }
@@ -1095,7 +1100,9 @@ test "build fixture fails when main wac source is invalid" {
   ) catch {
     e => {
       js_remove_dir_recursive(parsed.temp_dir)
-      fail("failed to write invalid main.wac fixture: " + e.to_string())
+      fail(
+        "failed to write invalid main.wac fixture: " + @debug.render(Repr(e)),
+      )
     }
   }
   guard @wite_bundle.compose_wac_file(parsed.main_wac_path) is Err(msg) else {
@@ -1244,7 +1251,7 @@ async test "evaluate_ts_config parses valid ts config file" {
   @fs.write_string_to_file(config_path, ts_content) catch {
     e => {
       js_remove_dir_recursive(temp_dir)
-      fail("failed to write ts config: " + e.to_string())
+      fail("failed to write ts config: " + @debug.render(Repr(e)))
     }
   }
   let raw = evaluate_ts_config(config_path)
@@ -1253,8 +1260,8 @@ async test "evaluate_ts_config parses valid ts config file" {
   guard tab_index is Some(i) else {
     fail("expected tab-separated result from evaluate_ts_config: " + raw)
   }
-  let tag = raw[:i].to_string()
-  let payload = raw[i + 1:].to_string()
+  let tag = raw[:i].to_owned()
+  let payload = raw[i + 1:].to_owned()
   assert_eq(tag, "ok")
   guard @wite_config.parse_wite_config_text(payload) is Ok(config) else {
     fail("failed to parse ts config output: " + payload)
