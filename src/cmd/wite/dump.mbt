@@ -182,30 +182,46 @@ fn dump_core(bytes : Bytes, show_headers : Bool, show_details : Bool) -> Unit {
       match section.section_id {
         1U => {
           // Type section
-          let count_result = try? @wite_analyze.parse_vec_count(payload)
+          let count_result = try @wite_analyze.parse_vec_count(payload) catch {
+            e => Err(e)
+          } noraise {
+            value => Ok(value)
+          }
           match count_result {
             Ok(count) => type_count = count
             Err(_) => ()
           }
         }
         2U => {
-          let count_result = try? @wite_analyze.parse_import_function_count(
-            payload,
-          )
+          let count_result = try
+            @wite_analyze.parse_import_function_count(payload)
+          catch {
+            e => Err(e)
+          } noraise {
+            value => Ok(value)
+          }
           match count_result {
             Ok(count) => import_count = count
             Err(_) => ()
           }
         }
         3U => {
-          let count_result = try? @wite_analyze.parse_vec_count(payload)
+          let count_result = try @wite_analyze.parse_vec_count(payload) catch {
+            e => Err(e)
+          } noraise {
+            value => Ok(value)
+          }
           match count_result {
             Ok(count) => func_count = count
             Err(_) => ()
           }
         }
         7U => {
-          let count_result = try? @wite_analyze.parse_vec_count(payload)
+          let count_result = try @wite_analyze.parse_vec_count(payload) catch {
+            e => Err(e)
+          } noraise {
+            value => Ok(value)
+          }
           match count_result {
             Ok(count) => export_count = count
             Err(_) => ()
@@ -523,7 +539,13 @@ fn dump_disassemble(bytes : Bytes, section_filter : Int?) -> Unit {
   for section in sections {
     if section.section_id == 2U {
       let payload = bytes[section.payload_start:section.section_end].to_owned()
-      let count_result = try? @wite_analyze.parse_import_function_count(payload)
+      let count_result = try
+        @wite_analyze.parse_import_function_count(payload)
+      catch {
+        e => Err(e)
+      } noraise {
+        value => Ok(value)
+      }
       match count_result {
         Ok(c) => imported_count = c
         Err(_) => ()
@@ -545,9 +567,13 @@ fn dump_disassemble(bytes : Bytes, section_filter : Int?) -> Unit {
       for s in sections {
         if s.section_id == 0U && s.custom_name == Some("name") {
           let name_payload = bytes[s.payload_start:s.section_end].to_owned()
-          let parsed = try? @wite_analyze.parse_name_section_function_names(
-            name_payload,
-          )
+          let parsed = try
+            @wite_analyze.parse_name_section_function_names(name_payload)
+          catch {
+            e => Err(e)
+          } noraise {
+            value => Ok(value)
+          }
           match parsed {
             Ok(names) => names.each((idx, name) => func_names.set(idx, name))
             Err(_) => ()
@@ -559,9 +585,13 @@ fn dump_disassemble(bytes : Bytes, section_filter : Int?) -> Unit {
       for s in sections {
         if s.section_id == 7U {
           let exp_payload = bytes[s.payload_start:s.section_end].to_owned()
-          let parsed = try? @wite_analyze.parse_export_function_names(
-            exp_payload,
-          )
+          let parsed = try
+            @wite_analyze.parse_export_function_names(exp_payload)
+          catch {
+            e => Err(e)
+          } noraise {
+            value => Ok(value)
+          }
           match parsed {
             Ok(names) =>
               @wite_analyze.merge_export_function_names(export_names, names)

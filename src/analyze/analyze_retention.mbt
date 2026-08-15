@@ -35,7 +35,13 @@ fn collect_root_reasons_raise(
         map_push_string_array(reasons_map, start_index, "start")
       }
       6U => {
-        let result = try? parse_global_section_function_refs_raise(payload)
+        let result = try
+          parse_global_section_function_refs_raise(payload)
+        catch {
+          e => Err(e)
+        } noraise {
+          value => Ok(value)
+        }
         match result {
           Ok(indices) =>
             for index in indices {
@@ -45,7 +51,13 @@ fn collect_root_reasons_raise(
         }
       }
       9U => {
-        let result = try? parse_element_section_function_refs_raise(payload)
+        let result = try
+          parse_element_section_function_refs_raise(payload)
+        catch {
+          e => Err(e)
+        } noraise {
+          value => Ok(value)
+        }
         match result {
           Ok(indices) =>
             for index in indices {
@@ -99,7 +111,7 @@ pub fn analyze_keep_reasons(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
 ) -> Result[KeepReasonReport, WiteError] {
-  try? ({
+  try {
     let export_root_names = export_root_names_from_config(config)
     let graph = analyze_call_graph_raise(bytes, export_root_names)
     let (reasons_map, reasons_partial) = collect_root_reasons_raise(
@@ -165,8 +177,12 @@ pub fn analyze_keep_reasons(
         0
       }
     })
-    { partial: graph.partial || reasons_partial, entries }
-  })
+    KeepReasonReport::{ partial: graph.partial || reasons_partial, entries }
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }
 
 ///|
@@ -174,7 +190,7 @@ pub fn analyze_retain_paths(
   bytes : Bytes,
   config? : OptimizeConfig = OptimizeConfig::default(),
 ) -> Result[RetainPathReport, WiteError] {
-  try? ({
+  try {
     let export_root_names = export_root_names_from_config(config)
     let graph = analyze_call_graph_raise(bytes, export_root_names)
     let (root_reasons_map, root_reason_partial) = collect_root_reasons_raise(
@@ -241,12 +257,16 @@ pub fn analyze_retain_paths(
       })
     }
     entries.sort_by(compare_retain_path_entry)
-    {
+    RetainPathReport::{
       partial: graph.partial || root_reason_partial,
       roots: graph.roots,
       entries,
     }
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }
 
 ///|

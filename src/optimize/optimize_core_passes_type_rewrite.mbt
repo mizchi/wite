@@ -688,7 +688,7 @@ fn rewrite_code_section_payload_for_dce_raise(
 ///|
 fn decode_call_indirect_immediate(imm : Bytes) -> (UInt, UInt)? {
   let parser = Cursor::new(imm)
-  let result = try? ({
+  let result = try {
     let type_index = parser.read_u32_leb128()
     let table_index = parser.read_u32_leb128()
     if !parser.eof() {
@@ -697,7 +697,11 @@ fn decode_call_indirect_immediate(imm : Bytes) -> (UInt, UInt)? {
       )
     }
     (type_index, table_index)
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => Some(v)
     Err(_) => None
@@ -1842,9 +1846,13 @@ fn apply_inlining_optimizing_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
 ) -> InliningApplyResult {
-  let result = try? apply_inlining_optimizing_raise_with_sections(
-    bytes, sections,
-  )
+  let result = try
+    apply_inlining_optimizing_raise_with_sections(bytes, sections)
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) => { bytes, inlined_call_count: 0U }
@@ -1923,7 +1931,11 @@ fn apply_inlining_optimizing_raise_with_sections(
     return { bytes, inlined_call_count: 0U }
   }
   let root_function_indices : Map[UInt, Bool] = Map([])
-  let call_graph_result = try? analyze_call_graph_raise(bytes, None)
+  let call_graph_result = try analyze_call_graph_raise(bytes, None) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match call_graph_result {
     Ok(call_graph) =>
       if !call_graph.partial {

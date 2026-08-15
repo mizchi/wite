@@ -90,7 +90,7 @@ fn collect_function_code_blocks(
 pub fn analyze_code_block_sizes(
   bytes : Bytes,
 ) -> Result[CodeBlockSizeReport, WiteError] {
-  try? ({
+  try {
     let sections = parse_core_sections_raise(bytes)
     let mut imported_function_count = 0U
     let mut local_function_count = 0U
@@ -138,7 +138,11 @@ pub fn analyze_code_block_sizes(
       let function_index = imported_function_count + i.reinterpret_as_uint()
       let body = code_bodies[i]
       total_body_bytes += body.length().reinterpret_as_uint()
-      let prefix_end_result = try? parse_local_decl_prefix_end(body)
+      let prefix_end_result = try parse_local_decl_prefix_end(body) catch {
+        e => Err(e)
+      } noraise {
+        value => Ok(value)
+      }
       match prefix_end_result {
         Ok(prefix_end) => {
           let instr_bytes = body[prefix_end:body.length()].to_owned()
@@ -184,7 +188,7 @@ pub fn analyze_code_block_sizes(
         0
       }
     })
-    {
+    CodeBlockSizeReport::{
       partial,
       function_count: local_function_count,
       block_count: blocks.length().reinterpret_as_uint(),
@@ -192,7 +196,11 @@ pub fn analyze_code_block_sizes(
       total_instruction_bytes,
       blocks,
     }
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }
 
 ///|
@@ -292,7 +300,11 @@ fn parse_prefixed_opcode_subopcode(
   }
   let parser = Cursor::new(instr_bytes)
   parser.set_pos(span.start + 1)
-  let result = try? parser.read_u32_leb128()
+  let result = try parser.read_u32_leb128() catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => if parser.get_pos() <= span.end_ { Some(v) } else { None }
     Err(_) => None
@@ -599,7 +611,7 @@ pub fn analyze_wasm_breakdown(
   bytes : Bytes,
   top_limit? : UInt = 0U,
 ) -> Result[WasmBreakdownReport, WiteError] {
-  try? ({
+  try {
     let sections = parse_core_sections_raise(bytes)
     let section_sizes = summarize_sections(sections, false)
     let custom_sections = summarize_custom_sections_raise(sections, bytes)
@@ -630,9 +642,13 @@ pub fn analyze_wasm_breakdown(
             parse_start_function_index(payload),
           )
         6U => {
-          let refs_result = try? parse_global_section_function_refs_raise(
-            payload,
-          )
+          let refs_result = try
+            parse_global_section_function_refs_raise(payload)
+          catch {
+            e => Err(e)
+          } noraise {
+            value => Ok(value)
+          }
           match refs_result {
             Ok(indices) =>
               for index in indices {
@@ -642,9 +658,13 @@ pub fn analyze_wasm_breakdown(
           }
         }
         9U => {
-          let refs_result = try? parse_element_section_function_refs_raise(
-            payload,
-          )
+          let refs_result = try
+            parse_element_section_function_refs_raise(payload)
+          catch {
+            e => Err(e)
+          } noraise {
+            value => Ok(value)
+          }
           match refs_result {
             Ok(indices) =>
               for index in indices {
@@ -709,7 +729,11 @@ pub fn analyze_wasm_breakdown(
         top_limit,
       )
       let mut direct_callees : Array[UInt] = []
-      let prefix_result = try? parse_local_decl_prefix_end(body)
+      let prefix_result = try parse_local_decl_prefix_end(body) catch {
+        e => Err(e)
+      } noraise {
+        value => Ok(value)
+      }
       match prefix_result {
         Ok(prefix_end) => {
           let instr_bytes = body[prefix_end:body.length()].to_owned()
@@ -803,7 +827,7 @@ pub fn analyze_wasm_breakdown(
         None => dead_body_bytes += body_bytes
       }
     }
-    {
+    WasmBreakdownReport::{
       total_bytes: bytes.length().reinterpret_as_uint(),
       sections: section_sizes,
       custom_sections,
@@ -821,5 +845,9 @@ pub fn analyze_wasm_breakdown(
       reachable_body_bytes,
       dead_body_bytes,
     }
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }

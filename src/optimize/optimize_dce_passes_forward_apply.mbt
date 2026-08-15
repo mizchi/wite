@@ -612,10 +612,16 @@ fn validate_const_target_specialize_hint_alias_raise(
     ) {
     return Some("recipe-type-mismatch")
   }
-  let build_result = try? build_const_target_specialized_body_raise(
-    code_bodies[target_local_pos],
-    alias_info.target_arg_instrs,
-  )
+  let build_result = try
+    build_const_target_specialized_body_raise(
+      code_bodies[target_local_pos],
+      alias_info.target_arg_instrs,
+    )
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match build_result {
     Ok(_) => None
     Err(_) => Some("specialize-build-invalid")

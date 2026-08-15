@@ -113,7 +113,11 @@ fn parse_prefixed_opcode_subopcode(
   }
   let parser = Cursor::new(instr_bytes)
   parser.set_pos(span.start + 1)
-  let result = try? parser.read_u32_leb128()
+  let result = try parser.read_u32_leb128() catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => if parser.get_pos() <= span.end_ { Some(v) } else { None }
     Err(_) => None
@@ -190,7 +194,13 @@ fn apply_dae_optimizing_with_sections(
   bytes : Bytes,
   sections : Array[RawSection],
 ) -> DaeApplyResult {
-  let result = try? apply_dae_optimizing_raise_with_sections(bytes, sections)
+  let result = try
+    apply_dae_optimizing_raise_with_sections(bytes, sections)
+  catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) => { bytes, removed_instr_count: 0U }
@@ -563,12 +573,20 @@ fn decode_memory_memarg_from_span(
   }
   let parser = Cursor::new(instr_bytes)
   parser.set_pos(span.start + 1)
-  let align_result = try? parser.read_u32_leb128()
+  let align_result = try parser.read_u32_leb128() catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   let align = match align_result {
     Ok(v) => v
     Err(_) => return None
   }
-  let offset_result = try? parser.read_u32_leb128()
+  let offset_result = try parser.read_u32_leb128() catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   let offset = match offset_result {
     Ok(v) => v
     Err(_) => return None
@@ -1921,7 +1939,11 @@ fn optimize_code_body_bytes(
   body_bytes : Bytes,
   config : OptimizeConfig,
 ) -> Bytes {
-  let prefix_result = try? parse_local_decl_prefix_end(body_bytes)
+  let prefix_result = try parse_local_decl_prefix_end(body_bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   let prefix_end = match prefix_result {
     Ok(v) => v
     Err(_) => return body_bytes
@@ -1972,7 +1994,11 @@ fn optimize_code_section_payload(
   payload : Bytes,
   config : OptimizeConfig,
 ) -> Bytes {
-  let result = try? optimize_code_section_payload_raise(payload, config)
+  let result = try optimize_code_section_payload_raise(payload, config) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match result {
     Ok(v) => v
     Err(_) => payload

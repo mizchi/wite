@@ -2,10 +2,14 @@
 pub fn analyze_section_sizes(
   bytes : Bytes,
 ) -> Result[Array[SectionSize], WiteError] {
-  try? ({
+  try {
     let sections = parse_core_sections_raise(bytes)
     summarize_sections(sections, false)
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }
 
 ///|
@@ -18,7 +22,7 @@ pub fn optimize_for_size(
 
 ///|
 pub fn profile_module(bytes : Bytes) -> Result[ModuleProfile, WiteError] {
-  try? ({
+  try {
     let sections = parse_core_sections_raise(bytes)
     let mut function_count = 0U
     let mut import_count = 0U
@@ -39,7 +43,7 @@ pub fn profile_module(bytes : Bytes) -> Result[ModuleProfile, WiteError] {
         _ => ()
       }
     }
-    {
+    ModuleProfile::{
       total_bytes: bytes.length().reinterpret_as_uint(),
       function_count,
       import_count,
@@ -48,14 +52,18 @@ pub fn profile_module(bytes : Bytes) -> Result[ModuleProfile, WiteError] {
       code_body_bytes,
       sections: summarize_sections(sections, false),
     }
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }
 
 ///|
 pub fn analyze_function_sizes(
   bytes : Bytes,
 ) -> Result[Array[FunctionSize], WiteError] {
-  try? ({
+  try {
     let sections = parse_core_sections_raise(bytes)
     let mut imported_function_count = 0U
     let mut local_function_count = 0U
@@ -122,5 +130,9 @@ pub fn analyze_function_sizes(
       }
     })
     functions
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }

@@ -44,7 +44,11 @@ fn parse_forward_call_target_with_param_count(
   body_bytes : Bytes,
   param_count : UInt,
 ) -> UInt? {
-  let prefix_result = try? parse_local_decl_prefix_raise(body_bytes)
+  let prefix_result = try parse_local_decl_prefix_raise(body_bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   let prefix = match prefix_result {
     Ok(v) => v
     Err(_) => return None
@@ -54,7 +58,11 @@ fn parse_forward_call_target_with_param_count(
   if param_count_i < 0 {
     return None
   }
-  let prefix_end_result = try? parse_local_decl_prefix_end(body_bytes)
+  let prefix_end_result = try parse_local_decl_prefix_end(body_bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match prefix_end_result {
     Ok(v) => if v != prefix_end { return None }
     Err(_) => return None
@@ -129,13 +137,21 @@ pub(all) struct SignatureRefineAlias {
 fn parse_forward_call_target_with_prefix_param_count(
   body_bytes : Bytes,
 ) -> (UInt, UInt, UInt, Array[Bytes])? {
-  let prefix_result = try? parse_local_decl_prefix_raise(body_bytes)
+  let prefix_result = try parse_local_decl_prefix_raise(body_bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   let prefix = match prefix_result {
     Ok(v) => v
     Err(_) => return None
   }
   let prefix_end = prefix.prefix_end
-  let prefix_end_result = try? parse_local_decl_prefix_end(body_bytes)
+  let prefix_end_result = try parse_local_decl_prefix_end(body_bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match prefix_end_result {
     Ok(v) => if v != prefix_end { return None }
     Err(_) => return None
@@ -213,13 +229,21 @@ fn parse_forward_call_target_with_const_arg_instrs(
   body_bytes : Bytes,
   wrapper_param_count : UInt,
 ) -> (UInt, Array[Bytes])? {
-  let prefix_result = try? parse_local_decl_prefix_raise(body_bytes)
+  let prefix_result = try parse_local_decl_prefix_raise(body_bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   let prefix = match prefix_result {
     Ok(v) => v
     Err(_) => return None
   }
   let prefix_end = prefix.prefix_end
-  let prefix_end_result = try? parse_local_decl_prefix_end(body_bytes)
+  let prefix_end_result = try parse_local_decl_prefix_end(body_bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   match prefix_end_result {
     Ok(v) => if v != prefix_end { return None }
     Err(_) => return None

@@ -20,7 +20,11 @@ fn world_keys(xs : Map[String, @wit.RWorldItem]) -> Array[String] {
 
 ///|
 pub fn profile_component(bytes : Bytes) -> Result[ComponentProfile, String] {
-  let sections_result = try? parse_component_sections_raise(bytes)
+  let sections_result = try parse_component_sections_raise(bytes) catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
   let sections = match sections_result {
     Ok(v) => v
     Err(e) =>

@@ -258,7 +258,7 @@ pub fn analyze_optimize_metadata(
   config? : OptimizeConfig = OptimizeConfig::o1(),
   function_diff_limit? : UInt = 20U,
 ) -> Result[OptimizeMetadataReport, WiteError] {
-  try? ({
+  try {
     let strip_stage = run_optimize_stage_raise(
       "strip",
       bytes,
@@ -285,7 +285,7 @@ pub fn analyze_optimize_metadata(
     )
     let before_size = bytes.length().reinterpret_as_uint()
     let after_size = rume_stage.bytes.length().reinterpret_as_uint()
-    {
+    OptimizeMetadataReport::{
       before_size,
       after_size,
       total_gain_bytes: size_gain_bytes(before_size, after_size),
@@ -297,5 +297,9 @@ pub fn analyze_optimize_metadata(
         rume_stage.stage,
       ],
     }
-  })
+  } catch {
+    e => Err(e)
+  } noraise {
+    value => Ok(value)
+  }
 }

@@ -80,7 +80,13 @@ fn analyze_call_graph_raise(
         push_unique_u32_with_seen(roots, root_seen, start_index)
       }
       6U => {
-        let refs_result = try? parse_global_section_function_refs_raise(payload)
+        let refs_result = try
+          parse_global_section_function_refs_raise(payload)
+        catch {
+          e => Err(e)
+        } noraise {
+          value => Ok(value)
+        }
         match refs_result {
           Ok(indices) =>
             for index in indices {
@@ -90,9 +96,13 @@ fn analyze_call_graph_raise(
         }
       }
       9U => {
-        let refs_result = try? parse_element_section_table_function_refs_raise(
-          payload,
-        )
+        let refs_result = try
+          parse_element_section_table_function_refs_raise(payload)
+        catch {
+          e => Err(e)
+        } noraise {
+          value => Ok(value)
+        }
         match refs_result {
           Ok(grouped) =>
             map_merge_unique_u32_array(element_refs_by_table, grouped)
@@ -140,7 +150,11 @@ fn analyze_call_graph_raise(
     let function_index = imported_function_count + i.reinterpret_as_uint()
     let body = code_bodies[i]
     let mut direct_callees : Array[UInt] = []
-    let direct_result = try? collect_direct_callees_from_body_raise(body)
+    let direct_result = try collect_direct_callees_from_body_raise(body) catch {
+      e => Err(e)
+    } noraise {
+      value => Ok(value)
+    }
     match direct_result {
       Ok((callees, body_has_indirect)) => {
         direct_callees = callees
