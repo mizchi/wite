@@ -49,10 +49,11 @@ test "empty_wite_config_file defaults" {
 test "parse_json_string_array normal" {
   let json : Json = ["--flag1", "--flag2"]
   let result = @config.parse_json_string_array(json, "test")
-  inspect(
+  debug_inspect(
     result,
     content=(
-      #|Ok([--flag1, --flag2])
+      #|Ok(["--flag1", "--flag2"])
+
     ),
   )
 }
@@ -61,17 +62,18 @@ test "parse_json_string_array normal" {
 test "parse_json_string_array empty" {
   let json : Json = Json::array([])
   let result = @config.parse_json_string_array(json, "test")
-  inspect(result, content="Ok([])")
+  debug_inspect(result, content="Ok([])")
 }
 
 ///|
 test "parse_json_string_array non-string element" {
   let json : Json = ["ok", 42]
   let result = @config.parse_json_string_array(json, "flags")
-  inspect(
+  debug_inspect(
     result,
     content=(
-      #|Err(config flags[1] must be string)
+      #|Err("config flags[1] must be string")
+
     ),
   )
 }
@@ -80,10 +82,11 @@ test "parse_json_string_array non-string element" {
 test "parse_json_string_array non-array" {
   let json : Json = "not-array"
   let result = @config.parse_json_string_array(json, "flags")
-  inspect(
+  debug_inspect(
     result,
     content=(
-      #|Err(config flags must be string array)
+      #|Err("config flags must be string array")
+
     ),
   )
 }
@@ -94,10 +97,11 @@ test "parse_wite_config_section array form" {
   let result = @config.parse_wite_config_section(json, "build")
   match result {
     Ok((flags, kind)) => {
-      inspect(
+      debug_inspect(
         flags,
         content=(
-          #|[--opt-level=3]
+          #|["--opt-level=3"]
+
         ),
       )
       inspect(@config.binary_kind_name(kind), content="auto")
@@ -112,10 +116,11 @@ test "parse_wite_config_section object form with flags" {
   let result = @config.parse_wite_config_section(json, "build")
   match result {
     Ok((flags, kind)) => {
-      inspect(
+      debug_inspect(
         flags,
         content=(
-          #|[--opt-level=3]
+          #|["--opt-level=3"]
+
         ),
       )
       inspect(@config.binary_kind_name(kind), content="auto")
@@ -130,10 +135,11 @@ test "parse_wite_config_section object form with kind" {
   let result = @config.parse_wite_config_section(json, "build")
   match result {
     Ok((flags, kind)) => {
-      inspect(
+      debug_inspect(
         flags,
         content=(
-          #|[--flag]
+          #|["--flag"]
+
         ),
       )
       inspect(@config.binary_kind_name(kind), content="core")
@@ -144,7 +150,7 @@ test "parse_wite_config_section object form with kind" {
 
 ///|
 test "parse_wite_config_section object form empty" {
-  let json : Json = {}
+  let json : Json = Json::empty_object()
   let result = @config.parse_wite_config_section(json, "build")
   match result {
     Ok((flags, kind)) => {
@@ -187,7 +193,7 @@ test "parse_wite_config_section non-object-non-array" {
 
 ///|
 test "parse_wite_config_json empty object" {
-  let json : Json = {}
+  let json : Json = Json::empty_object()
   let result = @config.parse_wite_config_json(json)
   match result {
     Ok(config) => {
@@ -219,17 +225,19 @@ test "parse_wite_config_json with all sections" {
   let result = @config.parse_wite_config_json(json)
   match result {
     Ok(config) => {
-      inspect(
+      debug_inspect(
         config.build_flags,
         content=(
-          #|[--b]
+          #|["--b"]
+
         ),
       )
       inspect(@config.binary_kind_name(config.build_kind), content="core")
-      inspect(
+      debug_inspect(
         config.analyze_flags,
         content=(
-          #|[--a]
+          #|["--a"]
+
         ),
       )
       inspect(@config.binary_kind_name(config.analyze_kind), content="auto")
@@ -248,10 +256,11 @@ test "merge_command_flags combines arrays" {
   let defaults : Array[String] = ["--opt-level=3"]
   let cli : Array[String] = ["--debug"]
   let merged = @config.merge_command_flags(defaults, cli)
-  inspect(
+  debug_inspect(
     merged,
     content=(
-      #|[--opt-level=3, --debug]
+      #|["--opt-level=3", "--debug"]
+
     ),
   )
 }
@@ -275,10 +284,11 @@ test "should_auto_sync_deps" {
 ///|
 test "build_auto_sync_deps_command_args" {
   let args = @config.build_auto_sync_deps_command_args("custom.jsonc")
-  inspect(
+  debug_inspect(
     args,
     content=(
-      #|[wite, deps, sync, --config=custom.jsonc, --fail-fast]
+      #|["wite", "deps", "sync", "--config=custom.jsonc", "--fail-fast"]
+
     ),
   )
 }
@@ -304,10 +314,11 @@ test "parse_config_selection_flags no-config" {
 test "parse_config_selection_flags remaining flags preserved" {
   let flags : Array[String] = ["--no-config", "--other", "value"]
   let result = @config.parse_config_selection_flags(flags).unwrap()
-  inspect(
+  debug_inspect(
     result.remaining_flags,
     content=(
-      #|[--other, value]
+      #|["--other", "value"]
+
     ),
   )
 }
@@ -364,7 +375,7 @@ test "parse_config_output object form" {
 
 ///|
 test "parse_config_output empty object defaults to dist" {
-  let json : Json = {}
+  let json : Json = Json::empty_object()
   let result = @config.parse_config_output(json)
   match result {
     Ok(output) => inspect(output.dir, content="dist")
@@ -390,7 +401,7 @@ test "parse_wite_config_json with input and output" {
 
 ///|
 test "parse_wite_config_json backward compat empty object" {
-  let json : Json = {}
+  let json : Json = Json::empty_object()
   let result = @config.parse_wite_config_json(json)
   match result {
     Ok(config) => {
@@ -507,10 +518,11 @@ test "parse_wite_config_json with named input and output" {
       let entries = @config.config_input_entries(config.input)
       inspect(entries.length(), content="2")
       inspect(config.output.dir, content="out")
-      inspect(
+      debug_inspect(
         config.build_flags,
         content=(
-          #|[-Oz]
+          #|["-Oz"]
+
         ),
       )
     }
@@ -565,7 +577,7 @@ test "parse_server_config workerd executor" {
 
 ///|
 test "parse_server_config defaults" {
-  let json : Json = {}
+  let json : Json = Json::empty_object()
   let result = @config.parse_server_config(json)
   match result {
     Ok(config) => {
@@ -615,7 +627,7 @@ test "parse_wite_config_json with server section" {
 
 ///|
 test "parse_wite_config_json without server section" {
-  let json : Json = {}
+  let json : Json = Json::empty_object()
   let result = @config.parse_wite_config_json(json)
   match result {
     Ok(config) => assert_true(config.server is None)
@@ -725,7 +737,7 @@ test "parse_server_bindings explicit d1 format" {
 
 ///|
 test "parse_server_bindings empty object" {
-  let json : Json = {}
+  let json : Json = Json::empty_object()
   let result = @config.parse_server_bindings(json)
   match result {
     Ok(bindings) => {
@@ -809,21 +821,23 @@ test "parse_server_bindings all types combined" {
 
 ///|
 test "config_input_single_path" {
-  inspect(
+  debug_inspect(
     @config.config_input_single_path(@config.ConfigInput::new_none()),
     content="None",
   )
-  inspect(
+  debug_inspect(
     @config.config_input_single_path(@config.ConfigInput::new_single("a.wasm")),
     content=(
-      #|Some(a.wasm)
+      #|Some("a.wasm")
+
     ),
   )
   let map : Map[String, String] = { "app": "b.wasm" }
-  inspect(
+  debug_inspect(
     @config.config_input_single_path(@config.ConfigInput::new_named(map)),
     content=(
-      #|Some(b.wasm)
+      #|Some("b.wasm")
+
     ),
   )
 }

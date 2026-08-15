@@ -306,33 +306,33 @@ async fn run_analyze_view_command(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--kind=") is Some(value) {
-      kind = parse_binary_kind_or_exit(value.to_string(), "analyze kind")
+      kind = parse_binary_kind_or_exit(value.to_owned(), "analyze kind")
       i += 1
       continue
     }
     if arg.strip_prefix("--view=") is Some(name) {
-      match parse_analyze_view(name.to_string()) {
+      match parse_analyze_view(name.to_owned()) {
         Some(v) => view = v
         None => {
-          println("unknown analyze view: " + name.to_string())
+          println("unknown analyze view: " + name.to_owned())
           @sys.exit(1)
         }
       }
     } else {
       match arg.strip_prefix("--limit=") {
-        Some(v) => limit = parse_uint_or_exit(v.to_string(), "limit")
+        Some(v) => limit = parse_uint_or_exit(v.to_owned(), "limit")
         None =>
           match arg.strip_prefix("--diff-limit=") {
             Some(v) =>
-              diff_limit = parse_uint_or_exit(v.to_string(), "diff-limit")
+              diff_limit = parse_uint_or_exit(v.to_owned(), "diff-limit")
             None =>
               match arg.strip_prefix("--opt-level=") {
-                Some(v) => config = parse_opt_level_or_exit(v.to_string())
+                Some(v) => config = parse_opt_level_or_exit(v.to_owned())
                 None =>
                   match arg.strip_prefix("--closed-world-root=") {
                     Some(root_name) =>
                       if !root_name.is_empty() {
-                        closed_world_root_exports.push(root_name.to_string())
+                        closed_world_root_exports.push(root_name.to_owned())
                       }
                     None =>
                       if arg == "--closed-world" {

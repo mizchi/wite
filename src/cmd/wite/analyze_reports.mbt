@@ -1116,7 +1116,7 @@ fn parse_interface_command_options(
       continue
     }
     if arg.strip_prefix("--world=") is Some(value) {
-      world = Some(value.to_string())
+      world = Some(value.to_owned())
       i += 1
       continue
     }

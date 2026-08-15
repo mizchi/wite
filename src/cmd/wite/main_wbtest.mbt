@@ -479,7 +479,7 @@ priv struct CommandRunResult {
 fn parse_command_run_result(raw : String) -> Result[CommandRunResult, String] {
   let parts : Array[String] = []
   for part in raw.split("\t") {
-    parts.push(part.to_string())
+    parts.push(part.to_owned())
   }
   if parts.length() == 0 {
     return Err("empty command result")
@@ -797,7 +797,7 @@ fn parse_build_bundle_fixture_workspace(
 ) -> Result[BuildBundleFixtureWorkspace, String] {
   let parts : Array[String] = []
   for part in raw.split("\t") {
-    parts.push(part.to_string())
+    parts.push(part.to_owned())
   }
   if parts.length() == 0 {
     return Err("empty smoke result")
@@ -824,7 +824,7 @@ fn parse_example_sample_app_workspace(
 ) -> Result[ExampleSampleAppWorkspace, String] {
   let parts : Array[String] = []
   for part in raw.split("\t") {
-    parts.push(part.to_string())
+    parts.push(part.to_owned())
   }
   if parts.length() == 0 {
     return Err("empty sample app result")

@@ -196,7 +196,7 @@ fn find_keep_reason_entry(
 fn split_string(text : String, delim : String) -> Array[String] {
   let out : Array[String] = []
   for part in text.split(delim) {
-    out.push(part.to_string())
+    out.push(part.to_owned())
   }
   out
 }

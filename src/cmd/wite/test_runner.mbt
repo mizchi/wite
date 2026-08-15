@@ -165,7 +165,7 @@ async fn run_test_command(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--target=") is Some(v) {
-      target = v.to_string()
+      target = v.to_owned()
       i += 1
       continue
     }
@@ -179,7 +179,7 @@ async fn run_test_command(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--interface=") is Some(v) {
-      interface_path = Some(v.to_string())
+      interface_path = Some(v.to_owned())
       i += 1
       continue
     }
@@ -193,7 +193,7 @@ async fn run_test_command(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--world=") is Some(v) {
-      world = Some(v.to_string())
+      world = Some(v.to_owned())
       i += 1
       continue
     }

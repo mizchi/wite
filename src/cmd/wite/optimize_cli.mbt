@@ -15,7 +15,7 @@ fn parse_wasm_opt_level_or_exit(token : String) -> String {
 fn resolve_wasm_opt_bin(cli_value : String?) -> String {
   match cli_value {
     Some(path) => path
-    None => @sys.get_env_var("WASM_OPT_BIN").unwrap_or("wasm-opt")
+    None => @env.get_env_var("WASM_OPT_BIN").unwrap_or("wasm-opt")
   }
 }
 
@@ -75,7 +75,7 @@ fn parse_keep_custom(args : Array[String], start : Int) -> Array[String] {
   for i in start..<args.length() {
     let arg = args[i]
     match arg.strip_prefix("--keep-custom=") {
-      Some(name) => keep.push(name.to_string())
+      Some(name) => keep.push(name.to_owned())
       None => ()
     }
   }
@@ -87,7 +87,7 @@ fn parse_closed_world_roots(args : Array[String], start : Int) -> Array[String] 
   let roots : Array[String] = []
   for i in start..<args.length() {
     match args[i].strip_prefix("--closed-world-root=") {
-      Some(name) => if !name.is_empty() { roots.push(name.to_string()) }
+      Some(name) => if !name.is_empty() { roots.push(name.to_owned()) }
       None => ()
     }
   }
@@ -99,7 +99,7 @@ fn parse_excluded_roots(args : Array[String], start : Int) -> Array[String] {
   let excludes : Array[String] = []
   for i in start..<args.length() {
     match args[i].strip_prefix("--exclude=") {
-      Some(name) => if !name.is_empty() { excludes.push(name.to_string()) }
+      Some(name) => if !name.is_empty() { excludes.push(name.to_owned()) }
       None => ()
     }
   }
@@ -130,7 +130,7 @@ fn parse_uint_or_exit(text : String, name : String) -> UInt {
 fn split_string(s : String, delim : String) -> Array[String] {
   let out : Array[String] = []
   for part in s.split(delim) {
-    out.push(part.to_string())
+    out.push(part.to_owned())
   }
   out
 }
@@ -183,7 +183,7 @@ fn parse_runtime_profile_scenarios(
   for i in start..<args.length() {
     match args[i].strip_prefix("--scenario=") {
       Some(spec_text) => {
-        let spec = spec_text.to_string()
+        let spec = spec_text.to_owned()
         if spec.is_empty() {
           println("invalid scenario: empty spec")
           @sys.exit(1)
@@ -360,7 +360,7 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
       continue
     }
     if flag.strip_prefix("--optimize-level=") is Some(value) {
-      wasm_opt_optimize_level = value.to_string()
+      wasm_opt_optimize_level = value.to_owned()
         |> parse_wasm_opt_optimize_level_or_exit
         |> Some
       if derive_preset_from_wasm_opt_levels(
@@ -389,7 +389,7 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
       continue
     }
     if flag.strip_prefix("-ol=") is Some(value) {
-      wasm_opt_optimize_level = value.to_string()
+      wasm_opt_optimize_level = value.to_owned()
         |> parse_wasm_opt_optimize_level_or_exit
         |> Some
       if derive_preset_from_wasm_opt_levels(
@@ -451,7 +451,7 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
       continue
     }
     if flag.strip_prefix("--shrink-level=") is Some(value) {
-      wasm_opt_shrink_level = value.to_string()
+      wasm_opt_shrink_level = value.to_owned()
         |> parse_wasm_opt_shrink_level_or_exit
         |> Some
       if derive_preset_from_wasm_opt_levels(
@@ -480,7 +480,7 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
       continue
     }
     if flag.strip_prefix("-s=") is Some(value) {
-      wasm_opt_shrink_level = value.to_string()
+      wasm_opt_shrink_level = value.to_owned()
         |> parse_wasm_opt_shrink_level_or_exit
         |> Some
       if derive_preset_from_wasm_opt_levels(
@@ -571,7 +571,7 @@ fn parse_optimize_cli_options(flags : Array[String]) -> OptimizeCliOptions {
       continue
     }
     if flag.strip_prefix("--rounds=") is Some(value) {
-      pass_rounds = parse_uint_or_exit(value.to_string(), "rounds")
+      pass_rounds = parse_uint_or_exit(value.to_owned(), "rounds")
     }
     if flag == "--dce" || flag == "--dce-apply" {
       enable_dce = true

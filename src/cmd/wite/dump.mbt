@@ -95,7 +95,7 @@ fn run_dump(args : Array[String]) -> Unit {
       _ =>
         if arg.strip_prefix("--section=") is Some(id_str) {
           section_filter = Some(
-            parse_uint_or_exit(id_str.to_string(), "section").reinterpret_as_int(),
+            parse_uint_or_exit(id_str.to_owned(), "section").reinterpret_as_int(),
           )
         } else {
           println("unknown dump option: " + arg)

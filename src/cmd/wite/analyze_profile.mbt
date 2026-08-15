@@ -317,7 +317,7 @@ async fn run_profile_command(args : Array[String]) -> Unit {
       continue
     }
     if arg.strip_prefix("--kind=") is Some(value) {
-      kind = parse_binary_kind_or_exit(value.to_string(), "profile kind")
+      kind = parse_binary_kind_or_exit(value.to_owned(), "profile kind")
       i += 1
       continue
     }

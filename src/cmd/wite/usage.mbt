@@ -161,7 +161,7 @@ fn extract_binary_kind_flags(
       continue
     }
     if flag.strip_prefix("--kind=") is Some(value) {
-      kind = parse_binary_kind_or_exit(value.to_string(), label)
+      kind = parse_binary_kind_or_exit(value.to_owned(), label)
       i += 1
       continue
     }
